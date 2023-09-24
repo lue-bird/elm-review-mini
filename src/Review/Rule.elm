@@ -1198,7 +1198,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
 
         initialModuleContext : moduleContext
         initialModuleContext =
-            applyContextCreator dummyAvailableData False moduleContextCreator initialProjectContext
+            applyContextCreator { availableData = dummyAvailableData, isFileIgnored = False } moduleContextCreator initialProjectContext
 
         emptyModuleVisitor : ModuleRuleSchema schemaState moduleContext
         emptyModuleVisitor =
@@ -5043,7 +5043,7 @@ createModuleVisitorFromProjectVisitorHelp schema raise hidden traversalAndFolder
                         let
                             initialContext : moduleContext
                             initialContext =
-                                applyContextCreator availableData isFileIgnored moduleContextCreator inputProjectContext
+                                applyContextCreator { availableData = availableData, isFileIgnored = isFileIgnored } moduleContextCreator inputProjectContext
 
                             ruleData : { ruleName : String, exceptions : Exceptions, filePath : String }
                             ruleData =
@@ -5056,7 +5056,7 @@ createModuleVisitorFromProjectVisitorHelp schema raise hidden traversalAndFolder
                                     outputProjectContext =
                                         case getFolderFromTraversal traversalAndFolder of
                                             Just { moduleToProject } ->
-                                                applyContextCreator availableData isFileIgnored moduleToProject resultModuleContext
+                                                applyContextCreator { availableData = availableData, isFileIgnored = isFileIgnored } moduleToProject resultModuleContext
 
                                             Nothing ->
                                                 schema.initialProjectContext
@@ -5389,7 +5389,7 @@ accumulate params visitor ( previousErrors, previousContext ) =
 {-| Creating a module context or a project context using functions like [`withModuleName`](#withModuleName) to request more information.
 -}
 type ContextCreator create
-    = ContextCreator (AvailableData -> Bool -> create) RequestedData
+    = ContextCreator ({ availableData : AvailableData, isFileIgnored : Bool } -> create) RequestedData
 
 
 requestedDataFromContextCreator : ContextCreator create -> RequestedData
@@ -5413,19 +5413,17 @@ requestedDataFromContextCreator (ContextCreator _ requestedData) =
 -}
 createContext : create -> ContextCreator create
 createContext create =
-    ContextCreator
-        (\_ _ -> create)
-        RequestedData.none
+    ContextCreator (\_ -> create) RequestedData.none
 
 
 contextCreatorToLazy : ContextCreator created -> ContextCreator (() -> created)
 contextCreatorToLazy (ContextCreator fn requestedData) =
-    ContextCreator (\availableData isFileIgnored () -> fn availableData isFileIgnored) requestedData
+    ContextCreator (\projectData () -> fn projectData) requestedData
 
 
-applyContextCreator : AvailableData -> Bool -> ContextCreator create -> create
-applyContextCreator data isFileIgnored (ContextCreator fn _) =
-    fn data isFileIgnored
+applyContextCreator : { availableData : AvailableData, isFileIgnored : Bool } -> ContextCreator create -> create
+applyContextCreator data (ContextCreator fn _) =
+    fn data
 
 
 {-| Request metadata about the module.
@@ -5440,12 +5438,11 @@ applyContextCreator data isFileIgnored (ContextCreator fn _) =
 withMetadata : ContextCreator (Metadata -> create) -> ContextCreator create
 withMetadata (ContextCreator fn requestedData) =
     ContextCreator
-        (\data isFileIgnored ->
+        (\data ->
             fn data
-                isFileIgnored
                 (createMetadata
-                    { moduleNameNode = moduleNameNode data.ast.moduleDefinition
-                    , isInSourceDirectories = data.isInSourceDirectories
+                    { moduleNameNode = moduleNameNode data.availableData.ast.moduleDefinition
+                    , isInSourceDirectories = data.availableData.isInSourceDirectories
                     }
                 )
         )
@@ -5469,7 +5466,7 @@ withMetadata (ContextCreator fn requestedData) =
 withModuleName : ContextCreator (ModuleName -> create) -> ContextCreator create
 withModuleName (ContextCreator fn requestedData) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored (moduleNameNode data.ast.moduleDefinition |> Node.value))
+        (\data -> fn data (moduleNameNode data.availableData.ast.moduleDefinition |> Node.value))
         requestedData
 
 
@@ -5489,8 +5486,7 @@ withModuleName (ContextCreator fn requestedData) =
 -}
 withModuleNameNode : ContextCreator (Node ModuleName -> create) -> ContextCreator create
 withModuleNameNode (ContextCreator fn requestedData) =
-    ContextCreator (\data isFileIgnored -> fn data isFileIgnored (moduleNameNode data.ast.moduleDefinition))
-        requestedData
+    ContextCreator (\data -> fn data (moduleNameNode data.availableData.ast.moduleDefinition)) requestedData
 
 
 {-| Request to know whether the current module is in the "source-directories" of the project. You can use this information to
@@ -5511,7 +5507,7 @@ know whether the module is part of the tests or of the production code.
 withIsInSourceDirectories : ContextCreator (Bool -> create) -> ContextCreator create
 withIsInSourceDirectories (ContextCreator fn requestedData) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.isInSourceDirectories)
+        (\data -> fn data data.availableData.isInSourceDirectories)
         requestedData
 
 
@@ -5536,7 +5532,7 @@ Note that for module rules, ignored files will be skipped automatically anyway.
 withIsFileIgnored : ContextCreator (Bool -> create) -> ContextCreator create
 withIsFileIgnored (ContextCreator fn (RequestedData requested)) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored isFileIgnored)
+        (\data -> fn data data.isFileIgnored)
         (RequestedData { requested | ignoredFiles = True })
 
 
@@ -5596,7 +5592,7 @@ Note: If you have been using [`elm-review-scope`](https://github.com/jfmengels/e
 withModuleNameLookupTable : ContextCreator (ModuleNameLookup -> create) -> ContextCreator create
 withModuleNameLookupTable (ContextCreator fn (RequestedData requested)) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.moduleNameLookup)
+        (\data -> fn data data.availableData.moduleNameLookup)
         (RequestedData { requested | moduleNameLookup = True })
 
 
@@ -5625,7 +5621,7 @@ Using the full AST, you can simplify the implementation by computing the data in
 withFullAst : ContextCreator (Elm.Syntax.File.File -> create) -> ContextCreator create
 withFullAst (ContextCreator fn requested) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.ast)
+        (\data -> fn data data.availableData.ast)
         requested
 
 
@@ -5647,7 +5643,7 @@ When that is the case, the module documentation will be `Nothing`.
 withModuleDocumentation : ContextCreator (Maybe (Node String) -> create) -> ContextCreator create
 withModuleDocumentation (ContextCreator fn requested) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.moduleDocumentation)
+        (\data -> fn data data.availableData.moduleDocumentation)
         requested
 
 
@@ -5673,7 +5669,7 @@ withModuleDocumentation (ContextCreator fn requested) =
 withModuleKey : ContextCreator (ModuleKey -> create) -> ContextCreator create
 withModuleKey (ContextCreator fn requestedData) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.moduleKey)
+        (\data -> fn data data.availableData.moduleKey)
         requestedData
 
 
@@ -5715,7 +5711,7 @@ Using [`withModuleContext`](#withModuleContext) in a project rule:
 withFilePath : ContextCreator (String -> create) -> ContextCreator create
 withFilePath (ContextCreator fn requestedData) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.filePath)
+        (\data -> fn data data.availableData.filePath)
         requestedData
 
 
@@ -5747,7 +5743,7 @@ experience.
 withSourceCodeExtractor : ContextCreator ((Range -> String) -> create) -> ContextCreator create
 withSourceCodeExtractor (ContextCreator fn (RequestedData requested)) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.extractSourceCode)
+        (\data -> fn data data.availableData.extractSourceCode)
         (RequestedData { requested | sourceCodeExtractor = True })
 
 
