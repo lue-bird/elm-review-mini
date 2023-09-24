@@ -91,12 +91,24 @@ elm-review --template jfmengels/elm-review-documentation/example --rules Docs.Re
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "Docs.ReviewAtDocs" (Rule.initContextCreator initialContext)
-        |> Rule.withElmJsonModuleVisitor elmJsonVisitor
-        |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
-        |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor
-        |> Rule.withDeclarationListVisitor (\nodes context -> ( declarationListVisitor nodes context, context ))
-        |> Rule.fromModuleRuleSchema
+    Rule.newProjectRuleSchema "Docs.ReviewAtDocs" initialProjectContext
+        |> Rule.withModuleVisitor
+            (\schema ->
+                schema
+                    |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
+                    |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor
+                    |> Rule.withDeclarationListVisitor (\nodes context -> ( declarationListVisitor nodes context, context ))
+            )
+            { fromModuleToProject = Rule.initContextCreator (\_ -> initialProjectContext)
+            , fromProjectToModule = initialContext
+            , foldProjectContexts = \a _ -> a
+            }
+        |> Rule.withElmJsonProjectVisitor (\maybeElmJson context -> ( [], elmJsonVisitor maybeElmJson context ))
+        |> Rule.fromProjectRuleSchema
+
+
+type alias ProjectContext =
+    { exposedModulesFromProject : Set String }
 
 
 type alias Context =
@@ -108,28 +120,36 @@ type alias Context =
     }
 
 
-initialContext : Context
+initialProjectContext : ProjectContext
+initialProjectContext =
+    { exposedModulesFromProject = Set.empty }
+
+
+initialContext : Rule.ContextCreator (ProjectContext -> Context)
 initialContext =
-    { exposedModulesFromProject = Set.empty
-    , moduleIsExposed = False
-    , exposedFromModule = Exposing.All Range.emptyRange
-    , hasMalformedDocs = False
-    , docsReferences = []
-    }
+    Rule.initContextCreator
+        (\projectContext ->
+            { exposedModulesFromProject = projectContext.exposedModulesFromProject
+            , moduleIsExposed = False
+            , exposedFromModule = Exposing.All Range.emptyRange
+            , hasMalformedDocs = False
+            , docsReferences = []
+            }
+        )
 
 
 
 -- ELM.JSON VISITOR
 
 
-elmJsonVisitor : Maybe Elm.Project.Project -> Context -> Context
-elmJsonVisitor maybeProject context =
+elmJsonVisitor : Maybe { elmJsonKey : Rule.ElmJsonKey, project : Elm.Project.Project } -> ProjectContext -> ProjectContext
+elmJsonVisitor maybeElmJson context =
     let
         exposedModules : Set String
         exposedModules =
-            case maybeProject of
-                Just project ->
-                    ExposedFromProject.exposedModules project
+            case maybeElmJson of
+                Just elmJson ->
+                    ExposedFromProject.exposedModules elmJson.project
 
                 _ ->
                     Set.empty

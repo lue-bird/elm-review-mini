@@ -101,15 +101,27 @@ relevant information _can_ be found without too much effort.
 -}
 rule : { document : What, from : From } -> Rule
 rule configuration =
-    Rule.newModuleRuleSchema "Docs.NoMissing" (Rule.initContextCreator initialContext)
-        |> Rule.withElmJsonModuleVisitor elmJsonVisitor
-        |> Rule.withModuleDefinitionVisitor (moduleDefinitionVisitor configuration.from)
-        |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor
-        |> Rule.withDeclarationEnterVisitor (declarationVisitor configuration.document)
-        |> Rule.fromModuleRuleSchema
+    Rule.newProjectRuleSchema "Docs.NoMissing" initialProjectContext
+        |> Rule.withModuleVisitor
+            (\schema ->
+                schema
+                    |> Rule.withModuleDefinitionVisitor (moduleDefinitionVisitor configuration.from)
+                    |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor
+                    |> Rule.withDeclarationEnterVisitor (declarationVisitor configuration.document)
+            )
+            { fromProjectToModule = projectContextToModule
+            , fromModuleToProject = Rule.initContextCreator (\_ -> initialProjectContext)
+            , foldProjectContexts = \a _ -> a
+            }
+        |> Rule.withElmJsonProjectVisitor (\maybeElmJson context -> ( [], elmJsonVisitor maybeElmJson context ))
+        |> Rule.fromProjectRuleSchema
 
 
-type alias Context =
+type alias ProjectContext =
+    { exposedModules : Set String }
+
+
+type alias ModuleContext =
     { moduleNameNode : Node String
     , exposedModules : Set String
     , exposedElements : Exposed
@@ -117,13 +129,20 @@ type alias Context =
     }
 
 
-initialContext : Context
-initialContext =
-    { moduleNameNode = Node Range.emptyRange ""
-    , exposedModules = Set.empty
-    , exposedElements = EverythingIsExposed
-    , shouldBeReported = True
-    }
+initialProjectContext =
+    { exposedModules = Set.empty }
+
+
+projectContextToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectContextToModule =
+    Rule.initContextCreator
+        (\projectContext ->
+            { moduleNameNode = Node Range.emptyRange ""
+            , exposedModules = projectContext.exposedModules
+            , exposedElements = EverythingIsExposed
+            , shouldBeReported = True
+            }
+        )
 
 
 type Exposed
@@ -184,14 +203,14 @@ exposedModules =
 -- ELM.JSON VISITOR
 
 
-elmJsonVisitor : Maybe Elm.Project.Project -> Context -> Context
-elmJsonVisitor maybeProject context =
+elmJsonVisitor : Maybe { elmJsonKey : Rule.ElmJsonKey, project : Elm.Project.Project } -> ProjectContext -> ProjectContext
+elmJsonVisitor maybeElmJson context =
     let
         exposedModules_ : Set String
         exposedModules_ =
-            case maybeProject of
-                Just project ->
-                    ExposedFromProject.exposedModules project
+            case maybeElmJson of
+                Just elmJson ->
+                    ExposedFromProject.exposedModules elmJson.project
 
                 _ ->
                     Set.empty
@@ -203,7 +222,7 @@ elmJsonVisitor maybeProject context =
 -- MODULE DEFINITION VISITOR
 
 
-moduleDefinitionVisitor : From -> Node Module -> Context -> ( List nothing, Context )
+moduleDefinitionVisitor : From -> Node Module -> ModuleContext -> ( List nothing, ModuleContext )
 moduleDefinitionVisitor fromConfig node context =
     let
         moduleNameNode : Node String
@@ -271,7 +290,7 @@ collectExposing node =
 -- MODULE DOCUMENTATION VISITOR
 
 
-moduleDocumentationVisitor : Maybe (Node String) -> Context -> ( List (Rule.Error {}), Context )
+moduleDocumentationVisitor : Maybe (Node String) -> ModuleContext -> ( List (Rule.Error {}), ModuleContext )
 moduleDocumentationVisitor moduleDocumentation context =
     if context.shouldBeReported then
         ( checkModuleDocumentation moduleDocumentation context.moduleNameNode
@@ -286,7 +305,7 @@ moduleDocumentationVisitor moduleDocumentation context =
 -- DECLARATION VISITOR
 
 
-declarationVisitor : What -> Node Declaration -> Context -> ( List (Error {}), Context )
+declarationVisitor : What -> Node Declaration -> ModuleContext -> ( List (Error {}), ModuleContext )
 declarationVisitor documentWhat node context =
     if context.shouldBeReported then
         ( reportDeclarationDocumentation documentWhat context node
@@ -297,7 +316,7 @@ declarationVisitor documentWhat node context =
         ( [], context )
 
 
-reportDeclarationDocumentation : What -> Context -> Node Declaration -> List (Error {})
+reportDeclarationDocumentation : What -> ModuleContext -> Node Declaration -> List (Error {})
 reportDeclarationDocumentation documentWhat context node =
     case Node.value node of
         Declaration.FunctionDeclaration { documentation, declaration } ->
@@ -330,7 +349,7 @@ reportDeclarationDocumentation documentWhat context node =
             []
 
 
-shouldBeDocumented : What -> Context -> String -> Bool
+shouldBeDocumented : What -> ModuleContext -> String -> Bool
 shouldBeDocumented documentWhat context name =
     case documentWhat of
         Everything ->

@@ -12,7 +12,6 @@ module Review.Rule exposing
     , withLetDeclarationEnterVisitor, withLetDeclarationExitVisitor
     , providesFixesForModuleRule
     , withFinalModuleEvaluation
-    , withElmJsonModuleVisitor, withReadmeModuleVisitor, withDirectDependenciesModuleVisitor, withDependenciesModuleVisitor
     , ProjectRuleSchema, newProjectRuleSchema, fromProjectRuleSchema, withModuleVisitor, withElmJsonProjectVisitor, withReadmeProjectVisitor, withDirectDependenciesProjectVisitor, withDependenciesProjectVisitor, withFinalProjectEvaluation, withContextFromImportedModules
     , providesFixesForProjectRule
     , ContextCreator, initContextCreator, withModuleName, withModuleNameNode, withIsInSourceDirectories, withFilePath, withIsFileIgnored, withModuleNameLookupTable, withModuleKey, withSourceCodeExtractor, withFullAst, withModuleDocumentation
@@ -199,11 +198,6 @@ Evaluating/visiting a node means two things:
 @docs withLetDeclarationEnterVisitor, withLetDeclarationExitVisitor
 @docs providesFixesForModuleRule
 @docs withFinalModuleEvaluation
-
-
-## Builder functions to analyze the project's data
-
-@docs withElmJsonModuleVisitor, withReadmeModuleVisitor, withDirectDependenciesModuleVisitor, withDependenciesModuleVisitor
 
 
 ## Creating a project rule
@@ -987,42 +981,20 @@ newModuleRuleSchema name moduleContextCreator =
 fromModuleRuleSchema : ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext -> Rule
 fromModuleRuleSchema ((ModuleRuleSchema schema) as moduleVisitor) =
     -- TODO BREAKING CHANGE Add canCollectData as a pre-requisite to using fromModuleRuleSchema
-    case schema.initialModuleContext of
-        Just initialModuleContext ->
-            ProjectRuleSchema
-                { name = schema.name
-                , initialProjectContext = initialModuleContext
-                , elmJsonVisitor = compactProjectDataVisitors (Maybe.map .project) schema.elmJsonVisitor
-                , readmeVisitor = compactProjectDataVisitors (Maybe.map .content) schema.readmeVisitor
-                , directDependenciesVisitor = compactProjectDataVisitors identity schema.directDependenciesVisitor
-                , dependenciesVisitor = compactProjectDataVisitors identity schema.dependenciesVisitor
-                , moduleVisitors = [ removeExtensibleRecordTypeVariable (always moduleVisitor) ]
-                , moduleContextCreator = Just (initContextCreator identity)
-                , folder = Nothing
-                , providesFixes = schema.providesFixes
-                , traversalType = AllModulesInParallel
-                , finalEvaluationFn = Nothing
-                , dataExtractor = Nothing
-                }
-                |> fromProjectRuleSchema
+    newProjectRuleSchema schema.name ()
+        |> withModuleVisitor
+            (\_ -> moduleVisitor)
+            { fromProjectToModule = contextCreatorToLazy schema.moduleContextCreator
+            , fromModuleToProject = initContextCreator (\_ -> ())
+            , foldProjectContexts = \() () -> ()
+            }
+        |> (if schema.providesFixes then
+                providesFixesForProjectRule
 
-        Nothing ->
-            ProjectRuleSchema
-                { name = schema.name
-                , initialProjectContext = ()
-                , elmJsonVisitor = Nothing
-                , readmeVisitor = Nothing
-                , directDependenciesVisitor = Nothing
-                , dependenciesVisitor = Nothing
-                , moduleVisitors = [ removeExtensibleRecordTypeVariable (always moduleVisitor) ]
-                , moduleContextCreator = Just (contextCreatorToLazy schema.moduleContextCreator)
-                , folder = Nothing
-                , providesFixes = schema.providesFixes
-                , traversalType = AllModulesInParallel
-                , finalEvaluationFn = Nothing
-                , dataExtractor = Nothing
-                }
-                |> fromProjectRuleSchema
+            else
+                identity
+           )
+        |> fromProjectRuleSchema
 
 
 compactProjectDataVisitors : (rawData -> data) -> Maybe (data -> moduleContext -> moduleContext) -> Maybe (rawData -> moduleContext -> ( List nothing, moduleContext ))
@@ -1802,116 +1774,6 @@ the results of other modules' analysis.
 withContextFromImportedModules : ProjectRuleSchema schemaState projectContext moduleContext -> ProjectRuleSchema schemaState projectContext moduleContext
 withContextFromImportedModules (ProjectRuleSchema schema) =
     ProjectRuleSchema { schema | traversalType = ImportedModulesFirst }
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the project's
-[`elm.json`](https://package.elm-lang.org/packages/elm/project-metadata-utils/latest/Elm-Project) file.
-
-The following example forbids exposing a module in an "Internal" directory in your `elm.json` file.
-
-    import Elm.Module
-    import Elm.Project
-    import Elm.Syntax.Module as Module exposing (Module)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    type alias Context =
-        Maybe Elm.Project.Project
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "DoNoExposeInternalModules" Nothing
-            |> Rule.withElmJsonModuleVisitor elmJsonVisitor
-            |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
-            |> Rule.fromModuleRuleSchema
-
-    elmJsonVisitor : Maybe Elm.Project.Project -> Context -> Context
-    elmJsonVisitor elmJson context =
-        elmJson
-
-    moduleDefinitionVisitor : Node Module -> Context -> ( List (Rule.Error {}), Context )
-    moduleDefinitionVisitor node context =
-        let
-            moduleName : List String
-            moduleName =
-                Node.value node |> Module.moduleName
-        in
-        if List.member "Internal" moduleName then
-            case context of
-                Just (Elm.Project.Package { exposed }) ->
-                    let
-                        exposedModules : List String
-                        exposedModules =
-                            case exposed of
-                                Elm.Project.ExposedList names ->
-                                    names
-                                        |> List.map Elm.Module.toString
-
-                                Elm.Project.ExposedDict fakeDict ->
-                                    fakeDict
-                                        |> List.concatMap Tuple.second
-                                        |> List.map Elm.Module.toString
-                    in
-                    if List.member (String.join "." moduleName) exposedModules then
-                        ( [ Rule.error "Do not expose modules in `Internal` as part of the public API" (Node.range node) ], context )
-
-                    else
-                        ( [], context )
-
-                _ ->
-                    ( [], context )
-
-        else
-            ( [], context )
-
--}
-withElmJsonModuleVisitor :
-    (Maybe Elm.Project.Project -> moduleContext -> moduleContext)
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-withElmJsonModuleVisitor visitor (ModuleRuleSchema schema) =
-    ModuleRuleSchema { schema | elmJsonVisitor = Just (combineContextOnlyVisitor visitor schema.elmJsonVisitor) }
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit
-the project's `README.md` file.
--}
-withReadmeModuleVisitor :
-    (Maybe String -> moduleContext -> moduleContext)
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-withReadmeModuleVisitor visitor (ModuleRuleSchema schema) =
-    ModuleRuleSchema { schema | readmeVisitor = Just (combineContextOnlyVisitor visitor schema.readmeVisitor) }
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will examine the project's
-[dependencies](./Review-Project-Dependency).
-
-You can use this look at the modules contained in dependencies, which can make the rule very precise when it targets
-specific functions.
-
--}
-withDependenciesModuleVisitor :
-    (Dict String Review.Project.Dependency.Dependency -> moduleContext -> moduleContext)
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-withDependenciesModuleVisitor visitor (ModuleRuleSchema schema) =
-    ModuleRuleSchema { schema | dependenciesVisitor = Just (combineContextOnlyVisitor visitor schema.dependenciesVisitor) }
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will examine the project's
-direct [dependencies](./Review-Project-Dependency).
-
-You can use this look at the modules contained in dependencies, which can make the rule very precise when it targets
-specific functions.
-
--}
-withDirectDependenciesModuleVisitor :
-    (Dict String Review.Project.Dependency.Dependency -> moduleContext -> moduleContext)
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-    -> ModuleRuleSchema { schemaState | canCollectProjectData : () } moduleContext
-withDirectDependenciesModuleVisitor visitor (ModuleRuleSchema schema) =
-    ModuleRuleSchema { schema | directDependenciesVisitor = Just (combineContextOnlyVisitor visitor schema.directDependenciesVisitor) }
 
 
 {-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
