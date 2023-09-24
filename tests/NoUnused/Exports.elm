@@ -756,10 +756,10 @@ testFunctionName moduleContext node =
     case Node.value node of
         Declaration.FunctionDeclaration function ->
             case Maybe.map (\(Node _ value) -> Node.value value.typeAnnotation) function.signature of
-                Just (TypeAnnotation.Typed typeNode _) ->
+                Just (TypeAnnotation.Typed (Node typeRange ( _, typeName )) _) ->
                     if
-                        (Tuple.second (Node.value typeNode) == "Test")
-                            && (ModuleNameLookup.moduleNameFor moduleContext.lookupTable typeNode == Just [ "Test" ])
+                        (typeName == "Test")
+                            && (ModuleNameLookup.moduleNameAt moduleContext.lookupTable typeRange == Just [ "Test" ])
                     then
                         function.declaration
                             |> Node.value
@@ -871,9 +871,9 @@ collectTypesFromTypeAnnotation moduleContext nodes acc =
 
 expressionVisitor : Node Expression -> ModuleContext -> ModuleContext
 expressionVisitor node moduleContext =
-    case Node.value node of
-        Expression.FunctionOrValue _ name ->
-            case ModuleNameLookup.moduleNameFor moduleContext.lookupTable node of
+    case node of
+        Node functionRange (Expression.FunctionOrValue _ name) ->
+            case ModuleNameLookup.moduleNameAt moduleContext.lookupTable functionRange of
                 Just moduleName ->
                     registerAsUsed
                         ( moduleName, name )
@@ -882,7 +882,7 @@ expressionVisitor node moduleContext =
                 Nothing ->
                     moduleContext
 
-        Expression.RecordUpdateExpression (Node range name) _ ->
+        Node _ (Expression.RecordUpdateExpression (Node range name) _) ->
             case ModuleNameLookup.moduleNameAt moduleContext.lookupTable range of
                 Just moduleName ->
                     registerAsUsed
@@ -892,7 +892,7 @@ expressionVisitor node moduleContext =
                 Nothing ->
                     moduleContext
 
-        Expression.LetExpression { declarations } ->
+        Node _ (Expression.LetExpression { declarations }) ->
             let
                 used : List ( ModuleName, String )
                 used =
@@ -917,7 +917,7 @@ expressionVisitor node moduleContext =
             in
             { moduleContext | used = List.foldl Set.insert moduleContext.used used }
 
-        Expression.CaseExpression { cases } ->
+        Node _ (Expression.CaseExpression { cases }) ->
             let
                 usedConstructors : List ( ModuleName, String )
                 usedConstructors =
@@ -944,7 +944,7 @@ findUsedConstructors lookupTable patterns acc =
                     let
                         newAcc : List ( ModuleName, String )
                         newAcc =
-                            case ModuleNameLookup.moduleNameFor lookupTable pattern of
+                            case ModuleNameLookup.moduleNameAt lookupTable (Node.range pattern) of
                                 Just moduleName ->
                                     ( moduleName, qualifiedNameRef.name ) :: acc
 

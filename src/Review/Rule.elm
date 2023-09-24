@@ -6312,7 +6312,6 @@ or implicitly. Resolving which module the type or function comes from can be a b
 doing it yourself.
 
 `elm-review` computes this for you already. Store this value inside your module context, then use
-[`ModuleNameLookup.moduleNameFor`](./Review-ModuleNameLookup#moduleNameFor) or
 [`ModuleNameLookup.moduleNameAt`](./Review-ModuleNameLookup#moduleNameAt) to get the name of the module the
 type or value comes from.
 
@@ -6337,8 +6336,8 @@ type or value comes from.
     expressionVisitor : Node Expression -> Context -> ( List (Error {}), Context )
     expressionVisitor node context =
         case Node.value node of
-            Expression.FunctionOrValue _ "color" ->
-                if ModuleNameLookup.moduleNameFor context.lookupTable node == Just [ "Css" ] then
+            Node functionRange (Expression.FunctionOrValue _ "color") ->
+                if ModuleNameLookup.moduleNameAt context.lookupTable functionRange == Just [ "Css" ] then
                     ( [ Rule.error
                             { message = "Do not use `Css.color` directly, use the Colors module instead"
                             , details = [ "We made a module which contains all the available colors of our design system. Use the functions in there instead." ]

@@ -230,14 +230,19 @@ expressionVisitor node context =
 
 reportIfDebugLog : Node Expression -> Context -> (() -> Maybe Range) -> ( List (Error {}), Context )
 reportIfDebugLog node context rangeToRemove =
-    if List.member (Node.range node) context.rangesToIgnore then
+    let
+        expressionRange : Range
+        expressionRange =
+            Node.range node
+    in
+    if List.member expressionRange context.rangesToIgnore then
         ( [], context )
 
     else
-        case ModuleNameLookup.moduleNameFor context.lookupTable node of
+        case ModuleNameLookup.moduleNameAt context.lookupTable expressionRange of
             Just [ "Debug" ] ->
                 ( [ error node (rangeToRemove ()) ]
-                , { context | rangesToIgnore = Node.range node :: context.rangesToIgnore }
+                , { context | rangesToIgnore = expressionRange :: context.rangesToIgnore }
                 )
 
             _ ->

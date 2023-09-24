@@ -10,7 +10,7 @@ import Elm.Module
 import Elm.Syntax.Declaration as Declaration exposing (Declaration)
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.ModuleName exposing (ModuleName)
-import Elm.Syntax.Node as Node exposing (Node)
+import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
 import Regex
 import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
@@ -251,15 +251,15 @@ declarationListVisitor target nodes moduleContext =
 isTargetFunction : Target -> ModuleContext -> Node a -> String -> Bool
 isTargetFunction target moduleContext functionNode functionName =
     (functionName == target.name)
-        && (ModuleNameLookup.moduleNameFor moduleContext.lookupTable functionNode == Just target.moduleName)
+        && (ModuleNameLookup.moduleNameAt moduleContext.lookupTable (Node.range functionNode) == Just target.moduleName)
 
 
 expressionVisitor : Target -> Node Expression -> ModuleContext -> ( List (Error {}), ModuleContext )
 expressionVisitor target node moduleContext =
     case Node.value node of
         Expression.Application (function :: argument :: []) ->
-            case Node.value function of
-                Expression.FunctionOrValue _ functionName ->
+            case function of
+                Node functionRange (Expression.FunctionOrValue _ functionName) ->
                     if isTargetFunction target moduleContext function functionName then
                         let
                             errors : List (Error {})
@@ -277,10 +277,10 @@ expressionVisitor target node moduleContext =
                                         [ Rule.error (nonStaticValue target) (Node.range node) ]
                         in
                         ( errors
-                        , { moduleContext | allowedFunctionOrValues = Node.range function :: moduleContext.allowedFunctionOrValues }
+                        , { moduleContext | allowedFunctionOrValues = functionRange :: moduleContext.allowedFunctionOrValues }
                         )
 
-                    else if functionName == "fromString" && ModuleNameLookup.moduleNameFor moduleContext.lookupTable function == Just [ "Regex" ] then
+                    else if functionName == "fromString" && ModuleNameLookup.moduleNameAt moduleContext.lookupTable functionRange == Just [ "Regex" ] then
                         case Node.value argument of
                             Expression.Literal _ ->
                                 ( [ Rule.error
@@ -290,7 +290,7 @@ expressionVisitor target node moduleContext =
                                             , "    " ++ target.suggestedImport ++ "\n    myRegex = " ++ target.suggestedUsage ++ " \"(abc|def)\""
                                             ]
                                         }
-                                        (Node.range function)
+                                        functionRange
                                   ]
                                 , moduleContext
                                 )

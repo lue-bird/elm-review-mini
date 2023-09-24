@@ -7,7 +7,7 @@ module NoDebug.TodoOrToString exposing (rule)
 -}
 
 import Elm.Syntax.Expression as Expression exposing (Expression)
-import Elm.Syntax.Node as Node exposing (Node)
+import Elm.Syntax.Node as Node exposing (Node(..))
 import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 
@@ -100,10 +100,10 @@ init =
 
 expressionVisitor : Node Expression -> Context -> ( List (Error {}), Context )
 expressionVisitor node context =
-    case Node.value node of
-        Expression.FunctionOrValue _ name ->
+    case node of
+        Node functionRange (Expression.FunctionOrValue _ name) ->
             if name == "todo" || name == "toString" then
-                case ModuleNameLookup.moduleNameFor context node of
+                case ModuleNameLookup.moduleNameAt context functionRange of
                     Just [ "Debug" ] ->
                         ( [ Rule.error
                                 { message = "Remove the use of `Debug." ++ name ++ "` before shipping to production"

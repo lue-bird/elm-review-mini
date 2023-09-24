@@ -458,7 +458,7 @@ findCustomTypesHelp lookupTable nodes acc =
             case Node.value node of
                 Expression.FunctionOrValue rawModuleName functionName ->
                     if String.Extra.isCapitalized functionName then
-                        case ModuleNameLookup.moduleNameFor lookupTable node of
+                        case ModuleNameLookup.moduleNameAt lookupTable (Node.range node) of
                             Just moduleName ->
                                 findCustomTypesHelp lookupTable restOfNodes (( moduleName, functionName ) :: acc)
 

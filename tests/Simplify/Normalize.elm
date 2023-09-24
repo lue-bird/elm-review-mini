@@ -113,7 +113,7 @@ normalize resources node =
 
         Expression.FunctionOrValue rawModuleName string ->
             Expression.FunctionOrValue
-                (ModuleNameLookup.moduleNameFor resources.lookupTable node
+                (ModuleNameLookup.moduleNameAt resources.lookupTable (Node.range node)
                     |> Maybe.withDefault rawModuleName
                 )
                 string
@@ -309,7 +309,7 @@ normalizePattern lookupTable node =
                 nameRef : Pattern.QualifiedNameRef
                 nameRef =
                     { moduleName =
-                        ModuleNameLookup.moduleNameFor lookupTable node
+                        ModuleNameLookup.moduleNameAt lookupTable (Node.range node)
                             |> Maybe.withDefault qualifiedNameRef.moduleName
                     , name = qualifiedNameRef.name
                     }

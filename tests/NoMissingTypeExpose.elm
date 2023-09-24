@@ -438,7 +438,7 @@ exposedSignatureTypesForTypeAnnotation :
 exposedSignatureTypesForTypeAnnotation lookupTable (Node _ typeAnnotation) exposedSignatureTypes =
     case typeAnnotation of
         TypeAnnotation.Typed name list ->
-            case ModuleNameLookup.moduleNameFor lookupTable name of
+            case ModuleNameLookup.moduleNameAt lookupTable (Node.range name) of
                 Just moduleName ->
                     (Node.map (\( _, typeName ) -> ( moduleName, typeName )) name :: exposedSignatureTypes)
                         |> exposedSignatureTypesForTypeAnnotationList lookupTable list

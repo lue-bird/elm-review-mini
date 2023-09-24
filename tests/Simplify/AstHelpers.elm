@@ -402,16 +402,11 @@ getUncomputedNumberValue node =
 
 isIdentity : ModuleNameLookup -> Node Expression -> Bool
 isIdentity lookupTable baseNode =
-    let
-        node : Node Expression
-        node =
-            removeParens baseNode
-    in
-    case Node.value node of
-        Expression.FunctionOrValue _ "identity" ->
-            ModuleNameLookup.moduleNameFor lookupTable node == Just [ "Basics" ]
+    case removeParens baseNode of
+        Node functionRange (Expression.FunctionOrValue _ "identity") ->
+            ModuleNameLookup.moduleNameAt lookupTable functionRange == Just [ "Basics" ]
 
-        Expression.LambdaExpression { args, expression } ->
+        Node _ (Expression.LambdaExpression { args, expression }) ->
             case args of
                 arg :: [] ->
                     case getVarPattern arg of
@@ -844,18 +839,18 @@ getTuple expressionNode =
 
 getBooleanPattern : ModuleNameLookup -> Node Pattern -> Maybe Bool
 getBooleanPattern lookupTable node =
-    case Node.value node of
-        Pattern.NamedPattern { name } _ ->
+    case node of
+        Node variantPatternRange (Pattern.NamedPattern { name } _) ->
             case name of
                 "True" ->
-                    if ModuleNameLookup.moduleNameFor lookupTable node == Just [ "Basics" ] then
+                    if ModuleNameLookup.moduleNameAt lookupTable variantPatternRange == Just [ "Basics" ] then
                         Just True
 
                     else
                         Nothing
 
                 "False" ->
-                    if ModuleNameLookup.moduleNameFor lookupTable node == Just [ "Basics" ] then
+                    if ModuleNameLookup.moduleNameAt lookupTable variantPatternRange == Just [ "Basics" ] then
                         Just False
 
                     else
@@ -864,7 +859,7 @@ getBooleanPattern lookupTable node =
                 _ ->
                     Nothing
 
-        Pattern.ParenthesizedPattern pattern ->
+        Node _ (Pattern.ParenthesizedPattern pattern) ->
             getBooleanPattern lookupTable pattern
 
         _ ->

@@ -661,16 +661,16 @@ isNeverOrItself lookupTable typeName node =
 
 expressionVisitor : Node Expression -> ModuleContext -> ModuleContext
 expressionVisitor node moduleContext =
-    case Node.value node of
-        Expression.FunctionOrValue _ name ->
-            case ModuleNameLookup.moduleNameFor moduleContext.lookupTable node of
+    case node of
+        Node functionRange (Expression.FunctionOrValue _ name) ->
+            case ModuleNameLookup.moduleNameAt moduleContext.lookupTable functionRange of
                 Just moduleName ->
-                    registerUsedFunctionOrValue (Node.range node) moduleName name moduleContext
+                    registerUsedFunctionOrValue functionRange moduleName name moduleContext
 
                 Nothing ->
                     moduleContext
 
-        Expression.OperatorApplication operator _ left right ->
+        Node operationRange (Expression.OperatorApplication operator _ left right) ->
             if operator == "==" || operator == "/=" then
                 let
                     { fromThisModule, fromOtherModules } =
@@ -688,7 +688,7 @@ expressionVisitor node moduleContext =
                     fixes =
                         List.foldl
                             (\( _, constructor ) dict ->
-                                updateToAdd constructor (Fix.replaceRangeBy (Node.range node) replacement) dict
+                                updateToAdd constructor (Fix.replaceRangeBy operationRange replacement) dict
                             )
                             moduleContext.fixesForRemovingConstructor
                             fromThisModule
@@ -702,7 +702,7 @@ expressionVisitor node moduleContext =
             else
                 moduleContext
 
-        Expression.Application ((Node _ (Expression.PrefixOperator operator)) :: arguments) ->
+        Node prefixOperationRange (Expression.Application ((Node _ (Expression.PrefixOperator operator)) :: arguments)) ->
             if operator == "==" || operator == "/=" then
                 let
                     { fromThisModule, fromOtherModules } =
@@ -728,7 +728,7 @@ expressionVisitor node moduleContext =
                     fixes =
                         List.foldl
                             (\( _, constructor ) dict ->
-                                updateToAdd constructor (Fix.replaceRangeBy (Node.range node) replacement) dict
+                                updateToAdd constructor (Fix.replaceRangeBy prefixOperationRange replacement) dict
                             )
                             moduleContext.fixesForRemovingConstructor
                             fromThisModule
@@ -742,7 +742,7 @@ expressionVisitor node moduleContext =
             else
                 moduleContext
 
-        Expression.LetExpression { declarations } ->
+        Node _ (Expression.LetExpression { declarations }) ->
             List.foldl
                 (\declaration ctx ->
                     case Node.value declaration of
@@ -968,7 +968,7 @@ addElementToUniqueList :
     -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
     -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
 addElementToUniqueList lookupTable node name acc =
-    case ModuleNameLookup.moduleNameFor lookupTable node of
+    case ModuleNameLookup.moduleNameAt lookupTable (Node.range node) of
         Just realModuleName ->
             let
                 moduleName : ModuleNameAsString
@@ -1009,7 +1009,7 @@ constructorsInPattern lookupTable nodes acc =
                     let
                         newAcc : { fromThisModule : Set ConstructorName, fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
                         newAcc =
-                            case ModuleNameLookup.moduleNameFor lookupTable node of
+                            case ModuleNameLookup.moduleNameAt lookupTable (Node.range node) of
                                 Just [] ->
                                     { fromThisModule = Set.insert qualifiedNameRef.name acc.fromThisModule
                                     , fromOtherModules = acc.fromOtherModules

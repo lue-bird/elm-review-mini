@@ -181,10 +181,15 @@ expressionVisitor node moduleContext =
 
 registerUpdateFunction : Node a -> ModuleContext -> ModuleContext
 registerUpdateFunction node moduleContext =
-    case ModuleNameLookup.moduleNameFor moduleContext.lookupTable node of
+    let
+        nodeRange : Range
+        nodeRange =
+            Node.range node
+    in
+    case ModuleNameLookup.moduleNameAt moduleContext.lookupTable nodeRange of
         Just moduleName ->
             if Set.member moduleName moduleContext.modulesThatExposeSubscriptionsAndUpdate then
-                { moduleContext | usesUpdateOfModule = Dict.insert moduleName (Node.range node) moduleContext.usesUpdateOfModule }
+                { moduleContext | usesUpdateOfModule = Dict.insert moduleName nodeRange moduleContext.usesUpdateOfModule }
 
             else
                 moduleContext
@@ -195,7 +200,7 @@ registerUpdateFunction node moduleContext =
 
 registerSubscriptionsFunction : Node a -> ModuleContext -> ModuleContext
 registerSubscriptionsFunction node moduleContext =
-    case ModuleNameLookup.moduleNameFor moduleContext.lookupTable node of
+    case ModuleNameLookup.moduleNameAt moduleContext.lookupTable (Node.range node) of
         Just moduleName ->
             if Set.member moduleName moduleContext.modulesThatExposeSubscriptionsAndUpdate then
                 { moduleContext | usesSubscriptionsOfModule = Set.insert moduleName moduleContext.usesSubscriptionsOfModule }

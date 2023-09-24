@@ -1,6 +1,5 @@
 module Review.ModuleNameLookup exposing
-    ( ModuleNameLookup, moduleNameFor, moduleNameAt
-    , fullModuleNameFor, fullModuleNameAt
+    ( ModuleNameLookup, moduleNameAt, fullModuleNameAt
     , createForTests
     )
 
@@ -13,12 +12,10 @@ or implicitly. Resolving which module the type or function comes from can be a b
 doing it yourself.
 
 `elm-review` computes this for you already. Store this value inside your module context, then use
-[`ModuleNameLookup.moduleNameFor`](./Review-ModuleNameLookup#moduleNameFor) or
 [`ModuleNameLookup.moduleNameAt`](./Review-ModuleNameLookup#moduleNameAt) to get the name of the module the
 type or value comes from.
 
-@docs ModuleNameLookup, moduleNameFor, moduleNameAt
-@docs fullModuleNameFor, fullModuleNameAt
+@docs ModuleNameLookup, moduleNameAt, fullModuleNameAt
 
 Note: If you have been using [`elm-review-scope`](https://github.com/jfmengels/elm-review-scope) before, you should use this instead.
 
@@ -41,60 +38,6 @@ from.
 -}
 type alias ModuleNameLookup =
     Internal.ModuleNameLookup
-
-
-{-| Returns the name of the module the type, value, or operator referred to by this [`Node`](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Node#Node) was defined in.
-
-The function returns `Just []` if the type or value was defined in this module. It returns `Just moduleName` if the Node is among these kinds of AST nodes (and `Nothing` for all the others):
-
-  - `Expression.FunctionOrValue`
-  - `nodeForTheName` in `Expression.RecordUpdateExpression nodeForTheName modifiers`
-  - `nodeForTheName` in `TypeAnnotation.Typed nodeForTheName args`
-  - `Pattern.NamedPattern`
-  - `Expression.PrefixOperator`
-  - `Expression.OperatorApplication`
-
-```elm
-expressionVisitor : Node Expression -> Context -> ( List (Error {}), Context )
-expressionVisitor node context =
-    case Node.value node of
-        Expression.FunctionOrValue _ "color" ->
-            if ModuleNameLookup.moduleNameFor context.lookupTable node == Just [ "Css" ] then
-                ( [ Rule.error
-                        { message = "Do not use `Css.color` directly, use the Colors module instead"
-                        , details = [ "We made a module which contains all the available colors of our design system. Use the functions in there instead." ]
-                        }
-                        (Node.range node)
-                  ]
-                , context
-                )
-
-            else
-                ( [], context )
-
-        _ ->
-            ( [], context )
-```
-
-Note: If using a `Range` is easier in your situation than using a `Node`, use [`moduleNameAt`](#moduleNameAt) instead.
-
--}
-moduleNameFor : ModuleNameLookup -> Node a -> Maybe ModuleName
-moduleNameFor (Internal.ModuleNameLookup _ dict) (Node range _) =
-    Dict.get (Internal.toRangeLike range) dict
-
-
-{-| This is the same as [`moduleNameFor`](#moduleNameFor), except that the function will return the current module name
-if the type or value was defined in this module, instead of `Just []`.
--}
-fullModuleNameFor : ModuleNameLookup -> Node a -> Maybe ModuleName
-fullModuleNameFor (Internal.ModuleNameLookup currentModuleName dict) (Node range _) =
-    case Dict.get (Internal.toRangeLike range) dict of
-        Just [] ->
-            Just currentModuleName
-
-        res ->
-            res
 
 
 {-| Returns the name of the module the type, value, or operator referred to by this [`Range`](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Range#Range).
@@ -123,8 +66,6 @@ expressionVisitor node context =
         _ ->
             ( [], context )
 ```
-
-Note: If using a `Node` is easier in your situation than using a `Range`, use [`moduleNameFor`](#moduleNameFor) instead.
 
 -}
 moduleNameAt : ModuleNameLookup -> Range -> Maybe ModuleName

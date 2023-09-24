@@ -16,26 +16,26 @@ getBoolean resources baseNode =
         node =
             AstHelpers.removeParens baseNode
     in
-    case Node.value node of
-        Expression.FunctionOrValue _ "True" ->
-            case ModuleNameLookup.moduleNameFor resources.lookupTable node of
+    case node of
+        Node functionRange (Expression.FunctionOrValue _ "True") ->
+            case ModuleNameLookup.moduleNameAt resources.lookupTable functionRange of
                 Just [ "Basics" ] ->
                     Determined True
 
                 _ ->
                     Undetermined
 
-        Expression.FunctionOrValue _ "False" ->
-            case ModuleNameLookup.moduleNameFor resources.lookupTable node of
+        Node functionRange (Expression.FunctionOrValue _ "False") ->
+            case ModuleNameLookup.moduleNameAt resources.lookupTable functionRange of
                 Just [ "Basics" ] ->
                     Determined False
 
                 _ ->
                     Undetermined
 
-        Expression.FunctionOrValue _ name ->
+        Node functionRange (Expression.FunctionOrValue _ name) ->
             case
-                ModuleNameLookup.moduleNameFor resources.lookupTable node
+                ModuleNameLookup.moduleNameAt resources.lookupTable functionRange
                     |> Maybe.andThen (\moduleName -> Infer.get (Expression.FunctionOrValue moduleName name) (Tuple.first resources.inferredConstants))
             of
                 Just (Expression.FunctionOrValue [ "Basics" ] "True") ->
@@ -88,19 +88,19 @@ getInt resources baseNode =
         node =
             AstHelpers.removeParens baseNode
     in
-    case Node.value node of
-        Expression.Integer n ->
+    case node of
+        Node _ (Expression.Integer n) ->
             Just n
 
-        Expression.Hex n ->
+        Node _ (Expression.Hex n) ->
             Just n
 
-        Expression.Negation expr ->
+        Node _ (Expression.Negation expr) ->
             Maybe.map negate (getInt resources expr)
 
-        Expression.FunctionOrValue _ name ->
+        Node functionRange (Expression.FunctionOrValue _ name) ->
             case
-                ModuleNameLookup.moduleNameFor resources.lookupTable node
+                ModuleNameLookup.moduleNameAt resources.lookupTable functionRange
                     |> Maybe.andThen (\moduleName -> Infer.get (Expression.FunctionOrValue moduleName name) (Tuple.first resources.inferredConstants))
             of
                 Just (Expression.Integer int) ->

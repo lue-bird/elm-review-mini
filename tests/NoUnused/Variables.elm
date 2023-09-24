@@ -801,14 +801,9 @@ isDebugLog : ModuleNameLookup -> Node Expression -> Bool
 isDebugLog lookupTable node =
     case Node.value node of
         Expression.Application [ functionWithParens, _, _ ] ->
-            let
-                function : Node Expression
-                function =
-                    removeParensFromExpression functionWithParens
-            in
-            case Node.value function of
-                Expression.FunctionOrValue _ "log" ->
-                    ModuleNameLookup.moduleNameFor lookupTable function == Just [ "Debug" ]
+            case removeParensFromExpression functionWithParens of
+                Node functionRange (Expression.FunctionOrValue _ "log") ->
+                    ModuleNameLookup.moduleNameAt lookupTable functionRange == Just [ "Debug" ]
 
                 _ ->
                     False
@@ -816,14 +811,9 @@ isDebugLog lookupTable node =
         Expression.OperatorApplication "|>" _ _ pipeFunction ->
             case Node.value (removeParensFromExpression pipeFunction) of
                 Expression.Application [ functionWithParens, _ ] ->
-                    let
-                        function : Node Expression
-                        function =
-                            removeParensFromExpression functionWithParens
-                    in
-                    case Node.value function of
-                        Expression.FunctionOrValue _ "log" ->
-                            ModuleNameLookup.moduleNameFor lookupTable function == Just [ "Debug" ]
+                    case removeParensFromExpression functionWithParens of
+                        Node functionRange (Expression.FunctionOrValue _ "log") ->
+                            ModuleNameLookup.moduleNameAt lookupTable functionRange == Just [ "Debug" ]
 
                         _ ->
                             False
@@ -834,14 +824,9 @@ isDebugLog lookupTable node =
         Expression.OperatorApplication "<|" _ pipeFunction _ ->
             case Node.value (removeParensFromExpression pipeFunction) of
                 Expression.Application [ functionWithParens, _ ] ->
-                    let
-                        function : Node Expression
-                        function =
-                            removeParensFromExpression functionWithParens
-                    in
-                    case Node.value function of
-                        Expression.FunctionOrValue _ "log" ->
-                            ModuleNameLookup.moduleNameFor lookupTable function == Just [ "Debug" ]
+                    case removeParensFromExpression functionWithParens of
+                        Node functionRange (Expression.FunctionOrValue _ "log") ->
+                            ModuleNameLookup.moduleNameAt lookupTable functionRange == Just [ "Debug" ]
 
                         _ ->
                             False
@@ -992,7 +977,7 @@ markValuesFromPatternsAsUsed nodes context =
 
                         contextAfterModuleUsage : ModuleContext
                         contextAfterModuleUsage =
-                            case ModuleNameLookup.moduleNameFor context.lookupTable node of
+                            case ModuleNameLookup.moduleNameAt context.lookupTable (Node.range node) of
                                 Just realModuleName ->
                                     markModuleAsUsed ( realModuleName, qualifiedNameRef.moduleName ) contextAfterTypeUsage
 
