@@ -31,7 +31,7 @@ baseRule =
         |> Rule.withFinalProjectEvaluation finalEvaluation
 
 
-fromModuleToProject : Rule.ContextCreator a ProjectContext
+fromModuleToProject : Rule.ContextCreator (a -> ProjectContext)
 fromModuleToProject =
     Rule.initContextCreator
         (\moduleKey moduleName _ ->

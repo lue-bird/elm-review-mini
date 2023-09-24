@@ -275,7 +275,7 @@ initialContext =
     Dict.empty
 
 
-fromProjectToModule : Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModule =
     Rule.initContextCreator
         (always
@@ -290,7 +290,7 @@ fromProjectToModule =
         )
 
 
-fromModuleToProject : Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProject =
     Rule.initContextCreator
         (\moduleName moduleContext ->

@@ -29,10 +29,10 @@ rule =
         |> Rule.fromModuleRuleSchema
 
 
-initContext : Rule.ContextCreator () Context
+initContext : Rule.ContextCreator Context
 initContext =
     Rule.initContextCreator
-        (\moduleName _ ->
+        (\moduleName ->
             { moduleName = moduleName
             }
         )

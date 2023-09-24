@@ -189,7 +189,7 @@ type alias MaybeExposedLinkData =
     }
 
 
-fromProjectToModule : Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModule =
     Rule.initContextCreator
         (\ast moduleName projectContext ->
@@ -215,7 +215,7 @@ fromProjectToModule =
         |> Rule.withModuleName
 
 
-fromModuleToProject : Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProject =
     Rule.initContextCreator
         (\moduleKey moduleContext ->

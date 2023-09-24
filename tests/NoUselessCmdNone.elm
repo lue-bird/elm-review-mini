@@ -73,10 +73,10 @@ type alias Context =
     }
 
 
-initialContext : Rule.ContextCreator () Context
+initialContext : Rule.ContextCreator Context
 initialContext =
     Rule.initContextCreator
-        (\lookupTable () ->
+        (\lookupTable ->
             { lookupTable = lookupTable
             , ranges = []
             }

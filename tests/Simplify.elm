@@ -952,7 +952,7 @@ initialContext =
     }
 
 
-fromModuleToProject : Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProject =
     Rule.initContextCreator
         (\moduleContext ->
@@ -964,7 +964,7 @@ fromModuleToProject =
         )
 
 
-fromProjectToModule : Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModule =
     Rule.initContextCreator
         (\lookupTable metadata extractSourceCode fullAst projectContext ->

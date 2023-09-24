@@ -233,7 +233,7 @@ ruleThatListsIgnoredFiles =
         |> Rule.fromProjectRuleSchema
 
 
-fromModuleToProject : Rule.ContextCreator () (Set ModuleName)
+fromModuleToProject : Rule.ContextCreator (() -> Set ModuleName)
 fromModuleToProject =
     Rule.initContextCreator
         (\moduleName isIgnored () ->

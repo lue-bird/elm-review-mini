@@ -155,7 +155,7 @@ type DeprecationReason
     | DeprecatedDependency
 
 
-fromProjectToModule : StableConfiguration -> Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModule : StableConfiguration -> Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModule (StableConfiguration configuration) =
     Rule.initContextCreator
         (\metadata lookupTable projectContext ->
@@ -176,7 +176,7 @@ fromProjectToModule (StableConfiguration configuration) =
         |> Rule.withModuleNameLookupTable
 
 
-fromModuleToProject : Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProject =
     Rule.initContextCreator
         (\metadata moduleContext ->

@@ -226,10 +226,10 @@ emptyBranching =
     }
 
 
-initialContext : Rule.ContextCreator () Context
+initialContext : Rule.ContextCreator Context
 initialContext =
     Rule.initContextCreator
-        (\lookupTable extractSourceCode () ->
+        (\lookupTable extractSourceCode ->
             { lookupTable = lookupTable
             , extractSourceCode = extractSourceCode
             , scope = newBranch (InsertNewLet { row = 0, column = 0 })

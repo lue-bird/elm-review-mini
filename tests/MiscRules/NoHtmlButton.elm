@@ -19,10 +19,10 @@ type alias Context =
     }
 
 
-contextCreator : Rule.ContextCreator () Context
+contextCreator : Rule.ContextCreator Context
 contextCreator =
     Rule.initContextCreator
-        (\moduleNameLookupTable () ->
+        (\moduleNameLookupTable ->
             { moduleNameLookupTable = moduleNameLookupTable
             }
         )

@@ -375,7 +375,7 @@ type ModuleRuleSchema schemaState moduleContext
 type alias ModuleRuleSchemaData moduleContext =
     { name : String
     , initialModuleContext : Maybe moduleContext
-    , moduleContextCreator : ContextCreator () moduleContext
+    , moduleContextCreator : ContextCreator moduleContext
     , moduleDefinitionVisitor : Maybe (Visitor Module moduleContext)
     , moduleDocumentationVisitor : Maybe (Maybe (Node String) -> moduleContext -> ( List (Error {}), moduleContext ))
     , commentsVisitor : Maybe (List (Node String) -> moduleContext -> ( List (Error {}), moduleContext ))
@@ -1000,7 +1000,7 @@ newModuleRuleSchema name initialModuleContext =
     ModuleRuleSchema
         { name = name
         , initialModuleContext = Just initialModuleContext
-        , moduleContextCreator = initContextCreator (always initialModuleContext)
+        , moduleContextCreator = initContextCreator initialModuleContext
         , moduleDefinitionVisitor = Nothing
         , moduleDocumentationVisitor = Nothing
         , commentsVisitor = Nothing
@@ -1049,10 +1049,10 @@ their name, like [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
             -- visitors
             |> Rule.fromModuleRuleSchema
 
-    contextCreator : Rule.ContextCreator () Context
+    contextCreator : Rule.ContextCreator Context
     contextCreator =
         Rule.initContextCreator
-            (\isInSourceDirectories () ->
+            (\isInSourceDirectories ->
                 { hasTodoBeenImported = False
                 , hasToStringBeenImported = False
                 , isInSourceDirectories = isInSourceDirectories
@@ -1061,7 +1061,7 @@ their name, like [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
             |> Rule.withIsInSourceDirectories
 
 -}
-newModuleRuleSchemaUsingContextCreator : String -> ContextCreator () moduleContext -> ModuleRuleSchema {} moduleContext
+newModuleRuleSchemaUsingContextCreator : String -> ContextCreator moduleContext -> ModuleRuleSchema {} moduleContext
 newModuleRuleSchemaUsingContextCreator name moduleContextCreator =
     ModuleRuleSchema
         { name = name
@@ -1122,7 +1122,7 @@ fromModuleRuleSchema ((ModuleRuleSchema schema) as moduleVisitor) =
                 , directDependenciesVisitor = Nothing
                 , dependenciesVisitor = Nothing
                 , moduleVisitors = [ removeExtensibleRecordTypeVariable (always moduleVisitor) ]
-                , moduleContextCreator = Just schema.moduleContextCreator
+                , moduleContextCreator = Just (contextCreatorToLazy schema.moduleContextCreator)
                 , folder = Nothing
                 , providesFixes = schema.providesFixes
                 , traversalType = AllModulesInParallel
@@ -1164,7 +1164,7 @@ type alias ProjectRuleSchemaData projectContext moduleContext =
     , directDependenciesVisitor : Maybe (Dict String Review.Project.Dependency.Dependency -> projectContext -> ( List (Error {}), projectContext ))
     , dependenciesVisitor : Maybe (Dict String Review.Project.Dependency.Dependency -> projectContext -> ( List (Error {}), projectContext ))
     , moduleVisitors : List (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { hasAtLeastOneVisitor : () } moduleContext)
-    , moduleContextCreator : Maybe (ContextCreator projectContext moduleContext)
+    , moduleContextCreator : Maybe (ContextCreator (projectContext -> moduleContext))
     , folder : Maybe (Folder projectContext moduleContext)
     , providesFixes : Bool
 
@@ -1282,9 +1282,9 @@ emptyCache =
 mergeModuleVisitors :
     String
     -> projectContext
-    -> Maybe (ContextCreator projectContext moduleContext)
+    -> Maybe (ContextCreator (projectContext -> moduleContext))
     -> List (ModuleRuleSchema schemaState1 moduleContext -> ModuleRuleSchema schemaState2 moduleContext)
-    -> Maybe ( ModuleRuleSchema {} moduleContext, ContextCreator projectContext moduleContext )
+    -> Maybe ( ModuleRuleSchema {} moduleContext, ContextCreator (projectContext -> moduleContext) )
 mergeModuleVisitors ruleName_ initialProjectContext maybeModuleContextCreator visitors =
     case maybeModuleContextCreator of
         Nothing ->
@@ -1301,9 +1301,9 @@ mergeModuleVisitors ruleName_ initialProjectContext maybeModuleContextCreator vi
 mergeModuleVisitorsHelp :
     String
     -> projectContext
-    -> ContextCreator projectContext moduleContext
+    -> ContextCreator (projectContext -> moduleContext)
     -> List (ModuleRuleSchema schemaState1 moduleContext -> ModuleRuleSchema schemaState2 moduleContext)
-    -> ( ModuleRuleSchema {} moduleContext, ContextCreator projectContext moduleContext )
+    -> ( ModuleRuleSchema {} moduleContext, ContextCreator (projectContext -> moduleContext) )
 mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator visitors =
     let
         dummyAst : Elm.Syntax.File.File
@@ -1340,7 +1340,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
             ModuleRuleSchema
                 { name = ruleName_
                 , initialModuleContext = Just initialModuleContext
-                , moduleContextCreator = initContextCreator (always initialModuleContext)
+                , moduleContextCreator = initContextCreator initialModuleContext
                 , moduleDefinitionVisitor = Nothing
                 , moduleDocumentationVisitor = Nothing
                 , commentsVisitor = Nothing
@@ -1710,7 +1710,7 @@ withModuleContext :
     -> ProjectRuleSchema { schemaState | hasAtLeastOneVisitor : (), withModuleContext : Forbidden } projectContext moduleContext
 withModuleContext functions (ProjectRuleSchema schema) =
     let
-        moduleContextCreator : ContextCreator projectContext moduleContext
+        moduleContextCreator : ContextCreator (projectContext -> moduleContext)
         moduleContextCreator =
             initContextCreator
                 (\moduleKey moduleNameNode_ projectContext ->
@@ -1752,7 +1752,7 @@ you to request more information
                 }
             |> Rule.fromProjectRuleSchema
 
-    fromProjectToModule : Rule.ContextCreator ProjectContext ModuleContext
+    fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
     fromProjectToModule =
         Rule.initContextCreator
             (\projectContext ->
@@ -1760,7 +1760,7 @@ you to request more information
                 }
             )
 
-    fromModuleToProject : Rule.ContextCreator ModuleContext ProjectContext
+    fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
     fromModuleToProject =
         Rule.initContextCreator
             (\moduleKey moduleName moduleContext ->
@@ -1772,8 +1772,8 @@ you to request more information
 
 -}
 withModuleContextUsingContextCreator :
-    { fromProjectToModule : ContextCreator projectContext moduleContext
-    , fromModuleToProject : ContextCreator moduleContext projectContext
+    { fromProjectToModule : ContextCreator (projectContext -> moduleContext)
+    , fromModuleToProject : ContextCreator (moduleContext -> projectContext)
     , foldProjectContexts : projectContext -> projectContext -> projectContext
     }
     -> ProjectRuleSchema { schemaState | canAddModuleVisitor : (), withModuleContext : Required } projectContext moduleContext
@@ -4141,7 +4141,7 @@ type TraversalAndFolder projectContext moduleContext
 
 
 type alias Folder projectContext moduleContext =
-    { fromModuleToProject : ContextCreator moduleContext projectContext
+    { fromModuleToProject : ContextCreator (moduleContext -> projectContext)
     , foldProjectContexts : projectContext -> projectContext -> projectContext
     }
 
@@ -5756,7 +5756,7 @@ createModuleVisitorFromProjectVisitorHelp :
     -> (ProjectRuleCache projectContext -> RuleProjectVisitor)
     -> RuleProjectVisitorHidden projectContext
     -> TraversalAndFolder projectContext moduleContext
-    -> ( ModuleRuleSchema schemaState moduleContext, ContextCreator projectContext moduleContext )
+    -> ( ModuleRuleSchema schemaState moduleContext, ContextCreator (projectContext -> moduleContext) )
     -> ValidProject
     -> String
     -> ContentHash
@@ -6151,21 +6151,21 @@ accumulate params visitor ( previousErrors, previousContext ) =
 {-| Create a module context from a project context or the other way around.
 Use functions like [`withModuleName`](#withModuleName) to request more information.
 -}
-type ContextCreator from to
-    = ContextCreator (AvailableData -> Bool -> from -> to) RequestedData
+type ContextCreator create
+    = ContextCreator (AvailableData -> Bool -> create) RequestedData
 
 
-requestedDataFromContextCreator : ContextCreator from to -> RequestedData
+requestedDataFromContextCreator : ContextCreator create -> RequestedData
 requestedDataFromContextCreator (ContextCreator _ requestedData) =
     requestedData
 
 
 {-| Initialize a new context creator.
 
-    contextCreator : Rule.ContextCreator () Context
+    contextCreator : Rule.ContextCreator Context
     contextCreator =
         Rule.initContextCreator
-            (\moduleName () ->
+            (\moduleName ->
                 { moduleName = moduleName
 
                 -- ...other fields
@@ -6174,16 +6174,21 @@ requestedDataFromContextCreator (ContextCreator _ requestedData) =
             |> Rule.withModuleName
 
 -}
-initContextCreator : (from -> to) -> ContextCreator from to
-initContextCreator fromProjectToModule =
+initContextCreator : create -> ContextCreator create
+initContextCreator create =
     ContextCreator
-        (\_ _ -> fromProjectToModule)
+        (\_ _ -> create)
         RequestedData.none
 
 
-applyContextCreator : AvailableData -> Bool -> ContextCreator from to -> from -> to
-applyContextCreator data isFileIgnored (ContextCreator fn _) from =
-    fn data isFileIgnored from
+contextCreatorToLazy : ContextCreator created -> ContextCreator (() -> created)
+contextCreatorToLazy (ContextCreator fn requestedData) =
+    ContextCreator (\availableData isFileIgnored () -> fn availableData isFileIgnored) requestedData
+
+
+applyContextCreator : AvailableData -> Bool -> ContextCreator create -> create
+applyContextCreator data isFileIgnored (ContextCreator fn _) =
+    fn data isFileIgnored
 
 
 {-| Request metadata about the module.
@@ -6195,7 +6200,7 @@ applyContextCreator data isFileIgnored (ContextCreator fn _) from =
   - [`withIsInSourceDirectories`](#withIsInSourceDirectories)
 
 -}
-withMetadata : ContextCreator Metadata (from -> to) -> ContextCreator from to
+withMetadata : ContextCreator (Metadata -> create) -> ContextCreator create
 withMetadata (ContextCreator fn requestedData) =
     ContextCreator
         (\data isFileIgnored ->
@@ -6212,10 +6217,10 @@ withMetadata (ContextCreator fn requestedData) =
 
 {-| Request the name of the module.
 
-    contextCreator : Rule.ContextCreator () Context
+    contextCreator : Rule.ContextCreator Context
     contextCreator =
         Rule.initContextCreator
-            (\moduleName () ->
+            (\moduleName ->
                 { moduleName = moduleName
 
                 -- ...other fields
@@ -6224,7 +6229,7 @@ withMetadata (ContextCreator fn requestedData) =
             |> Rule.withModuleName
 
 -}
-withModuleName : ContextCreator ModuleName (from -> to) -> ContextCreator from to
+withModuleName : ContextCreator (ModuleName -> create) -> ContextCreator create
 withModuleName (ContextCreator fn requestedData) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored (moduleNameNode data.ast.moduleDefinition |> Node.value))
@@ -6233,10 +6238,10 @@ withModuleName (ContextCreator fn requestedData) =
 
 {-| Request the node corresponding to the name of the module.
 
-    contextCreator : Rule.ContextCreator () Context
+    contextCreator : Rule.ContextCreator Context
     contextCreator =
         Rule.initContextCreator
-            (\moduleNameNode () ->
+            (\moduleNameNode ->
                 { moduleNameNode = moduleNameNode
 
                 -- ...other fields
@@ -6245,7 +6250,7 @@ withModuleName (ContextCreator fn requestedData) =
             |> Rule.withModuleNameNode
 
 -}
-withModuleNameNode : ContextCreator (Node ModuleName) (from -> to) -> ContextCreator from to
+withModuleNameNode : ContextCreator (Node ModuleName -> create) -> ContextCreator create
 withModuleNameNode (ContextCreator fn requestedData) =
     ContextCreator (\data isFileIgnored -> fn data isFileIgnored (moduleNameNode data.ast.moduleDefinition))
         requestedData
@@ -6266,7 +6271,7 @@ know whether the module is part of the tests or of the production code.
             |> Rule.withIsInSourceDirectories
 
 -}
-withIsInSourceDirectories : ContextCreator Bool (from -> to) -> ContextCreator from to
+withIsInSourceDirectories : ContextCreator (Bool -> create) -> ContextCreator create
 withIsInSourceDirectories (ContextCreator fn requestedData) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.isInSourceDirectories)
@@ -6279,10 +6284,10 @@ errors — when that will ignored anyway.
 
 Note that for module rules, ignored files will be skipped automatically anyway.
 
-    contextCreator : Rule.ContextCreator () Context
+    contextCreator : Rule.ContextCreator Context
     contextCreator =
         Rule.initContextCreator
-            (\isFileIgnored () ->
+            (\isFileIgnored ->
                 { isFileIgnored = isFileIgnored
 
                 -- ...other fields
@@ -6291,7 +6296,7 @@ Note that for module rules, ignored files will be skipped automatically anyway.
             |> Rule.withIsFileIgnored
 
 -}
-withIsFileIgnored : ContextCreator Bool (from -> to) -> ContextCreator from to
+withIsFileIgnored : ContextCreator (Bool -> create) -> ContextCreator create
 withIsFileIgnored (ContextCreator fn (RequestedData requested)) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored isFileIgnored)
@@ -6323,10 +6328,10 @@ type or value comes from.
             |> Rule.fromModuleRuleSchema
             |> Rule.ignoreErrorsForFiles [ "src/Colors.elm" ]
 
-    initialContext : Rule.ContextCreator () Context
+    initialContext : Rule.ContextCreator Context
     initialContext =
         Rule.initContextCreator
-            (\lookupTable () -> { lookupTable = lookupTable })
+            (\lookupTable -> { lookupTable = lookupTable })
             |> Rule.withModuleNameLookupTable
 
     expressionVisitor : Node Expression -> Context -> ( List (Error {}), Context )
@@ -6352,7 +6357,7 @@ type or value comes from.
 Note: If you have been using [`elm-review-scope`](https://github.com/jfmengels/elm-review-scope) before, you should use this instead.
 
 -}
-withModuleNameLookupTable : ContextCreator ModuleNameLookupTable (from -> to) -> ContextCreator from to
+withModuleNameLookupTable : ContextCreator (ModuleNameLookupTable -> create) -> ContextCreator create
 withModuleNameLookupTable (ContextCreator fn (RequestedData requested)) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.moduleNameLookupTable)
@@ -6369,10 +6374,10 @@ initialization and store some intermediary data.
 
 Using the full AST, you can simplify the implementation by computing the data in the context creator, without the use of visitors.
 
-    contextCreator : Rule.ContextCreator () Context
+    contextCreator : Rule.ContextCreator Context
     contextCreator =
         Rule.initContextCreator
-            (\ast () ->
+            (\ast ->
                 { exposed = collectExposed ast.moduleDefinition ast.declarations
 
                 -- ...other fields
@@ -6381,7 +6386,7 @@ Using the full AST, you can simplify the implementation by computing the data in
             |> Rule.withFullAst
 
 -}
-withFullAst : ContextCreator Elm.Syntax.File.File (from -> to) -> ContextCreator from to
+withFullAst : ContextCreator (Elm.Syntax.File.File -> create) -> ContextCreator create
 withFullAst (ContextCreator fn requested) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.ast)
@@ -6403,7 +6408,7 @@ When that is the case, the module documentation will be `Nothing`.
             |> Rule.withModuleDocumentation
 
 -}
-withModuleDocumentation : ContextCreator (Maybe (Node String)) (from -> to) -> ContextCreator from to
+withModuleDocumentation : ContextCreator (Maybe (Node String) -> create) -> ContextCreator create
 withModuleDocumentation (ContextCreator fn requested) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.moduleDocumentation)
@@ -6422,14 +6427,14 @@ withModuleDocumentation (ContextCreator fn requested) =
                 , foldProjectContexts = foldProjectContexts
                 }
 
-    fromModuleToProject : Rule.ContextCreator () Context
+    fromModuleToProject : Rule.ContextCreator Context
     fromModuleToProject =
         Rule.initContextCreator
-            (\moduleKey () -> { moduleKey = moduleKey })
+            (\moduleKey -> { moduleKey = moduleKey })
             |> Rule.withModuleKey
 
 -}
-withModuleKey : ContextCreator ModuleKey (from -> to) -> ContextCreator from to
+withModuleKey : ContextCreator (ModuleKey -> create) -> ContextCreator create
 withModuleKey (ContextCreator fn requestedData) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.moduleKey)
@@ -6464,14 +6469,14 @@ Using [`withModuleContextUsingContextCreator`](#withModuleContextUsingContextCre
                 , foldProjectContexts = foldProjectContexts
                 }
 
-    fromModuleToProject : Rule.ContextCreator () Context
+    fromModuleToProject : Rule.ContextCreator Context
     fromModuleToProject =
         Rule.initContextCreator
-            (\filePath () -> { filePath = filePath })
+            (\filePath -> { filePath = filePath })
             |> Rule.withFilePath
 
 -}
-withFilePath : ContextCreator String (from -> to) -> ContextCreator from to
+withFilePath : ContextCreator (String -> create) -> ContextCreator create
 withFilePath (ContextCreator fn requestedData) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.filePath)
@@ -6490,10 +6495,10 @@ withFilePath (ContextCreator fn requestedData) =
         { extractSourceCode : Range -> String
         }
 
-    initialContext : Rule.ContextCreator () Context
+    initialContext : Rule.ContextCreator Context
     initialContext =
         Rule.initContextCreator
-            (\extractSourceCode () -> { extractSourceCode = extractSourceCode })
+            (\extractSourceCode -> { extractSourceCode = extractSourceCode })
             |> Rule.withSourceCodeExtractor
 
 The motivation for this capability was for allowing to provide higher-quality fixes, especially where you'd need to **move** or **copy**
@@ -6503,7 +6508,7 @@ I discourage using this functionality to explore the source code, as the differe
 experience.
 
 -}
-withSourceCodeExtractor : ContextCreator (Range -> String) (from -> to) -> ContextCreator from to
+withSourceCodeExtractor : ContextCreator ((Range -> String) -> create) -> ContextCreator create
 withSourceCodeExtractor (ContextCreator fn (RequestedData requested)) =
     ContextCreator
         (\data isFileIgnored -> fn data isFileIgnored data.extractSourceCode)

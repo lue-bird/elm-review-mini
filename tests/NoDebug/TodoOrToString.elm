@@ -92,9 +92,9 @@ type alias Context =
     ModuleNameLookupTable
 
 
-init : Rule.ContextCreator () Context
+init : Rule.ContextCreator Context
 init =
-    Rule.initContextCreator (\lookupTable () -> lookupTable)
+    Rule.initContextCreator (\lookupTable -> lookupTable)
         |> Rule.withModuleNameLookupTable
 
 

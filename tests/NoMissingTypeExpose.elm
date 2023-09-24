@@ -607,7 +607,7 @@ formatTypeName ( moduleName, name ) =
     String.join "." (moduleName ++ [ name ])
 
 
-fromProjectToModuleContext : Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModuleContext : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModuleContext =
     Rule.initContextCreator
         (\lookupTable moduleName { exposedModules, moduleTypes } ->
@@ -629,7 +629,7 @@ fromProjectToModuleContext =
         |> Rule.withModuleName
 
 
-fromModuleToProjectContext : Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProjectContext : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProjectContext =
     Rule.initContextCreator
         (\moduleName context ->

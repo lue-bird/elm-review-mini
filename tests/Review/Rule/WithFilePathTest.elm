@@ -28,10 +28,10 @@ rule =
         |> Rule.fromModuleRuleSchema
 
 
-initContext : Rule.ContextCreator () Context
+initContext : Rule.ContextCreator Context
 initContext =
     Rule.initContextCreator
-        (\filePath _ ->
+        (\filePath ->
             { filePath = filePath
             }
         )

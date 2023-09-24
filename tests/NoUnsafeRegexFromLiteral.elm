@@ -180,7 +180,7 @@ initialProjectContext =
     }
 
 
-fromProjectToModule : Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModule =
     Rule.initContextCreator
         (\lookupTable _ ->
@@ -192,7 +192,7 @@ fromProjectToModule =
         |> Rule.withModuleNameLookupTable
 
 
-fromModuleToProject : Target -> Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProject : Target -> Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProject target =
     Rule.initContextCreator
         (\moduleName moduleContext ->

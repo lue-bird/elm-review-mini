@@ -127,10 +127,10 @@ type alias Context =
     }
 
 
-initialContext : Rule.ContextCreator () Context
+initialContext : Rule.ContextCreator Context
 initialContext =
     Rule.initContextCreator
-        (\isInSourceDirectories () ->
+        (\isInSourceDirectories ->
             { inDeclarationOfNonTestValue = False
             , isInSourceDirectories = isInSourceDirectories
             }

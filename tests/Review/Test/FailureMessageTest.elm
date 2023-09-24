@@ -1452,11 +1452,11 @@ ignoredChangedResultsTest =
                 initialContext =
                     Dict.empty
 
-                fromProjectToModule : Rule.ContextCreator IgnoredChangedResultsContext ()
+                fromProjectToModule : Rule.ContextCreator (IgnoredChangedResultsContext -> ())
                 fromProjectToModule =
                     Rule.initContextCreator (\_ -> ())
 
-                fromModuleToProject : Rule.ContextCreator () IgnoredChangedResultsContext
+                fromModuleToProject : Rule.ContextCreator (() -> IgnoredChangedResultsContext)
                 fromModuleToProject =
                     Rule.initContextCreator
                         (\ast isFileIgnored moduleName () ->

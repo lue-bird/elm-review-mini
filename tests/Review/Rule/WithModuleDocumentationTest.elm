@@ -34,10 +34,10 @@ rule =
         |> Rule.fromModuleRuleSchema
 
 
-initContext : Rule.ContextCreator () Context
+initContext : Rule.ContextCreator Context
 initContext =
     Rule.initContextCreator
-        (\moduleDocumentation _ ->
+        (\moduleDocumentation ->
             { moduleDocumentation = moduleDocumentation
             }
         )

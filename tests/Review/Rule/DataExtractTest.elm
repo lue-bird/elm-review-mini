@@ -46,7 +46,7 @@ moduleVisitor schema =
         |> Rule.withDeclarationListVisitor (\node context -> ( [], declarationListVisitor node context ))
 
 
-fromProjectToModule : Rule.ContextCreator ProjectContext ModuleContext
+fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModule =
     Rule.initContextCreator
         (\_ ->
@@ -55,7 +55,7 @@ fromProjectToModule =
         )
 
 
-fromModuleToProject : Rule.ContextCreator ModuleContext ProjectContext
+fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProject =
     Rule.initContextCreator
         (\moduleName moduleContext ->
