@@ -1,3 +1,12 @@
+# What is the point of this fork?
+
+It's my personal playground for testing ideas. Goals:
+
+  - Making the `elm-review` API much simpler
+  - Getting familiar with the code so that my suggestions are more than my brain farts
+
+> Below the original readme
+
 # elm-review
 
 `elm-review` analyzes [Elm](https://elm-lang.org/) projects, to help find mistakes before your users find them.
