@@ -66,7 +66,7 @@ elm-review --template jfmengels/elm-review-debug/example --rules NoDebug.Log
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "NoDebug.Log" initContext
+    Rule.newModuleRuleSchema "NoDebug.Log" initContext
         |> Rule.withExpressionEnterVisitor expressionVisitor
         |> Rule.providesFixesForModuleRule
         |> Rule.fromModuleRuleSchema

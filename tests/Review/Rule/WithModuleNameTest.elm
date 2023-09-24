@@ -14,7 +14,7 @@ type alias Context =
 
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "TestRule" initContext
+    Rule.newModuleRuleSchema "TestRule" initContext
         |> Rule.withModuleDefinitionVisitor
             (\node context ->
                 ( [ Rule.error

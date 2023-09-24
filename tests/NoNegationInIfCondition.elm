@@ -52,7 +52,7 @@ handled for this rule to do what it is meant to do.
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "NoNegationInIfCondition" initialContext
+    Rule.newModuleRuleSchema "NoNegationInIfCondition" initialContext
         |> Rule.withExpressionEnterVisitor expressionVisitor
         |> Rule.providesFixesForModuleRule
         |> Rule.fromModuleRuleSchema

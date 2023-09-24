@@ -62,7 +62,7 @@ You should not use this rule if you
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoExtraBooleanComparison" ()
+    Rule.newModuleRuleSchema "NoExtraBooleanComparison" (Rule.initContextCreator ())
         |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.fromModuleRuleSchema
 

@@ -523,14 +523,14 @@ expectedTypeError context name =
 
 nameVisitorRule : String -> Rule
 nameVisitorRule context =
-    Rule.newModuleRuleSchema "NameVisitor" context
+    Rule.newModuleRuleSchema "NameVisitor" (Rule.initContextCreator context)
         |> NameVisitor.withNameVisitor nameVisitor
         |> Rule.fromModuleRuleSchema
 
 
 valueOrTypeVisitorRule : String -> Rule
 valueOrTypeVisitorRule context =
-    Rule.newModuleRuleSchema "ValueOrTypeVisitor" context
+    Rule.newModuleRuleSchema "ValueOrTypeVisitor" (Rule.initContextCreator context)
         |> NameVisitor.withValueAndTypeVisitors
             { valueVisitor = valueVisitor
             , typeVisitor = typeVisitor
@@ -540,14 +540,14 @@ valueOrTypeVisitorRule context =
 
 valueVisitorRule : String -> Rule
 valueVisitorRule context =
-    Rule.newModuleRuleSchema "ValueVisitor" context
+    Rule.newModuleRuleSchema "ValueVisitor" (Rule.initContextCreator context)
         |> NameVisitor.withValueVisitor valueVisitor
         |> Rule.fromModuleRuleSchema
 
 
 typeVisitorRule : String -> Rule
 typeVisitorRule context =
-    Rule.newModuleRuleSchema "TypeVisitor" context
+    Rule.newModuleRuleSchema "TypeVisitor" (Rule.initContextCreator context)
         |> NameVisitor.withTypeVisitor typeVisitor
         |> Rule.fromModuleRuleSchema
 
@@ -569,7 +569,7 @@ typeVisitor node context =
 
 countingVisitorRule : Int -> Rule
 countingVisitorRule counter =
-    Rule.newModuleRuleSchema "NameVisitor" counter
+    Rule.newModuleRuleSchema "NameVisitor" (Rule.initContextCreator counter)
         |> NameVisitor.withNameVisitor countingVisitor
         |> Rule.fromModuleRuleSchema
 

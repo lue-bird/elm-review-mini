@@ -83,7 +83,7 @@ elm-review --template jfmengels/elm-review-debug/example --rules NoDebug.TodoOrT
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "NoDebug.TodoOrToString" init
+    Rule.newModuleRuleSchema "NoDebug.TodoOrToString" init
         |> Rule.withExpressionEnterVisitor expressionVisitor
         |> Rule.fromModuleRuleSchema
 

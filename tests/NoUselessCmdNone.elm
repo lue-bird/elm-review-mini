@@ -60,7 +60,7 @@ elm - review --template jfmengels/elm-review-noop/preview --rules NoUselessCmdNo
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "NoUselessCmdNone" initialContext
+    Rule.newModuleRuleSchema "NoUselessCmdNone" initialContext
         |> Rule.withDeclarationEnterVisitor declarationVisitor
         |> Rule.withExpressionEnterVisitor expressionVisitor
         |> Rule.withFinalModuleEvaluation finalEvaluation

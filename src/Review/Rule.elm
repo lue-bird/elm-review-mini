@@ -1,7 +1,7 @@
 module Review.Rule exposing
     ( Rule
-    , ModuleRuleSchema, newModuleRuleSchema, fromModuleRuleSchema
-    , newModuleRuleSchemaUsingContextCreator
+    , ModuleRuleSchema, fromModuleRuleSchema
+    , newModuleRuleSchema
     , withModuleDefinitionVisitor
     , withModuleDocumentationVisitor
     , withCommentsVisitor
@@ -184,12 +184,12 @@ Evaluating/visiting a node means two things:
     node evaluation. You can only use the context and update it with "non-simple with\*" visitor functions.
     I recommend using the "simple with\*" visitor functions if you don't need to do either, as they are simpler to use
 
-@docs ModuleRuleSchema, newModuleRuleSchema, fromModuleRuleSchema
+@docs ModuleRuleSchema, fromModuleRuleSchema
 
 
 ## Builder functions
 
-@docs newModuleRuleSchemaUsingContextCreator
+@docs newModuleRuleSchema
 @docs withModuleDefinitionVisitor
 @docs withModuleDocumentationVisitor
 @docs withCommentsVisitor
@@ -900,7 +900,7 @@ to make it report something.
 The first argument is the rule name. I _highly_ recommend naming it just like the
 module name (including all the `.` there may be).
 
-The second argument is the initial `moduleContext`, i.e. the data that the rule will
+The second argument is a [`ContextCreator`](#ContextCreator) for the initial `moduleContext`, i.e. the data that the rule will
 accumulate as the module will be traversed, and allows the rule to know/remember
 what happens in other parts of the module. If you don't need a context, I
 recommend specifying `()`.
@@ -911,9 +911,9 @@ recommend specifying `()`.
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "My.Rule.Name" ()
-            |> Rule.withExpressionEnterVisitor expressionVisitor
-            |> Rule.withImportVisitor importVisitor
+        Rule.newModuleRuleSchema "My.Rule.Name" (Rule.initContextCreator ())
+            |> Rule.withExpressionEnterVisitor (\expr () -> ( expressionVisitor expr, () ))
+            |> Rule.withImportVisitor (\import () -> ( importVisitor import, () ))
             |> Rule.fromModuleRuleSchema
 
 If you do need information from other parts of the module, then you should specify
@@ -924,7 +924,7 @@ an initial context and functions like [`withExpressionEnterVisitor`](#withExpres
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "NoUnusedVariables" initialContext
+        Rule.newModuleRuleSchema "NoUnusedVariables" (Rule.initContextCreator initialContext)
             |> Rule.withExpressionEnterVisitor expressionVisitor
             |> Rule.withImportVisitor importVisitor
             |> Rule.fromModuleRuleSchema
@@ -938,58 +938,13 @@ an initial context and functions like [`withExpressionEnterVisitor`](#withExpres
     initialContext =
         { declaredVariables = [], usedVariables = [] }
 
--}
-newModuleRuleSchema : String -> moduleContext -> ModuleRuleSchema { canCollectProjectData : () } moduleContext
-newModuleRuleSchema name initialModuleContext =
-    ModuleRuleSchema
-        { name = name
-        , initialModuleContext = Just initialModuleContext
-        , moduleContextCreator = initContextCreator initialModuleContext
-        , moduleDefinitionVisitor = Nothing
-        , moduleDocumentationVisitor = Nothing
-        , commentsVisitor = Nothing
-        , importVisitor = Nothing
-        , declarationListVisitor = Nothing
-        , declarationVisitorOnEnter = Nothing
-        , declarationVisitorOnExit = Nothing
-        , expressionVisitorsOnEnter = Nothing
-        , expressionVisitorsOnExit = Nothing
-        , letDeclarationVisitorOnEnter = Nothing
-        , letDeclarationVisitorOnExit = Nothing
-        , caseBranchVisitorOnEnter = Nothing
-        , caseBranchVisitorOnExit = Nothing
-        , finalEvaluationFn = Nothing
-        , elmJsonVisitor = Nothing
-        , readmeVisitor = Nothing
-        , dependenciesVisitor = Nothing
-        , directDependenciesVisitor = Nothing
-        , providesFixes = False
-        }
-
-
-{-| Same as [`newModuleRuleSchema`](#newModuleRuleSchema), except that you can request for data to help initialize the context.
-
-    module My.Rule.Name exposing (rule)
+Here's an example of how you would supply information to the initialization:
 
     import Review.Rule as Rule exposing (Rule)
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "My.Rule.Name" ()
-            |> Rule.withExpressionEnterVisitor expressionVisitor
-            |> Rule.withImportVisitor importVisitor
-            |> Rule.fromModuleRuleSchema
-
-If you do need information from other parts of the module, then you should specify
-an initial context, and I recommend using "with\*" functions without "Simple" in
-their name, like [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
-[`withImportVisitor`](#withImportVisitor) or [`withFinalModuleEvaluation`](#withFinalModuleEvaluation).
-
-    import Review.Rule as Rule exposing (Rule)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchemaUsingContextCreator "Rule.Name" contextCreator
+        Rule.newModuleRuleSchema "Rule.Name" contextCreator
             -- visitors
             |> Rule.fromModuleRuleSchema
 
@@ -1005,8 +960,8 @@ their name, like [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
             |> Rule.withIsInSourceDirectories
 
 -}
-newModuleRuleSchemaUsingContextCreator : String -> ContextCreator moduleContext -> ModuleRuleSchema {} moduleContext
-newModuleRuleSchemaUsingContextCreator name moduleContextCreator =
+newModuleRuleSchema : String -> ContextCreator moduleContext -> ModuleRuleSchema { canCollectProjectData : () } moduleContext
+newModuleRuleSchema name moduleContextCreator =
     ModuleRuleSchema
         { name = name
         , initialModuleContext = Nothing
@@ -5799,7 +5754,7 @@ type or value comes from.
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchemaUsingContextCreator "NoHtmlButton" initialContext
+        Rule.newModuleRuleSchema "NoHtmlButton" initialContext
             |> Rule.withExpressionEnterVisitor expressionVisitor
             |> Rule.fromModuleRuleSchema
             |> Rule.ignoreErrorsForFiles [ "src/Colors.elm" ]
@@ -5919,11 +5874,11 @@ withModuleKey (ContextCreator fn requestedData) =
 
 {-| Request the file path for this module, relative to the project's `elm.json`.
 
-Using [`newModuleRuleSchemaUsingContextCreator`](#newModuleRuleSchemaUsingContextCreator):
+Using [`newModuleRuleSchema`](#newModuleRuleSchema):
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchemaUsingContextCreator "YourRuleName" initialContext
+        Rule.newModuleRuleSchema "YourRuleName" initialContext
             |> Rule.withExpressionEnterVisitor expressionVisitor
             |> Rule.fromModuleRuleSchema
 
@@ -5963,7 +5918,7 @@ withFilePath (ContextCreator fn requestedData) =
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchemaUsingContextCreator "YourRuleName" initialContext
+        Rule.newModuleRuleSchema "YourRuleName" initialContext
             |> Rule.withExpressionEnterVisitor expressionVisitor
             |> Rule.fromModuleRuleSchema
 

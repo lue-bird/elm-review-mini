@@ -212,7 +212,7 @@ import Set exposing (Set)
 -}
 rule : Configuration -> Rule
 rule configuration =
-    Rule.newModuleRuleSchema "NoUnoptimizedRecursion" initialContext
+    Rule.newModuleRuleSchema "NoUnoptimizedRecursion" (Rule.initContextCreator initialContext)
         |> Rule.withCommentsVisitor (commentsVisitor configuration)
         |> Rule.withDeclarationEnterVisitor (declarationVisitor configuration)
         |> Rule.withExpressionEnterVisitor (expressionEnterVisitor configuration)

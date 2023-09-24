@@ -603,9 +603,9 @@ unsafePackageName packageName =
             unsafePackageName packageName
 
 
-createRule : (Rule.ModuleRuleSchema {} ModuleContext -> Rule.ModuleRuleSchema { hasAtLeastOneVisitor : () } ModuleContext) -> Rule
+createRule : (Rule.ModuleRuleSchema { canCollectProjectData : () } ModuleContext -> Rule.ModuleRuleSchema { canCollectProjectData : (), hasAtLeastOneVisitor : () } ModuleContext) -> Rule
 createRule visitor =
-    Rule.newModuleRuleSchemaUsingContextCreator "TestRule" contextCreator
+    Rule.newModuleRuleSchema "TestRule" contextCreator
         |> visitor
         |> Rule.withFinalModuleEvaluation finalEvaluation
         |> Rule.fromModuleRuleSchema

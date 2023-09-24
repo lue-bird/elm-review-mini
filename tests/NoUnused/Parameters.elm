@@ -71,7 +71,7 @@ elm-review --template jfmengels/elm-review-unused/example --rules NoUnused.Param
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoUnused.Parameters" initialContext
+    Rule.newModuleRuleSchema "NoUnused.Parameters" (Rule.initContextCreator initialContext)
         |> Rule.withDeclarationEnterVisitor declarationEnterVisitor
         |> Rule.withDeclarationExitVisitor declarationExitVisitor
         |> Rule.withExpressionEnterVisitor expressionEnterVisitor

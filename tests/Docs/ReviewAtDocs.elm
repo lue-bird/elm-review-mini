@@ -91,7 +91,7 @@ elm-review --template jfmengels/elm-review-documentation/example --rules Docs.Re
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "Docs.ReviewAtDocs" initialContext
+    Rule.newModuleRuleSchema "Docs.ReviewAtDocs" (Rule.initContextCreator initialContext)
         |> Rule.withElmJsonModuleVisitor elmJsonVisitor
         |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
         |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor

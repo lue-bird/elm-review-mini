@@ -151,7 +151,7 @@ elm-review --template jfmengels/elm-review-common/example --rules NoPrematureLet
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "NoPrematureLetComputation" initialContext
+    Rule.newModuleRuleSchema "NoPrematureLetComputation" initialContext
         |> Rule.withDeclarationEnterVisitor declarationVisitor
         |> Rule.withExpressionEnterVisitor expressionEnterVisitor
         |> Rule.withExpressionExitVisitor expressionExitVisitor

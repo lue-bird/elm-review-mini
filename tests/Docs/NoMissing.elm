@@ -101,7 +101,7 @@ relevant information _can_ be found without too much effort.
 -}
 rule : { document : What, from : From } -> Rule
 rule configuration =
-    Rule.newModuleRuleSchema "Docs.NoMissing" initialContext
+    Rule.newModuleRuleSchema "Docs.NoMissing" (Rule.initContextCreator initialContext)
         |> Rule.withElmJsonModuleVisitor elmJsonVisitor
         |> Rule.withModuleDefinitionVisitor (moduleDefinitionVisitor configuration.from)
         |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor

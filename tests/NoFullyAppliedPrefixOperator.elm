@@ -48,7 +48,7 @@ elm-review --template jfmengels/elm-review-simplification/example --rules NoFull
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoFullyAppliedPrefixOperator" ()
+    Rule.newModuleRuleSchema "NoFullyAppliedPrefixOperator" (Rule.initContextCreator ())
         |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.fromModuleRuleSchema
 

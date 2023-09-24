@@ -12,7 +12,7 @@ import Test exposing (Test, describe, test)
 
 moduleRule : Rule
 moduleRule =
-    Rule.newModuleRuleSchema "TestRule" ()
+    Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator ())
         |> Rule.withExpressionEnterVisitor
             (\node context ->
                 ( [ Rule.error

@@ -8,7 +8,7 @@ import Review.Rule as Rule exposing (Error, Rule)
 
 rule : Rule
 rule =
-    Rule.newModuleRuleSchemaUsingContextCreator "NoHtmlButton" contextCreator
+    Rule.newModuleRuleSchema "NoHtmlButton" contextCreator
         |> Rule.withExpressionEnterVisitor expressionVisitor
         |> Rule.fromModuleRuleSchema
         |> Rule.ignoreErrorsForFiles [ "src/Button.elm" ]

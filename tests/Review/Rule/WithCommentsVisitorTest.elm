@@ -72,7 +72,7 @@ port output : Json.Encode.Value -> Cmd msg
 
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "WithCommentsVisitorTestRule" ()
+    Rule.newModuleRuleSchema "WithCommentsVisitorTestRule" (Rule.initContextCreator ())
         |> Rule.withCommentsVisitor (\comments context -> ( commentsVisitor comments, context ))
         |> Rule.fromModuleRuleSchema
 

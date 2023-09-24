@@ -63,7 +63,7 @@ elm-review --template jfmengels/elm-review-unused/example --rules NoUnused.Patte
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoUnused.Patterns" initialContext
+    Rule.newModuleRuleSchema "NoUnused.Patterns" (Rule.initContextCreator initialContext)
         |> Rule.withDeclarationEnterVisitor declarationEnterVisitor
         |> Rule.withExpressionEnterVisitor expressionEnterVisitor
         |> Rule.withExpressionExitVisitor expressionExitVisitor
