@@ -1028,9 +1028,14 @@ type alias ProjectRuleSchemaData projectContext moduleContext =
     , readmeVisitor : Maybe (Maybe { readmeKey : ReadmeKey, content : String } -> projectContext -> ( List (Error {}), projectContext ))
     , directDependenciesVisitor : Maybe (Dict String Review.Project.Dependency.Dependency -> projectContext -> ( List (Error {}), projectContext ))
     , dependenciesVisitor : Maybe (Dict String Review.Project.Dependency.Dependency -> projectContext -> ( List (Error {}), projectContext ))
-    , moduleVisitors : List (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { hasAtLeastOneVisitor : () } moduleContext)
-    , moduleContextCreator : Maybe (ContextCreator (projectContext -> moduleContext))
-    , folder : Maybe (Folder projectContext moduleContext)
+    , moduleVisitor :
+        Maybe
+            { schema :
+                ModuleRuleSchema {} moduleContext
+                -> ModuleRuleSchema { hasAtLeastOneVisitor : () } moduleContext
+            , contextCreator : ContextCreator (projectContext -> moduleContext)
+            , folder : Folder projectContext moduleContext
+            }
     , providesFixes : Bool
 
     -- TODO Jeroen Only allow to set it if there is a folder, but not several times
@@ -1086,9 +1091,7 @@ newProjectRuleSchema name initialProjectContext =
         , readmeVisitor = Nothing
         , directDependenciesVisitor = Nothing
         , dependenciesVisitor = Nothing
-        , moduleVisitors = []
-        , moduleContextCreator = Nothing
-        , folder = Nothing
+        , moduleVisitor = Nothing
         , providesFixes = False
         , traversalType = AllModulesInParallel
         , finalEvaluationFn = Nothing
@@ -1105,9 +1108,14 @@ fromProjectRuleSchema (ProjectRuleSchema schema) =
         , id = 0
         , exceptions = Exceptions.init
         , requestedData =
-            RequestedData.combine
-                (Maybe.map requestedDataFromContextCreator schema.moduleContextCreator)
-                (Maybe.map (.moduleToProject >> requestedDataFromContextCreator) schema.folder)
+            case schema.moduleVisitor of
+                Just moduleVisitor ->
+                    RequestedData.combineJust
+                        (requestedDataFromContextCreator moduleVisitor.contextCreator)
+                        (requestedDataFromContextCreator moduleVisitor.folder.moduleToProject)
+
+                Nothing ->
+                    RequestedData.none
         , providesFixes = schema.providesFixes
         , ruleProjectVisitor =
             Ok
@@ -1145,29 +1153,13 @@ emptyCache =
 mergeModuleVisitors :
     String
     -> projectContext
-    -> Maybe (ContextCreator (projectContext -> moduleContext))
-    -> List (ModuleRuleSchema schemaState1 moduleContext -> ModuleRuleSchema schemaState2 moduleContext)
-    -> Maybe ( ModuleRuleSchema {} moduleContext, ContextCreator (projectContext -> moduleContext) )
-mergeModuleVisitors ruleName_ initialProjectContext maybeModuleContextCreator visitors =
-    case maybeModuleContextCreator of
-        Nothing ->
-            Nothing
-
-        Just moduleContextCreator ->
-            if List.isEmpty visitors then
-                Nothing
-
-            else
-                Just (mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator visitors)
-
-
-mergeModuleVisitorsHelp :
-    String
-    -> projectContext
-    -> ContextCreator (projectContext -> moduleContext)
-    -> List (ModuleRuleSchema schemaState1 moduleContext -> ModuleRuleSchema schemaState2 moduleContext)
+    ->
+        { moduleVisitor
+            | contextCreator : ContextCreator (projectContext -> moduleContext)
+            , schema : ModuleRuleSchema schemaState1 moduleContext -> ModuleRuleSchema schemaState2 moduleContext
+        }
     -> ( ModuleRuleSchema {} moduleContext, ContextCreator (projectContext -> moduleContext) )
-mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator visitors =
+mergeModuleVisitors ruleName_ initialProjectContext visitor =
     let
         dummyAst : Elm.Syntax.File.File
         dummyAst =
@@ -1196,7 +1188,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
 
         initialModuleContext : moduleContext
         initialModuleContext =
-            applyContextCreator { availableData = dummyAvailableData, isFileIgnored = False } moduleContextCreator initialProjectContext
+            applyContextCreator { availableData = dummyAvailableData, isFileIgnored = False } visitor.contextCreator initialProjectContext
 
         emptyModuleVisitor : ModuleRuleSchema schemaState moduleContext
         emptyModuleVisitor =
@@ -1225,14 +1217,10 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
                 , providesFixes = False
                 }
     in
-    ( List.foldl
-        (\addVisitors (ModuleRuleSchema moduleVisitorSchema) ->
-            addVisitors (ModuleRuleSchema moduleVisitorSchema)
-        )
-        emptyModuleVisitor
-        visitors
+    ( visitor.schema
+        (emptyModuleVisitor |> (\(ModuleRuleSchema moduleVisitorSchema) -> ModuleRuleSchema moduleVisitorSchema))
         |> (\(ModuleRuleSchema moduleVisitorSchema) -> ModuleRuleSchema moduleVisitorSchema)
-    , moduleContextCreator
+    , visitor.contextCreator
     )
 
 
@@ -1526,12 +1514,14 @@ withModuleVisitor :
 withModuleVisitor visitor functions (ProjectRuleSchema schema) =
     ProjectRuleSchema
         { schema
-            | moduleVisitors = removeExtensibleRecordTypeVariable visitor :: schema.moduleVisitors
-            , moduleContextCreator = Just functions.projectToModule
-            , folder =
+            | moduleVisitor =
                 Just
-                    { moduleToProject = functions.moduleToProject
-                    , foldProjectContexts = functions.foldProjectContexts
+                    { schema = removeExtensibleRecordTypeVariable visitor
+                    , contextCreator = functions.projectToModule
+                    , folder =
+                        { moduleToProject = functions.moduleToProject
+                        , foldProjectContexts = functions.foldProjectContexts
+                        }
                     }
         }
 
@@ -3465,9 +3455,9 @@ computeFinalContextHashes schema cache =
 
         traversalAndFolder : TraversalAndFolder projectContext moduleContext
         traversalAndFolder =
-            case ( schema.traversalType, schema.folder ) of
-                ( AllModulesInParallel, _ ) ->
-                    TraverseAllModulesInParallel schema.folder
+            case ( schema.traversalType, Maybe.map .folder schema.moduleVisitor ) of
+                ( AllModulesInParallel, maybeFolder ) ->
+                    TraverseAllModulesInParallel maybeFolder
 
                 ( ImportedModulesFirst, Just folder ) ->
                     TraverseImportedModulesFirst folder
@@ -3495,9 +3485,9 @@ computeFinalContext schema cache =
 
         traversalAndFolder : TraversalAndFolder projectContext moduleContext
         traversalAndFolder =
-            case ( schema.traversalType, schema.folder ) of
-                ( AllModulesInParallel, _ ) ->
-                    TraverseAllModulesInParallel schema.folder
+            case ( schema.traversalType, Maybe.map .folder schema.moduleVisitor ) of
+                ( AllModulesInParallel, maybeFolder ) ->
+                    TraverseAllModulesInParallel maybeFolder
 
                 ( ImportedModulesFirst, Just folder ) ->
                     TraverseImportedModulesFirst folder
@@ -4966,25 +4956,33 @@ createModuleVisitorFromProjectVisitor :
     -> RuleProjectVisitorHidden projectContext
     -> Maybe (ValidProject -> String -> ContentHash -> Graph.Adjacency () -> Maybe (AvailableData -> RuleModuleVisitor))
 createModuleVisitorFromProjectVisitor schema raise hidden =
-    case mergeModuleVisitors schema.name schema.initialProjectContext schema.moduleContextCreator schema.moduleVisitors of
+    case schema.moduleVisitor of
         Nothing ->
             Nothing
 
-        Just moduleRuleSchema ->
+        Just moduleVisitor ->
             let
+                moduleRuleSchema : ( ModuleRuleSchema {} moduleContext, ContextCreator (projectContext -> moduleContext) )
+                moduleRuleSchema =
+                    mergeModuleVisitors schema.name schema.initialProjectContext moduleVisitor
+
                 traversalAndFolder : TraversalAndFolder projectContext moduleContext
                 traversalAndFolder =
-                    case ( schema.traversalType, schema.folder ) of
-                        ( AllModulesInParallel, _ ) ->
-                            TraverseAllModulesInParallel schema.folder
+                    case schema.traversalType of
+                        AllModulesInParallel ->
+                            TraverseAllModulesInParallel (Just moduleVisitor.folder)
 
-                        ( ImportedModulesFirst, Just folder ) ->
-                            TraverseImportedModulesFirst folder
-
-                        ( ImportedModulesFirst, Nothing ) ->
-                            TraverseAllModulesInParallel Nothing
+                        ImportedModulesFirst ->
+                            TraverseImportedModulesFirst moduleVisitor.folder
             in
-            Just (createModuleVisitorFromProjectVisitorHelp schema raise hidden traversalAndFolder moduleRuleSchema)
+            Just
+                (createModuleVisitorFromProjectVisitorHelp
+                    schema
+                    raise
+                    hidden
+                    traversalAndFolder
+                    moduleRuleSchema
+                )
 
 
 createModuleVisitorFromProjectVisitorHelp :
