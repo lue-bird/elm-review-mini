@@ -1444,7 +1444,7 @@ ignoredChangedResultsTest =
                 testRule =
                     Rule.newProjectRuleSchema "TestRule" initialContext
                         |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
-                        |> Rule.withModuleContextUsingContextCreator
+                        |> Rule.withModuleContext
                             { fromProjectToModule = fromProjectToModule
                             , fromModuleToProject = fromModuleToProject
                             , foldProjectContexts = foldProjectContexts

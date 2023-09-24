@@ -107,7 +107,7 @@ rule configuration =
             Rule.newProjectRuleSchema "NoDeprecated" initialProjectContext
                 |> Rule.withDirectDependenciesProjectVisitor (dependenciesVisitor stableConfiguration)
                 |> Rule.withModuleVisitor (moduleVisitor stableConfiguration)
-                |> Rule.withModuleContextUsingContextCreator
+                |> Rule.withModuleContext
                     { fromProjectToModule = fromProjectToModule stableConfiguration
                     , fromModuleToProject = fromModuleToProject
                     , foldProjectContexts = foldProjectContexts

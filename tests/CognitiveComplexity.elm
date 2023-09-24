@@ -209,7 +209,7 @@ rule : Int -> Rule
 rule threshold =
     Rule.newProjectRuleSchema "CognitiveComplexity" initialContext
         |> Rule.withModuleVisitor (moduleVisitor threshold)
-        |> Rule.withModuleContextUsingContextCreator
+        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

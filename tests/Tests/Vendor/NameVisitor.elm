@@ -470,8 +470,8 @@ projectRuleTests =
                             )
                         |> Rule.withModuleContext
                             { foldProjectContexts = \() () -> ()
-                            , fromProjectToModule = \_ _ () -> "context"
-                            , fromModuleToProject = \_ _ _ -> ()
+                            , fromProjectToModule = Rule.initContextCreator (\() -> "context")
+                            , fromModuleToProject = Rule.initContextCreator (\_ -> ())
                             }
                         |> Rule.fromProjectRuleSchema
             in

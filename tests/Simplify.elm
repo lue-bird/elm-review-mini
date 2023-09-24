@@ -796,7 +796,7 @@ rule (Configuration config) =
         |> Rule.withDirectDependenciesProjectVisitor (dependenciesVisitor (Set.fromList config.ignoreConstructors))
         |> Rule.withModuleVisitor moduleVisitor
         |> Rule.withContextFromImportedModules
-        |> Rule.withModuleContextUsingContextCreator
+        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

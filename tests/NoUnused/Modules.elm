@@ -52,7 +52,7 @@ rule : Rule
 rule =
     Rule.newProjectRuleSchema "NoUnused.Modules" initialProjectContext
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContextUsingContextCreator
+        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

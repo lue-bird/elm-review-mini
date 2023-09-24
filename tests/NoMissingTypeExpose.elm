@@ -91,7 +91,7 @@ rule =
         |> Rule.withDirectDependenciesProjectVisitor dependencyDictVisitor
         |> Rule.withModuleVisitor moduleVisitor
         |> Rule.withContextFromImportedModules
-        |> Rule.withModuleContextUsingContextCreator
+        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModuleContext
             , fromModuleToProject = fromModuleToProjectContext
             , foldProjectContexts = foldProjectContexts

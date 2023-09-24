@@ -47,8 +47,8 @@ rule words =
         |> Rule.withReadmeProjectVisitor (readmeVisitor words)
         |> Rule.withModuleVisitor (moduleVisitor words)
         |> Rule.withModuleContext
-            { fromModuleToProject = \_ _ () -> ()
-            , fromProjectToModule = \_ _ () -> ()
+            { fromModuleToProject = Rule.initContextCreator (\() -> ())
+            , fromProjectToModule = Rule.initContextCreator (\() -> ())
             , foldProjectContexts = \() () -> ()
             }
         |> Rule.fromProjectRuleSchema
