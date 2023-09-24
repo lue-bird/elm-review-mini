@@ -14,7 +14,7 @@ import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..))
 import Elm.Syntax.Range as Range exposing (Range)
 import Expect
-import Review.ModuleNameLookupTable as ModuleNameLookupTable
+import Review.ModuleNameLookup as ModuleNameLookup
 import Simplify.Infer as Infer
 import Simplify.Normalize as Normalize
 import Test exposing (Test, describe, test)
@@ -656,7 +656,7 @@ normalizeSourceCode moduleNames inferred source =
         |> parse
         |> getValue
         |> Normalize.normalize
-            { lookupTable = ModuleNameLookupTable.createForTests [ "A" ] moduleNames
+            { lookupTable = ModuleNameLookup.createForTests [ "A" ] moduleNames
             , inferredConstants = ( inferred, [] )
             }
         |> Node.value

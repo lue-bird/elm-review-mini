@@ -19,7 +19,7 @@ import Elm.Syntax.Pattern as Pattern exposing (Pattern)
 import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import List.Extra
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 import Set exposing (Set)
 import String.Extra
@@ -105,7 +105,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , isModuleExposed : Bool
     , exposed : Exposing
     , customTypeArgs : List ( String, Dict String (List Range) )
@@ -304,11 +304,11 @@ moduleDefinitionVisitor node moduleContext =
     { moduleContext | exposed = Module.exposingList (Node.value node) }
 
 
-isNotNever : ModuleNameLookupTable -> Node TypeAnnotation -> Bool
+isNotNever : ModuleNameLookup -> Node TypeAnnotation -> Bool
 isNotNever lookupTable node =
     case Node.value node of
         TypeAnnotation.Typed (Node neverRange ( _, "Never" )) [] ->
-            ModuleNameLookupTable.moduleNameAt lookupTable neverRange /= Just [ "Basics" ]
+            ModuleNameLookup.moduleNameAt lookupTable neverRange /= Just [ "Basics" ]
 
         _ ->
             True
@@ -355,7 +355,7 @@ declarationVisitor node context =
             context
 
 
-createArguments : ModuleNameLookupTable -> List (Node TypeAnnotation) -> List Range
+createArguments : ModuleNameLookup -> List (Node TypeAnnotation) -> List Range
 createArguments lookupTable arguments =
     List.foldr
         (\argument acc ->
@@ -442,13 +442,13 @@ expressionVisitor node context =
             context
 
 
-findCustomTypes : ModuleNameLookupTable -> List (Node Expression) -> Set ( ModuleName, String )
+findCustomTypes : ModuleNameLookup -> List (Node Expression) -> Set ( ModuleName, String )
 findCustomTypes lookupTable nodes =
     findCustomTypesHelp lookupTable nodes []
         |> Set.fromList
 
 
-findCustomTypesHelp : ModuleNameLookupTable -> List (Node Expression) -> List ( ModuleName, String ) -> List ( ModuleName, String )
+findCustomTypesHelp : ModuleNameLookup -> List (Node Expression) -> List ( ModuleName, String ) -> List ( ModuleName, String )
 findCustomTypesHelp lookupTable nodes acc =
     case nodes of
         [] ->
@@ -458,7 +458,7 @@ findCustomTypesHelp lookupTable nodes acc =
             case Node.value node of
                 Expression.FunctionOrValue rawModuleName functionName ->
                     if String.Extra.isCapitalized functionName then
-                        case ModuleNameLookupTable.moduleNameFor lookupTable node of
+                        case ModuleNameLookup.moduleNameFor lookupTable node of
                             Just moduleName ->
                                 findCustomTypesHelp lookupTable restOfNodes (( moduleName, functionName ) :: acc)
 
@@ -510,12 +510,12 @@ registerUsedPatterns newUsedArguments previouslyUsedArguments =
         newUsedArguments
 
 
-collectUsedCustomTypeArgs : ModuleNameLookupTable -> List (Node Pattern) -> List ( ( ModuleName, String ), Set Int )
+collectUsedCustomTypeArgs : ModuleNameLookup -> List (Node Pattern) -> List ( ( ModuleName, String ), Set Int )
 collectUsedCustomTypeArgs lookupTable nodes =
     collectUsedCustomTypeArgsHelp lookupTable nodes []
 
 
-collectUsedCustomTypeArgsHelp : ModuleNameLookupTable -> List (Node Pattern) -> List ( ( ModuleName, String ), Set Int ) -> List ( ( ModuleName, String ), Set Int )
+collectUsedCustomTypeArgsHelp : ModuleNameLookup -> List (Node Pattern) -> List ( ( ModuleName, String ), Set Int ) -> List ( ( ModuleName, String ), Set Int )
 collectUsedCustomTypeArgsHelp lookupTable nodes acc =
     case nodes of
         [] ->
@@ -527,7 +527,7 @@ collectUsedCustomTypeArgsHelp lookupTable nodes acc =
                     let
                         newAcc : List ( ( ModuleName, String ), Set Int )
                         newAcc =
-                            case ModuleNameLookupTable.moduleNameAt lookupTable range of
+                            case ModuleNameLookup.moduleNameAt lookupTable range of
                                 Just moduleName ->
                                     ( ( moduleName, name ), computeUsedPositions 0 args Set.empty ) :: acc
 

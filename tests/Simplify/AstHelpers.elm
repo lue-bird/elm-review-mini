@@ -45,7 +45,7 @@ import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern as Pattern exposing (Pattern)
 import Elm.Syntax.Range exposing (Range)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Set exposing (Set)
 import Simplify.Infer as Infer
 import Simplify.Normalize as Normalize
@@ -71,24 +71,24 @@ removeParensFromPattern node =
             node
 
 
-isSpecificValueOrFunction : ModuleName -> String -> ModuleNameLookupTable -> Node Expression -> Bool
+isSpecificValueOrFunction : ModuleName -> String -> ModuleNameLookup -> Node Expression -> Bool
 isSpecificValueOrFunction moduleName fnName lookupTable node =
     case removeParens node of
         Node noneRange (Expression.FunctionOrValue _ foundFnName) ->
             (foundFnName == fnName)
-                && (ModuleNameLookupTable.moduleNameAt lookupTable noneRange == Just moduleName)
+                && (ModuleNameLookup.moduleNameAt lookupTable noneRange == Just moduleName)
 
         _ ->
             False
 
 
-getSpecificValueOrFunction : ( ModuleName, String ) -> ModuleNameLookupTable -> Node Expression -> Maybe { fnRange : Range }
+getSpecificValueOrFunction : ( ModuleName, String ) -> ModuleNameLookup -> Node Expression -> Maybe { fnRange : Range }
 getSpecificValueOrFunction ( moduleName, fnName ) lookupTable node =
     case removeParens node of
         Node noneRange (Expression.FunctionOrValue _ foundFnName) ->
             if
                 (foundFnName == fnName)
-                    && (ModuleNameLookupTable.moduleNameAt lookupTable noneRange == Just moduleName)
+                    && (ModuleNameLookup.moduleNameAt lookupTable noneRange == Just moduleName)
             then
                 Just { fnRange = noneRange }
 
@@ -99,18 +99,18 @@ getSpecificValueOrFunction ( moduleName, fnName ) lookupTable node =
             Nothing
 
 
-isSpecificCall : ModuleName -> String -> ModuleNameLookupTable -> Node Expression -> Bool
+isSpecificCall : ModuleName -> String -> ModuleNameLookup -> Node Expression -> Bool
 isSpecificCall moduleName fnName lookupTable node =
     case Node.value (removeParens node) of
         Expression.Application ((Node noneRange (Expression.FunctionOrValue _ foundFnName)) :: _ :: []) ->
             (foundFnName == fnName)
-                && (ModuleNameLookupTable.moduleNameAt lookupTable noneRange == Just moduleName)
+                && (ModuleNameLookup.moduleNameAt lookupTable noneRange == Just moduleName)
 
         _ ->
             False
 
 
-getListSingleton : ModuleNameLookupTable -> Node Expression -> Maybe { element : Node Expression }
+getListSingleton : ModuleNameLookup -> Node Expression -> Maybe { element : Node Expression }
 getListSingleton lookupTable baseNode =
     case Node.value (removeParens baseNode) of
         Expression.ListExpr [ element ] ->
@@ -123,7 +123,7 @@ getListSingleton lookupTable baseNode =
             getListSingletonCall lookupTable baseNode
 
 
-getListSingletonCall : ModuleNameLookupTable -> Node Expression -> Maybe { element : Node Expression }
+getListSingletonCall : ModuleNameLookup -> Node Expression -> Maybe { element : Node Expression }
 getListSingletonCall lookupTable expressionNode =
     case getSpecificFunctionCall ( [ "List" ], "singleton" ) lookupTable expressionNode of
         Just singletonCall ->
@@ -138,13 +138,13 @@ getListSingletonCall lookupTable expressionNode =
             Nothing
 
 
-getSpecificFunction : ( ModuleName, String ) -> ModuleNameLookupTable -> Node Expression -> Maybe Range
+getSpecificFunction : ( ModuleName, String ) -> ModuleNameLookup -> Node Expression -> Maybe Range
 getSpecificFunction ( moduleName, name ) lookupTable baseNode =
     case removeParens baseNode of
         Node fnRange (Expression.FunctionOrValue _ foundName) ->
             if
                 (foundName == name)
-                    && (ModuleNameLookupTable.moduleNameAt lookupTable fnRange == Just moduleName)
+                    && (ModuleNameLookup.moduleNameAt lookupTable fnRange == Just moduleName)
             then
                 Just fnRange
 
@@ -157,7 +157,7 @@ getSpecificFunction ( moduleName, name ) lookupTable baseNode =
 
 getSpecificFunctionCall :
     ( ModuleName, String )
-    -> ModuleNameLookupTable
+    -> ModuleNameLookup
     -> Node Expression
     ->
         Maybe
@@ -172,7 +172,7 @@ getSpecificFunctionCall ( moduleName, name ) lookupTable baseNode =
             (\call ->
                 if
                     (call.fnName /= name)
-                        || (ModuleNameLookupTable.moduleNameAt lookupTable call.fnRange /= Just moduleName)
+                        || (ModuleNameLookup.moduleNameAt lookupTable call.fnRange /= Just moduleName)
                 then
                     Nothing
 
@@ -316,12 +316,12 @@ getCollapsedValueOrFunction baseNode =
             Nothing
 
 
-getNotFunction : ModuleNameLookupTable -> Node Expression -> Maybe Range
+getNotFunction : ModuleNameLookup -> Node Expression -> Maybe Range
 getNotFunction lookupTable baseNode =
     getSpecificFunction ( [ "Basics" ], "not" ) lookupTable baseNode
 
 
-isTupleFirstAccess : ModuleNameLookupTable -> Node Expression -> Bool
+isTupleFirstAccess : ModuleNameLookup -> Node Expression -> Bool
 isTupleFirstAccess lookupTable expressionNode =
     case getSpecificReducedFunction ( [ "Tuple" ], "first" ) lookupTable expressionNode of
         Just _ ->
@@ -331,7 +331,7 @@ isTupleFirstAccess lookupTable expressionNode =
             isTupleFirstPatternLambda expressionNode
 
 
-isTupleSecondAccess : ModuleNameLookupTable -> Node Expression -> Bool
+isTupleSecondAccess : ModuleNameLookup -> Node Expression -> Bool
 isTupleSecondAccess lookupTable expressionNode =
     case getSpecificReducedFunction ( [ "Tuple" ], "second" ) lookupTable expressionNode of
         Just _ ->
@@ -400,7 +400,7 @@ getUncomputedNumberValue node =
             Nothing
 
 
-isIdentity : ModuleNameLookupTable -> Node Expression -> Bool
+isIdentity : ModuleNameLookup -> Node Expression -> Bool
 isIdentity lookupTable baseNode =
     let
         node : Node Expression
@@ -409,7 +409,7 @@ isIdentity lookupTable baseNode =
     in
     case Node.value node of
         Expression.FunctionOrValue _ "identity" ->
-            ModuleNameLookupTable.moduleNameFor lookupTable node == Just [ "Basics" ]
+            ModuleNameLookup.moduleNameFor lookupTable node == Just [ "Basics" ]
 
         Expression.LambdaExpression { args, expression } ->
             case args of
@@ -431,13 +431,13 @@ isIdentity lookupTable baseNode =
 
 {-| Parses variables and lambdas that are reducible to a variable
 -}
-getSpecificReducedFunction : ( ModuleName, String ) -> ModuleNameLookupTable -> Node Expression -> Maybe { fnRange : Range }
+getSpecificReducedFunction : ( ModuleName, String ) -> ModuleNameLookup -> Node Expression -> Maybe { fnRange : Range }
 getSpecificReducedFunction ( moduleName, name ) lookupTable expressionNode =
     Maybe.andThen
         (\reducedFunction ->
             if
                 (reducedFunction.fnName /= name)
-                    || (ModuleNameLookupTable.moduleNameAt lookupTable reducedFunction.fnRange /= Just moduleName)
+                    || (ModuleNameLookup.moduleNameAt lookupTable reducedFunction.fnRange /= Just moduleName)
             then
                 Nothing
 
@@ -478,7 +478,7 @@ getReducedFunction expressionNode =
 -}
 getSpecificReducedFunctionCall :
     ( ModuleName, String )
-    -> ModuleNameLookupTable
+    -> ModuleNameLookup
     -> Node Expression
     ->
         Maybe
@@ -518,7 +518,7 @@ getSpecificReducedFunctionCall ( moduleName, name ) lookupTable expressionNode =
 
 getSpecificReducedLambdaToCall :
     ( ModuleName, String )
-    -> ModuleNameLookupTable
+    -> ModuleNameLookup
     -> Node Expression
     ->
         Maybe
@@ -533,7 +533,7 @@ getSpecificReducedLambdaToCall ( moduleName, name ) lookupTable expressionNode =
             (\reducedLambdaToCall ->
                 if
                     (reducedLambdaToCall.fnName /= name)
-                        || (ModuleNameLookupTable.moduleNameAt lookupTable reducedLambdaToCall.fnRange /= Just moduleName)
+                        || (ModuleNameLookup.moduleNameAt lookupTable reducedLambdaToCall.fnRange /= Just moduleName)
                 then
                     Nothing
 
@@ -815,7 +815,7 @@ getCollapsedCons expressionNode =
             Nothing
 
 
-getBool : ModuleNameLookupTable -> Node Expression -> Maybe Bool
+getBool : ModuleNameLookup -> Node Expression -> Maybe Bool
 getBool lookupTable expressionNode =
     if isSpecificBool True lookupTable expressionNode then
         Just True
@@ -827,7 +827,7 @@ getBool lookupTable expressionNode =
         Nothing
 
 
-isSpecificBool : Bool -> ModuleNameLookupTable -> Node Expression -> Bool
+isSpecificBool : Bool -> ModuleNameLookup -> Node Expression -> Bool
 isSpecificBool specificBool lookupTable expressionNode =
     isSpecificValueOrFunction [ "Basics" ] (boolToString specificBool) lookupTable expressionNode
 
@@ -842,20 +842,20 @@ getTuple expressionNode =
             Nothing
 
 
-getBooleanPattern : ModuleNameLookupTable -> Node Pattern -> Maybe Bool
+getBooleanPattern : ModuleNameLookup -> Node Pattern -> Maybe Bool
 getBooleanPattern lookupTable node =
     case Node.value node of
         Pattern.NamedPattern { name } _ ->
             case name of
                 "True" ->
-                    if ModuleNameLookupTable.moduleNameFor lookupTable node == Just [ "Basics" ] then
+                    if ModuleNameLookup.moduleNameFor lookupTable node == Just [ "Basics" ] then
                         Just True
 
                     else
                         Nothing
 
                 "False" ->
-                    if ModuleNameLookupTable.moduleNameFor lookupTable node == Just [ "Basics" ] then
+                    if ModuleNameLookup.moduleNameFor lookupTable node == Just [ "Basics" ] then
                         Just False
 
                     else
@@ -871,7 +871,7 @@ getBooleanPattern lookupTable node =
             Nothing
 
 
-getOrder : ModuleNameLookupTable -> Node Expression -> Maybe Order
+getOrder : ModuleNameLookup -> Node Expression -> Maybe Order
 getOrder lookupTable expression =
     if isSpecificValueOrFunction [ "Basics" ] "LT" lookupTable expression then
         Just LT

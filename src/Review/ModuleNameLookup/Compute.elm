@@ -1,4 +1,4 @@
-module Review.ModuleNameLookupTable.Compute exposing (compute)
+module Review.ModuleNameLookup.Compute exposing (compute)
 
 import Dict exposing (Dict)
 import Elm.Docs
@@ -19,7 +19,7 @@ import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Elm.Type
 import NonEmpty exposing (NonEmpty)
 import Review.Cache.ContentHash exposing (ContentHash)
-import Review.ModuleNameLookupTable.Internal as ModuleNameLookupTableInternal exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup.Internal as ModuleNameLookupTableInternal exposing (ModuleNameLookup)
 import Review.Project.Dependency
 import Review.Project.ProjectCache as ProjectCache exposing (ProjectCache)
 import Review.Project.ProjectModule as ProjectModule exposing (OpaqueProjectModule)
@@ -40,7 +40,7 @@ type alias Context =
     , exposedUnions : List Elm.Docs.Union
     , exposedAliases : List Elm.Docs.Alias
     , exposedValues : List Elm.Docs.Value
-    , lookupTable : ModuleNameLookupTable
+    , lookupTable : ModuleNameLookup
     }
 
 
@@ -74,7 +74,7 @@ emptyScope =
     }
 
 
-compute : ModuleName -> OpaqueProjectModule -> ValidProject -> ( ModuleNameLookupTable, ValidProject )
+compute : ModuleName -> OpaqueProjectModule -> ValidProject -> ( ModuleNameLookup, ValidProject )
 compute moduleName module_ project =
     let
         projectCache : ProjectCache
@@ -100,7 +100,7 @@ compute moduleName module_ project =
                 Dict.empty
                 (ProjectModule.ast module_).imports
 
-        computeLookupTableForModule : () -> ( ModuleNameLookupTable, ValidProject )
+        computeLookupTableForModule : () -> ( ModuleNameLookup, ValidProject )
         computeLookupTableForModule () =
             computeHelp
                 { implicitImports = implicitImports
@@ -122,7 +122,7 @@ compute moduleName module_ project =
             computeLookupTableForModule ()
 
 
-computeHelp : ProjectCache.ModuleCacheKey -> ModuleName -> OpaqueProjectModule -> ValidProject -> ( ModuleNameLookupTable, ValidProject )
+computeHelp : ProjectCache.ModuleCacheKey -> ModuleName -> OpaqueProjectModule -> ValidProject -> ( ModuleNameLookup, ValidProject )
 computeHelp cacheKey moduleName module_ project =
     let
         projectCache : ProjectCache
@@ -1024,11 +1024,11 @@ declarationEnterVisitor node context =
                         |> NonEmpty.cons newScope
                         |> updateScope context
 
-                lookupTableAfterArguments : ModuleNameLookupTable
+                lookupTableAfterArguments : ModuleNameLookup
                 lookupTableAfterArguments =
                     collectModuleNamesFromPattern newContext (Node.value function.declaration).arguments newContext.lookupTable
 
-                finalLookupTable : ModuleNameLookupTable
+                finalLookupTable : ModuleNameLookup
                 finalLookupTable =
                     case function.signature of
                         Just signature ->
@@ -1143,7 +1143,7 @@ collectNamesFromPattern variableType patternsToVisit acc =
             acc
 
 
-collectModuleNamesFromPattern : Context -> List (Node Pattern) -> ModuleNameLookupTable -> ModuleNameLookupTable
+collectModuleNamesFromPattern : Context -> List (Node Pattern) -> ModuleNameLookup -> ModuleNameLookup
 collectModuleNamesFromPattern context patternsToVisit acc =
     case patternsToVisit of
         pattern :: restOfPatternsToVisit ->
@@ -1250,14 +1250,14 @@ expressionEnterVisitor node context =
                         declarations
                         |> updateScope context
 
-                lookupTable : ModuleNameLookupTable
+                lookupTable : ModuleNameLookup
                 lookupTable =
                     List.foldl
                         (\declaration acc ->
                             case Node.value declaration of
                                 Expression.LetFunction function ->
                                     let
-                                        withDeclarationModuleName : ModuleNameLookupTable
+                                        withDeclarationModuleName : ModuleNameLookup
                                         withDeclarationModuleName =
                                             collectModuleNamesFromPattern newContext
                                                 (Node.value function.declaration).arguments
@@ -1344,7 +1344,7 @@ expressionEnterVisitor node context =
             context
 
 
-collectModuleNamesFromTypeAnnotation : Context -> List (Node TypeAnnotation) -> ModuleNameLookupTable -> ModuleNameLookupTable
+collectModuleNamesFromTypeAnnotation : Context -> List (Node TypeAnnotation) -> ModuleNameLookup -> ModuleNameLookup
 collectModuleNamesFromTypeAnnotation context typeAnnotationsToVisit acc =
     case typeAnnotationsToVisit of
         typeAnnotationNode :: remainingTypeAnnotationsToVisit ->

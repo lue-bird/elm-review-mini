@@ -22,7 +22,7 @@ import Elm.Syntax.TypeAlias exposing (TypeAlias)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import NoUnused.NonemptyList as NonemptyList exposing (Nonempty)
 import Review.Fix as Fix exposing (Fix)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Project.Dependency as Dependency exposing (Dependency)
 import Review.Rule as Rule exposing (Error, Rule)
 import Set exposing (Set)
@@ -138,7 +138,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , scopes : Nonempty Scope
     , inTheDeclarationOf : List String
     , exposesEverything : Bool
@@ -656,7 +656,7 @@ expressionEnterVisitor (Node range value) context =
                             { context | unusedImportedCustomTypes = Dict.remove customTypeName context.unusedImportedCustomTypes }
 
                         Nothing ->
-                            case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+                            case ModuleNameLookup.moduleNameAt context.lookupTable range of
                                 Just realModuleName ->
                                     context
                                         |> markValueAsUsed name
@@ -666,7 +666,7 @@ expressionEnterVisitor (Node range value) context =
                                     markValueAsUsed name context
 
         Expression.FunctionOrValue moduleName _ ->
-            case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+            case ModuleNameLookup.moduleNameAt context.lookupTable range of
                 Just realModuleName ->
                     markModuleAsUsed ( realModuleName, moduleName ) context
 
@@ -797,7 +797,7 @@ letDeclarationEnterVisitor (Node range { declarations, expression }) declaration
                     )
 
 
-isDebugLog : ModuleNameLookupTable -> Node Expression -> Bool
+isDebugLog : ModuleNameLookup -> Node Expression -> Bool
 isDebugLog lookupTable node =
     case Node.value node of
         Expression.Application [ functionWithParens, _, _ ] ->
@@ -808,7 +808,7 @@ isDebugLog lookupTable node =
             in
             case Node.value function of
                 Expression.FunctionOrValue _ "log" ->
-                    ModuleNameLookupTable.moduleNameFor lookupTable function == Just [ "Debug" ]
+                    ModuleNameLookup.moduleNameFor lookupTable function == Just [ "Debug" ]
 
                 _ ->
                     False
@@ -823,7 +823,7 @@ isDebugLog lookupTable node =
                     in
                     case Node.value function of
                         Expression.FunctionOrValue _ "log" ->
-                            ModuleNameLookupTable.moduleNameFor lookupTable function == Just [ "Debug" ]
+                            ModuleNameLookup.moduleNameFor lookupTable function == Just [ "Debug" ]
 
                         _ ->
                             False
@@ -841,7 +841,7 @@ isDebugLog lookupTable node =
                     in
                     case Node.value function of
                         Expression.FunctionOrValue _ "log" ->
-                            ModuleNameLookupTable.moduleNameFor lookupTable function == Just [ "Debug" ]
+                            ModuleNameLookup.moduleNameFor lookupTable function == Just [ "Debug" ]
 
                         _ ->
                             False
@@ -992,7 +992,7 @@ markValuesFromPatternsAsUsed nodes context =
 
                         contextAfterModuleUsage : ModuleContext
                         contextAfterModuleUsage =
-                            case ModuleNameLookupTable.moduleNameFor context.lookupTable node of
+                            case ModuleNameLookup.moduleNameFor context.lookupTable node of
                                 Just realModuleName ->
                                     markModuleAsUsed ( realModuleName, qualifiedNameRef.moduleName ) contextAfterTypeUsage
 
@@ -1572,7 +1572,7 @@ collectNamesFromTypeAnnotation exception nodes context =
 
                         contextAfterModuleUsage : ModuleContext
                         contextAfterModuleUsage =
-                            case ModuleNameLookupTable.moduleNameAt context.lookupTable typeRange of
+                            case ModuleNameLookup.moduleNameAt context.lookupTable typeRange of
                                 Just realModuleName ->
                                     markModuleAsUsed ( realModuleName, rawModuleName ) contextAfterTypeUsage
 

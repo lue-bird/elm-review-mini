@@ -1,5 +1,5 @@
-module Review.ModuleNameLookupTable exposing
-    ( ModuleNameLookupTable, moduleNameFor, moduleNameAt
+module Review.ModuleNameLookup exposing
+    ( ModuleNameLookup, moduleNameFor, moduleNameAt
     , fullModuleNameFor, fullModuleNameAt
     , createForTests
     )
@@ -13,11 +13,11 @@ or implicitly. Resolving which module the type or function comes from can be a b
 doing it yourself.
 
 `elm-review` computes this for you already. Store this value inside your module context, then use
-[`ModuleNameLookupTable.moduleNameFor`](./Review-ModuleNameLookupTable#moduleNameFor) or
-[`ModuleNameLookupTable.moduleNameAt`](./Review-ModuleNameLookupTable#moduleNameAt) to get the name of the module the
+[`ModuleNameLookup.moduleNameFor`](./Review-ModuleNameLookup#moduleNameFor) or
+[`ModuleNameLookup.moduleNameAt`](./Review-ModuleNameLookup#moduleNameAt) to get the name of the module the
 type or value comes from.
 
-@docs ModuleNameLookupTable, moduleNameFor, moduleNameAt
+@docs ModuleNameLookup, moduleNameFor, moduleNameAt
 @docs fullModuleNameFor, fullModuleNameAt
 
 Note: If you have been using [`elm-review-scope`](https://github.com/jfmengels/elm-review-scope) before, you should use this instead.
@@ -33,14 +33,14 @@ import Dict
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
-import Review.ModuleNameLookupTable.Internal as Internal
+import Review.ModuleNameLookup.Internal as Internal
 
 
 {-| Associates positions in the AST of a module to the name of the module that the contained variable or type originates
 from.
 -}
-type alias ModuleNameLookupTable =
-    Internal.ModuleNameLookupTable
+type alias ModuleNameLookup =
+    Internal.ModuleNameLookup
 
 
 {-| Returns the name of the module the type, value, or operator referred to by this [`Node`](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Node#Node) was defined in.
@@ -59,7 +59,7 @@ expressionVisitor : Node Expression -> Context -> ( List (Error {}), Context )
 expressionVisitor node context =
     case Node.value node of
         Expression.FunctionOrValue _ "color" ->
-            if ModuleNameLookupTable.moduleNameFor context.lookupTable node == Just [ "Css" ] then
+            if ModuleNameLookup.moduleNameFor context.lookupTable node == Just [ "Css" ] then
                 ( [ Rule.error
                         { message = "Do not use `Css.color` directly, use the Colors module instead"
                         , details = [ "We made a module which contains all the available colors of our design system. Use the functions in there instead." ]
@@ -79,16 +79,16 @@ expressionVisitor node context =
 Note: If using a `Range` is easier in your situation than using a `Node`, use [`moduleNameAt`](#moduleNameAt) instead.
 
 -}
-moduleNameFor : ModuleNameLookupTable -> Node a -> Maybe ModuleName
-moduleNameFor (Internal.ModuleNameLookupTable _ dict) (Node range _) =
+moduleNameFor : ModuleNameLookup -> Node a -> Maybe ModuleName
+moduleNameFor (Internal.ModuleNameLookup _ dict) (Node range _) =
     Dict.get (Internal.toRangeLike range) dict
 
 
 {-| This is the same as [`moduleNameFor`](#moduleNameFor), except that the function will return the current module name
 if the type or value was defined in this module, instead of `Just []`.
 -}
-fullModuleNameFor : ModuleNameLookupTable -> Node a -> Maybe ModuleName
-fullModuleNameFor (Internal.ModuleNameLookupTable currentModuleName dict) (Node range _) =
+fullModuleNameFor : ModuleNameLookup -> Node a -> Maybe ModuleName
+fullModuleNameFor (Internal.ModuleNameLookup currentModuleName dict) (Node range _) =
     case Dict.get (Internal.toRangeLike range) dict of
         Just [] ->
             Just currentModuleName
@@ -113,7 +113,7 @@ expressionVisitor : Node Expression -> Context -> ( List (Error {}), Context )
 expressionVisitor node context =
     case Node.value node of
         Expression.RecordUpdateExpr (Node range name) _ ->
-            case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+            case ModuleNameLookup.moduleNameAt context.lookupTable range of
                 Just moduleName ->
                     ( [], markVariableAsUsed ( moduleName, name ) context )
 
@@ -127,16 +127,16 @@ expressionVisitor node context =
 Note: If using a `Node` is easier in your situation than using a `Range`, use [`moduleNameFor`](#moduleNameFor) instead.
 
 -}
-moduleNameAt : ModuleNameLookupTable -> Range -> Maybe ModuleName
-moduleNameAt (Internal.ModuleNameLookupTable _ dict) range =
+moduleNameAt : ModuleNameLookup -> Range -> Maybe ModuleName
+moduleNameAt (Internal.ModuleNameLookup _ dict) range =
     Dict.get (Internal.toRangeLike range) dict
 
 
 {-| This is the same as [`moduleNameAt`](#moduleNameAt), except that the function will return the current module name
 if the type or value was defined in this module, instead of `Just []`.
 -}
-fullModuleNameAt : ModuleNameLookupTable -> Range -> Maybe ModuleName
-fullModuleNameAt (Internal.ModuleNameLookupTable currentModuleName dict) range =
+fullModuleNameAt : ModuleNameLookup -> Range -> Maybe ModuleName
+fullModuleNameAt (Internal.ModuleNameLookup currentModuleName dict) range =
     case Dict.get (Internal.toRangeLike range) dict of
         Just [] ->
             Just currentModuleName
@@ -150,11 +150,11 @@ module in which this lookup table would be used.
 
 **NOTE**: This is only meant to be used for testing purposes, not for direct use in rules.
 
-This can be useful if you want to test individual functions that take a `ModuleNameLookupTable` as an argument.
+This can be useful if you want to test individual functions that take a `ModuleNameLookup` as an argument.
 
-    ModuleNameLookupTable.createForTests [ "My", "Module" ] []
+    ModuleNameLookup.createForTests [ "My", "Module" ] []
 
 -}
-createForTests : ModuleName -> List ( Range, ModuleName ) -> ModuleNameLookupTable
+createForTests : ModuleName -> List ( Range, ModuleName ) -> ModuleNameLookup
 createForTests =
     Internal.fromList

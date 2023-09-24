@@ -322,9 +322,9 @@ import Review.Fix.FixedErrors as FixedErrors exposing (FixedErrors)
 import Review.Fix.Internal as InternalFix
 import Review.ImportCycle as ImportCycle
 import Review.Logger as Logger
-import Review.ModuleNameLookupTable exposing (ModuleNameLookupTable)
-import Review.ModuleNameLookupTable.Compute
-import Review.ModuleNameLookupTable.Internal as ModuleNameLookupTableInternal
+import Review.ModuleNameLookup exposing (ModuleNameLookup)
+import Review.ModuleNameLookup.Compute
+import Review.ModuleNameLookup.Internal as ModuleNameLookupTableInternal
 import Review.Options as ReviewOptions exposing (ReviewOptions)
 import Review.Options.Internal as InternalOptions exposing (ReviewOptionsData, ReviewOptionsInternal(..))
 import Review.Project.Dependency
@@ -1325,7 +1325,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
             { ast = dummyAst
             , moduleKey = ModuleKey "dummy"
             , moduleDocumentation = Nothing
-            , moduleNameLookupTable = ModuleNameLookupTableInternal.empty []
+            , moduleNameLookup = ModuleNameLookupTableInternal.empty []
             , extractSourceCode = always "dummy"
             , filePath = "dummy file path"
             , isInSourceDirectories = True
@@ -4707,7 +4707,7 @@ computeWhatsRequiredToAnalyze project module_ incoming ruleProjectVisitors =
 computeModuleWithRuleVisitors : ValidProject -> OpaqueProjectModule -> List (AvailableData -> RuleModuleVisitor) -> RequestedData -> List RuleProjectVisitor -> ( ValidProject, List RuleProjectVisitor )
 computeModuleWithRuleVisitors project module_ inputRuleModuleVisitors (RequestedData requestedData) rulesNotToRun =
     let
-        ( moduleNameLookupTable, newProject ) =
+        ( moduleNameLookup, newProject ) =
             computeModuleNameLookupTable requestedData project module_
 
         ast : File
@@ -4718,7 +4718,7 @@ computeModuleWithRuleVisitors project module_ inputRuleModuleVisitors (Requested
         availableData =
             { ast = ast
             , moduleKey = ModuleKey (ProjectModule.path module_)
-            , moduleNameLookupTable = moduleNameLookupTable
+            , moduleNameLookup = moduleNameLookup
             , moduleDocumentation = findModuleDocumentation ast
             , extractSourceCode =
                 if requestedData.sourceCodeExtractor then
@@ -4744,7 +4744,7 @@ computeModuleWithRuleVisitors project module_ inputRuleModuleVisitors (Requested
     ( newProject, List.append rulesNotToRun outputRuleProjectVisitors )
 
 
-computeModuleNameLookupTable : { a | moduleNameLookupTable : Bool } -> ValidProject -> OpaqueProjectModule -> ( ModuleNameLookupTableInternal.ModuleNameLookupTable, ValidProject )
+computeModuleNameLookupTable : { a | moduleNameLookup : Bool } -> ValidProject -> OpaqueProjectModule -> ( ModuleNameLookupTableInternal.ModuleNameLookup, ValidProject )
 computeModuleNameLookupTable requestedData project module_ =
     let
         moduleName : ModuleName
@@ -4752,8 +4752,8 @@ computeModuleNameLookupTable requestedData project module_ =
             ProjectModule.moduleName module_
     in
     -- TODO If the file has changed, then compute the module docs anyway.
-    if requestedData.moduleNameLookupTable then
-        Review.ModuleNameLookupTable.Compute.compute moduleName module_ project
+    if requestedData.moduleNameLookup then
+        Review.ModuleNameLookup.Compute.compute moduleName module_ project
 
     else
         ( ModuleNameLookupTableInternal.empty moduleName, project )
@@ -6312,14 +6312,14 @@ or implicitly. Resolving which module the type or function comes from can be a b
 doing it yourself.
 
 `elm-review` computes this for you already. Store this value inside your module context, then use
-[`ModuleNameLookupTable.moduleNameFor`](./Review-ModuleNameLookupTable#moduleNameFor) or
-[`ModuleNameLookupTable.moduleNameAt`](./Review-ModuleNameLookupTable#moduleNameAt) to get the name of the module the
+[`ModuleNameLookup.moduleNameFor`](./Review-ModuleNameLookup#moduleNameFor) or
+[`ModuleNameLookup.moduleNameAt`](./Review-ModuleNameLookup#moduleNameAt) to get the name of the module the
 type or value comes from.
 
-    import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+    import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 
     type alias Context =
-        { lookupTable : ModuleNameLookupTable }
+        { lookupTable : ModuleNameLookup }
 
     rule : Rule
     rule =
@@ -6338,7 +6338,7 @@ type or value comes from.
     expressionVisitor node context =
         case Node.value node of
             Expression.FunctionOrValue _ "color" ->
-                if ModuleNameLookupTable.moduleNameFor context.lookupTable node == Just [ "Css" ] then
+                if ModuleNameLookup.moduleNameFor context.lookupTable node == Just [ "Css" ] then
                     ( [ Rule.error
                             { message = "Do not use `Css.color` directly, use the Colors module instead"
                             , details = [ "We made a module which contains all the available colors of our design system. Use the functions in there instead." ]
@@ -6357,11 +6357,11 @@ type or value comes from.
 Note: If you have been using [`elm-review-scope`](https://github.com/jfmengels/elm-review-scope) before, you should use this instead.
 
 -}
-withModuleNameLookupTable : ContextCreator (ModuleNameLookupTable -> create) -> ContextCreator create
+withModuleNameLookupTable : ContextCreator (ModuleNameLookup -> create) -> ContextCreator create
 withModuleNameLookupTable (ContextCreator fn (RequestedData requested)) =
     ContextCreator
-        (\data isFileIgnored -> fn data isFileIgnored data.moduleNameLookupTable)
-        (RequestedData { requested | moduleNameLookupTable = True })
+        (\data isFileIgnored -> fn data isFileIgnored data.moduleNameLookup)
+        (RequestedData { requested | moduleNameLookup = True })
 
 
 {-| Request the full [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree) for the current module.
@@ -6519,7 +6519,7 @@ type alias AvailableData =
     { ast : Elm.Syntax.File.File
     , moduleKey : ModuleKey
     , moduleDocumentation : Maybe (Node String)
-    , moduleNameLookupTable : ModuleNameLookupTable
+    , moduleNameLookup : ModuleNameLookup
     , extractSourceCode : Range -> String
     , filePath : String
     , isInSourceDirectories : Bool

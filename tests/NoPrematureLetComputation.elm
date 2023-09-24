@@ -14,7 +14,7 @@ import Elm.Syntax.Pattern as Pattern exposing (Pattern)
 import Elm.Syntax.Range as Range exposing (Location, Range)
 import RangeDict exposing (RangeDict)
 import Review.Fix as Fix exposing (Fix)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Rule)
 import Set exposing (Set)
 
@@ -160,7 +160,7 @@ rule =
 
 
 type alias Context =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , extractSourceCode : Range -> String
     , scope : Scope
     , branching : Branching
@@ -630,11 +630,11 @@ registerApplicationCall fnRange fnName argumentWithParens nbOfOtherArguments con
             context
 
 
-numberOfArgumentsForFunction : ModuleNameLookupTable -> String -> Range -> Maybe number
+numberOfArgumentsForFunction : ModuleNameLookup -> String -> Range -> Maybe number
 numberOfArgumentsForFunction lookupTable fnName fnRange =
     case Dict.get fnName knownFunctions of
         Just knownModuleNames ->
-            ModuleNameLookupTable.moduleNameAt lookupTable fnRange
+            ModuleNameLookup.moduleNameAt lookupTable fnRange
                 |> Maybe.andThen (\moduleName -> Dict.get moduleName knownModuleNames)
 
         _ ->

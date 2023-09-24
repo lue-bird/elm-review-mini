@@ -20,7 +20,7 @@ import Elm.Syntax.Signature exposing (Signature)
 import Elm.Syntax.Type as Type
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Review.Fix as Fix exposing (Fix)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Project.Dependency as Dependency exposing (Dependency)
 import Review.Rule as Rule exposing (Rule)
 import Set exposing (Set)
@@ -310,7 +310,7 @@ rememberDeclaredType (Node _ name) declaredTypes =
 
 
 exposedSignatureTypesForDeclarationList :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Exposing
     -> List (Node Declaration)
     -> List (Node ( ModuleName, String ))
@@ -320,7 +320,7 @@ exposedSignatureTypesForDeclarationList lookupTable exposes list exposedSignatur
 
 
 exposedSignatureTypesForDeclaration :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Exposing
     -> Node Declaration
     -> List (Node ( ModuleName, String ))
@@ -341,7 +341,7 @@ exposedSignatureTypesForDeclaration lookupTable exposes (Node _ declaration) exp
 
 
 exposedSignatureTypesForConstructorList :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Exposing
     -> Node String
     -> List (Node Type.ValueConstructor)
@@ -356,7 +356,7 @@ exposedSignatureTypesForConstructorList lookupTable exposes (Node _ name) list e
 
 
 exposedSignatureTypesForConstructor :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Node Type.ValueConstructor
     -> List (Node ( ModuleName, String ))
     -> List (Node ( ModuleName, String ))
@@ -365,7 +365,7 @@ exposedSignatureTypesForConstructor lookupTable (Node _ { arguments }) exposedSi
 
 
 exposedSignatureTypesForAlias :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Exposing
     -> Node String
     -> Node TypeAnnotation
@@ -385,7 +385,7 @@ exposedSignatureTypesForAlias lookupTable exposes (Node _ name) typeAnnotation e
 
 
 exposedSignatureTypesForSignature :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Exposing
     -> Maybe (Node Signature)
     -> List (Node ( ModuleName, String ))
@@ -404,7 +404,7 @@ exposedSignatureTypesForSignature lookupTable exposes maybeSignature exposedSign
 
 
 exposedSignatureTypesForRecordFieldList :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> List (Node TypeAnnotation.RecordField)
     -> List (Node ( ModuleName, String ))
     -> List (Node ( ModuleName, String ))
@@ -413,7 +413,7 @@ exposedSignatureTypesForRecordFieldList lookupTable fields exposedSignatureTypes
 
 
 exposedSignatureTypesForRecordField :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Node TypeAnnotation.RecordField
     -> List (Node ( ModuleName, String ))
     -> List (Node ( ModuleName, String ))
@@ -422,7 +422,7 @@ exposedSignatureTypesForRecordField lookupTable (Node _ ( _, typeAnnotation )) e
 
 
 exposedSignatureTypesForTypeAnnotationList :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> List (Node TypeAnnotation)
     -> List (Node ( ModuleName, String ))
     -> List (Node ( ModuleName, String ))
@@ -431,14 +431,14 @@ exposedSignatureTypesForTypeAnnotationList lookupTable list exposedSignatureType
 
 
 exposedSignatureTypesForTypeAnnotation :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Node TypeAnnotation
     -> List (Node ( ModuleName, String ))
     -> List (Node ( ModuleName, String ))
 exposedSignatureTypesForTypeAnnotation lookupTable (Node _ typeAnnotation) exposedSignatureTypes =
     case typeAnnotation of
         TypeAnnotation.Typed name list ->
-            case ModuleNameLookupTable.moduleNameFor lookupTable name of
+            case ModuleNameLookup.moduleNameFor lookupTable name of
                 Just moduleName ->
                     (Node.map (\( _, typeName ) -> ( moduleName, typeName )) name :: exposedSignatureTypes)
                         |> exposedSignatureTypesForTypeAnnotationList lookupTable list
@@ -715,7 +715,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , modulesFromTheProject : Set ModuleName
     , moduleType : ModuleType
     }

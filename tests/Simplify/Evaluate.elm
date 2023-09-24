@@ -2,7 +2,7 @@ module Simplify.Evaluate exposing (getBoolean, getInt, isAlwaysBoolean)
 
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.Node as Node exposing (Node(..))
-import Review.ModuleNameLookupTable as ModuleNameLookupTable
+import Review.ModuleNameLookup as ModuleNameLookup
 import Simplify.AstHelpers as AstHelpers
 import Simplify.Infer as Infer
 import Simplify.Match exposing (Match(..))
@@ -18,7 +18,7 @@ getBoolean resources baseNode =
     in
     case Node.value node of
         Expression.FunctionOrValue _ "True" ->
-            case ModuleNameLookupTable.moduleNameFor resources.lookupTable node of
+            case ModuleNameLookup.moduleNameFor resources.lookupTable node of
                 Just [ "Basics" ] ->
                     Determined True
 
@@ -26,7 +26,7 @@ getBoolean resources baseNode =
                     Undetermined
 
         Expression.FunctionOrValue _ "False" ->
-            case ModuleNameLookupTable.moduleNameFor resources.lookupTable node of
+            case ModuleNameLookup.moduleNameFor resources.lookupTable node of
                 Just [ "Basics" ] ->
                     Determined False
 
@@ -35,7 +35,7 @@ getBoolean resources baseNode =
 
         Expression.FunctionOrValue _ name ->
             case
-                ModuleNameLookupTable.moduleNameFor resources.lookupTable node
+                ModuleNameLookup.moduleNameFor resources.lookupTable node
                     |> Maybe.andThen (\moduleName -> Infer.get (Expression.FunctionOrValue moduleName name) (Tuple.first resources.inferredConstants))
             of
                 Just (Expression.FunctionOrValue [ "Basics" ] "True") ->
@@ -67,7 +67,7 @@ isAlwaysBoolean : Infer.Resources a -> Node Expression -> Match Bool
 isAlwaysBoolean resources node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: boolean :: []) ->
-            case ModuleNameLookupTable.moduleNameAt resources.lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt resources.lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     getBoolean resources boolean
 
@@ -100,7 +100,7 @@ getInt resources baseNode =
 
         Expression.FunctionOrValue _ name ->
             case
-                ModuleNameLookupTable.moduleNameFor resources.lookupTable node
+                ModuleNameLookup.moduleNameFor resources.lookupTable node
                     |> Maybe.andThen (\moduleName -> Infer.get (Expression.FunctionOrValue moduleName name) (Tuple.first resources.inferredConstants))
             of
                 Just (Expression.Integer int) ->

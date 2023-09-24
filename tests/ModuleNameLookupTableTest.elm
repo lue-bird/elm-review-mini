@@ -13,7 +13,7 @@ import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Elm.Version
 import Fixtures.Dependencies as Dependencies
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Project as Project exposing (Project)
 import Review.Project.Dependency as Dependency exposing (Dependency)
 import Review.Rule as Rule exposing (Rule)
@@ -25,7 +25,7 @@ import Test exposing (Test, describe, test)
 
 all : Test
 all =
-    describe "ModuleNameLookupTable"
+    describe "ModuleNameLookup"
         [ moduleNameAtTest
         , fullModuleNameAtest
         , dependenciesTest
@@ -34,13 +34,13 @@ all =
 
 moduleNameAtTest : Test
 moduleNameAtTest =
-    describe "ModuleNameLookupTable.moduleNameAt"
+    describe "ModuleNameLookup.moduleNameAt"
         [ test "should return the module that defined the value" <|
             \() ->
                 let
-                    lookupFunction : ModuleNameLookupTable -> Range -> Maybe ModuleName
+                    lookupFunction : ModuleNameLookup -> Range -> Maybe ModuleName
                     lookupFunction =
-                        ModuleNameLookupTable.moduleNameAt
+                        ModuleNameLookup.moduleNameAt
 
                     rule : Rule
                     rule =
@@ -183,9 +183,9 @@ Something.B.Bar -> Something.B.Bar
         , test "should return the module that defined the type" <|
             \() ->
                 let
-                    lookupFunction : ModuleNameLookupTable -> Range -> Maybe ModuleName
+                    lookupFunction : ModuleNameLookup -> Range -> Maybe ModuleName
                     lookupFunction =
-                        ModuleNameLookupTable.moduleNameAt
+                        ModuleNameLookup.moduleNameAt
 
                     rule : Rule
                     rule =
@@ -251,13 +251,13 @@ type alias BAlias = {}
 
 fullModuleNameAtest : Test
 fullModuleNameAtest =
-    describe "ModuleNameLookupTable.fullModuleNameAt"
+    describe "ModuleNameLookup.fullModuleNameAt"
         [ test "should return the module that defined the value" <|
             \() ->
                 let
-                    lookupFunction : ModuleNameLookupTable -> Range -> Maybe ModuleName
+                    lookupFunction : ModuleNameLookup -> Range -> Maybe ModuleName
                     lookupFunction =
-                        ModuleNameLookupTable.fullModuleNameAt
+                        ModuleNameLookup.fullModuleNameAt
 
                     rule : Rule
                     rule =
@@ -394,9 +394,9 @@ Something.B.Bar -> Something.B.Bar
         , test "should return the module that defined the type" <|
             \() ->
                 let
-                    lookupFunction : ModuleNameLookupTable -> Range -> Maybe ModuleName
+                    lookupFunction : ModuleNameLookup -> Range -> Maybe ModuleName
                     lookupFunction =
-                        ModuleNameLookupTable.fullModuleNameAt
+                        ModuleNameLookup.fullModuleNameAt
 
                     rule : Rule
                     rule =
@@ -466,9 +466,9 @@ dependenciesTest =
         [ test "should not confuse a function from a local module with a module from an indirect dependency" <|
             \() ->
                 let
-                    lookupFunction : ModuleNameLookupTable -> Range -> Maybe ModuleName
+                    lookupFunction : ModuleNameLookup -> Range -> Maybe ModuleName
                     lookupFunction =
-                        ModuleNameLookupTable.moduleNameAt
+                        ModuleNameLookup.moduleNameAt
 
                     rule : Rule
                     rule =
@@ -499,7 +499,7 @@ value = 1
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , texts : List String
     }
 
@@ -622,7 +622,7 @@ contextCreator =
         |> Rule.withModuleNameLookupTable
 
 
-expressionVisitor : (ModuleNameLookupTable -> Range -> Maybe ModuleName) -> Node Expression -> ModuleContext -> ( List nothing, ModuleContext )
+expressionVisitor : (ModuleNameLookup -> Range -> Maybe ModuleName) -> Node Expression -> ModuleContext -> ( List nothing, ModuleContext )
 expressionVisitor lookupFunction node context =
     case Node.value node of
         Expression.FunctionOrValue moduleName name ->
@@ -683,7 +683,7 @@ expressionVisitor lookupFunction node context =
             ( [], context )
 
 
-collectPatterns : (ModuleNameLookupTable -> Range -> Maybe ModuleName) -> ModuleContext -> Node Pattern.Pattern -> List String
+collectPatterns : (ModuleNameLookup -> Range -> Maybe ModuleName) -> ModuleContext -> Node Pattern.Pattern -> List String
 collectPatterns lookupFunction context node =
     case Node.value node of
         Pattern.NamedPattern { moduleName, name } _ ->
@@ -702,7 +702,7 @@ collectPatterns lookupFunction context node =
             Debug.todo ("Other patterns in case expressions are not handled: " ++ Debug.toString node)
 
 
-getRealName : (ModuleNameLookupTable -> Range -> Maybe ModuleName) -> ModuleContext -> ModuleName -> Range -> String -> String
+getRealName : (ModuleNameLookup -> Range -> Maybe ModuleName) -> ModuleContext -> ModuleName -> Range -> String -> String
 getRealName lookupFunction context moduleName range name =
     let
         nameInCode : String
@@ -729,7 +729,7 @@ getRealName lookupFunction context moduleName range name =
     nameInCode ++ " -> " ++ resultingName
 
 
-declarationVisitor : (ModuleNameLookupTable -> Range -> Maybe ModuleName) -> Node Declaration -> ModuleContext -> ( List nothing, ModuleContext )
+declarationVisitor : (ModuleNameLookup -> Range -> Maybe ModuleName) -> Node Declaration -> ModuleContext -> ( List nothing, ModuleContext )
 declarationVisitor lookupFunction node context =
     case Node.value node of
         Declaration.CustomTypeDeclaration { constructors } ->
@@ -769,7 +769,7 @@ declarationVisitor lookupFunction node context =
             ( [], context )
 
 
-typeAnnotationNames : (ModuleNameLookupTable -> Range -> Maybe ModuleName) -> ModuleContext -> Node TypeAnnotation -> List String
+typeAnnotationNames : (ModuleNameLookup -> Range -> Maybe ModuleName) -> ModuleContext -> Node TypeAnnotation -> List String
 typeAnnotationNames lookupFunction moduleContext typeAnnotation =
     case Node.value typeAnnotation of
         TypeAnnotation.GenericType name ->

@@ -105,7 +105,7 @@ import AssocList
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
-import Review.ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup exposing (ModuleNameLookup)
 
 
 type Inferred
@@ -130,7 +130,7 @@ type Fact
 
 type alias Resources a =
     { a
-        | lookupTable : ModuleNameLookupTable
+        | lookupTable : ModuleNameLookup
         , inferredConstants : ( Inferred, List Inferred )
     }
 

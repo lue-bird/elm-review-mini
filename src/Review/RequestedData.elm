@@ -3,7 +3,7 @@ module Review.RequestedData exposing (RequestedData(..), combine, combineJust, n
 
 type RequestedData
     = RequestedData
-        { moduleNameLookupTable : Bool
+        { moduleNameLookup : Bool
         , sourceCodeExtractor : Bool
         , ignoredFiles : Bool
         }
@@ -12,7 +12,7 @@ type RequestedData
 none : RequestedData
 none =
     RequestedData
-        { moduleNameLookupTable = False
+        { moduleNameLookup = False
         , sourceCodeExtractor = False
         , ignoredFiles = False
         }
@@ -36,7 +36,7 @@ combine maybeA maybeB =
 combineJust : RequestedData -> RequestedData -> RequestedData
 combineJust (RequestedData a) (RequestedData b) =
     RequestedData
-        { moduleNameLookupTable = a.moduleNameLookupTable || b.moduleNameLookupTable
+        { moduleNameLookup = a.moduleNameLookup || b.moduleNameLookup
         , sourceCodeExtractor = a.sourceCodeExtractor || b.sourceCodeExtractor
         , ignoredFiles = a.ignoredFiles || b.ignoredFiles
         }

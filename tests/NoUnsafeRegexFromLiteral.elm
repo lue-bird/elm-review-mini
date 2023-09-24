@@ -13,7 +13,7 @@ import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node)
 import Elm.Syntax.Range exposing (Range)
 import Regex
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 
 
@@ -168,7 +168,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , allowedFunctionOrValues : List Range
     , foundTargetFunction : Bool
     }
@@ -251,7 +251,7 @@ declarationListVisitor target nodes moduleContext =
 isTargetFunction : Target -> ModuleContext -> Node a -> String -> Bool
 isTargetFunction target moduleContext functionNode functionName =
     (functionName == target.name)
-        && (ModuleNameLookupTable.moduleNameFor moduleContext.lookupTable functionNode == Just target.moduleName)
+        && (ModuleNameLookup.moduleNameFor moduleContext.lookupTable functionNode == Just target.moduleName)
 
 
 expressionVisitor : Target -> Node Expression -> ModuleContext -> ( List (Error {}), ModuleContext )
@@ -280,7 +280,7 @@ expressionVisitor target node moduleContext =
                         , { moduleContext | allowedFunctionOrValues = Node.range function :: moduleContext.allowedFunctionOrValues }
                         )
 
-                    else if functionName == "fromString" && ModuleNameLookupTable.moduleNameFor moduleContext.lookupTable function == Just [ "Regex" ] then
+                    else if functionName == "fromString" && ModuleNameLookup.moduleNameFor moduleContext.lookupTable function == Just [ "Regex" ] then
                         case Node.value argument of
                             Expression.Literal _ ->
                                 ( [ Rule.error

@@ -82,7 +82,7 @@ import Elm.Syntax.Range as Range exposing (Range)
 import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Project.Dependency
 import Review.Rule as Rule exposing (Rule)
 import Set exposing (Set)
@@ -141,7 +141,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , currentModuleName : ModuleName
     , deprecatedModules : Dict ModuleName DeprecationReason
     , deprecatedElements : Set ( ModuleName, String )
@@ -904,7 +904,7 @@ expressionVisitor configuration (Node nodeRange node) context =
 
 reportElementAsList : ModuleContext -> Range -> (() -> Range) -> String -> List (Rule.Error {})
 reportElementAsList context rangeForLookupTable rangeForReport name =
-    case ModuleNameLookupTable.moduleNameAt context.lookupTable rangeForLookupTable of
+    case ModuleNameLookup.moduleNameAt context.lookupTable rangeForLookupTable of
         Just moduleName ->
             case Dict.get moduleName context.deprecatedModules of
                 Just DeprecatedModule ->
@@ -926,7 +926,7 @@ reportElementAsList context rangeForLookupTable rangeForReport name =
 
 reportElementAsMaybe : ModuleContext -> Range -> String -> Maybe (Rule.Error {})
 reportElementAsMaybe context range name =
-    case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+    case ModuleNameLookup.moduleNameAt context.lookupTable range of
         Just moduleName ->
             case Dict.get moduleName context.deprecatedModules of
                 Just DeprecatedModule ->

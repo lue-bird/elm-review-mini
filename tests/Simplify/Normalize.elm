@@ -7,7 +7,7 @@ import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern as Pattern exposing (Pattern)
 import Elm.Syntax.Range as Range
 import Elm.Writer
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Simplify.Infer as Infer
 
 
@@ -113,7 +113,7 @@ normalize resources node =
 
         Expression.FunctionOrValue rawModuleName string ->
             Expression.FunctionOrValue
-                (ModuleNameLookupTable.moduleNameFor resources.lookupTable node
+                (ModuleNameLookup.moduleNameFor resources.lookupTable node
                     |> Maybe.withDefault rawModuleName
                 )
                 string
@@ -278,7 +278,7 @@ addToFunctionCall functionCall extraArgument =
                 |> toNode
 
 
-normalizePattern : ModuleNameLookupTable -> Node Pattern -> Node Pattern
+normalizePattern : ModuleNameLookup -> Node Pattern -> Node Pattern
 normalizePattern lookupTable node =
     case Node.value node of
         Pattern.TuplePattern patterns ->
@@ -309,7 +309,7 @@ normalizePattern lookupTable node =
                 nameRef : Pattern.QualifiedNameRef
                 nameRef =
                     { moduleName =
-                        ModuleNameLookupTable.moduleNameFor lookupTable node
+                        ModuleNameLookup.moduleNameFor lookupTable node
                             |> Maybe.withDefault qualifiedNameRef.moduleName
                     , name = qualifiedNameRef.name
                     }

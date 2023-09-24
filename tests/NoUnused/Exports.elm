@@ -25,7 +25,7 @@ import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import List.Extra
 import NoUnused.LamderaSupport as LamderaSupport
 import Review.Fix as Fix
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 import Set exposing (Set)
 
@@ -119,7 +119,7 @@ type ExposedElementType
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , exposed : Dict String ExposedElement
     , used : Set ( ModuleName, String )
     , elementsNotToReport : Set String
@@ -759,7 +759,7 @@ testFunctionName moduleContext node =
                 Just (TypeAnnotation.Typed typeNode _) ->
                     if
                         (Tuple.second (Node.value typeNode) == "Test")
-                            && (ModuleNameLookupTable.moduleNameFor moduleContext.lookupTable typeNode == Just [ "Test" ])
+                            && (ModuleNameLookup.moduleNameFor moduleContext.lookupTable typeNode == Just [ "Test" ])
                     then
                         function.declaration
                             |> Node.value
@@ -835,7 +835,7 @@ collectTypesFromTypeAnnotation moduleContext nodes acc =
                     collectTypesFromTypeAnnotation moduleContext (left :: right :: restOfNodes) acc
 
                 TypeAnnotation.Typed (Node range ( _, name )) params ->
-                    case ModuleNameLookupTable.moduleNameAt moduleContext.lookupTable range of
+                    case ModuleNameLookup.moduleNameAt moduleContext.lookupTable range of
                         Just moduleName ->
                             collectTypesFromTypeAnnotation moduleContext (params ++ restOfNodes) (( moduleName, name ) :: acc)
 
@@ -873,7 +873,7 @@ expressionVisitor : Node Expression -> ModuleContext -> ModuleContext
 expressionVisitor node moduleContext =
     case Node.value node of
         Expression.FunctionOrValue _ name ->
-            case ModuleNameLookupTable.moduleNameFor moduleContext.lookupTable node of
+            case ModuleNameLookup.moduleNameFor moduleContext.lookupTable node of
                 Just moduleName ->
                     registerAsUsed
                         ( moduleName, name )
@@ -883,7 +883,7 @@ expressionVisitor node moduleContext =
                     moduleContext
 
         Expression.RecordUpdateExpression (Node range name) _ ->
-            case ModuleNameLookupTable.moduleNameAt moduleContext.lookupTable range of
+            case ModuleNameLookup.moduleNameAt moduleContext.lookupTable range of
                 Just moduleName ->
                     registerAsUsed
                         ( moduleName, name )
@@ -932,7 +932,7 @@ expressionVisitor node moduleContext =
             moduleContext
 
 
-findUsedConstructors : ModuleNameLookupTable -> List (Node Pattern) -> List ( ModuleName, String ) -> List ( ModuleName, String )
+findUsedConstructors : ModuleNameLookup -> List (Node Pattern) -> List ( ModuleName, String ) -> List ( ModuleName, String )
 findUsedConstructors lookupTable patterns acc =
     case patterns of
         [] ->
@@ -944,7 +944,7 @@ findUsedConstructors lookupTable patterns acc =
                     let
                         newAcc : List ( ModuleName, String )
                         newAcc =
-                            case ModuleNameLookupTable.moduleNameFor lookupTable pattern of
+                            case ModuleNameLookup.moduleNameFor lookupTable pattern of
                                 Just moduleName ->
                                     ( moduleName, qualifiedNameRef.name ) :: acc
 

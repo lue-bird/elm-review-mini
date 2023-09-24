@@ -776,7 +776,7 @@ import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern as Pattern exposing (Pattern)
 import Elm.Syntax.Range as Range exposing (Location, Range)
 import Review.Fix as Fix exposing (Fix)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Project.Dependency as Dependency exposing (Dependency)
 import Review.Rule as Rule exposing (Error, Rule)
 import Set exposing (Set)
@@ -884,7 +884,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , moduleName : ModuleName
     , exposedVariantTypes : Exposed
     , moduleBindings : Set String
@@ -1445,7 +1445,7 @@ expressionVisitorHelp node context =
         --------------------
         Expression.Application ((Node fnRange (Expression.FunctionOrValue _ fnName)) :: firstArg :: restOfArguments) ->
             case
-                ModuleNameLookupTable.moduleNameAt context.lookupTable fnRange
+                ModuleNameLookup.moduleNameAt context.lookupTable fnRange
                     |> Maybe.andThen (\moduleName -> Dict.get ( moduleName, fnName ) functionCallChecks)
             of
                 Just checkFn ->
@@ -1567,7 +1567,7 @@ expressionVisitorHelp node context =
         ----------
         Expression.OperatorApplication "<|" _ (Node fnRange (Expression.FunctionOrValue _ fnName)) firstArg ->
             case
-                ModuleNameLookupTable.moduleNameAt context.lookupTable fnRange
+                ModuleNameLookup.moduleNameAt context.lookupTable fnRange
                     |> Maybe.andThen (\moduleName -> Dict.get ( moduleName, fnName ) functionCallChecks)
             of
                 Just checkFn ->
@@ -1587,7 +1587,7 @@ expressionVisitorHelp node context =
 
         Expression.OperatorApplication "<|" _ (Node applicationRange (Expression.Application ((Node fnRange (Expression.FunctionOrValue _ fnName)) :: firstArg :: argsBetweenFirstAndLast))) lastArg ->
             case
-                ModuleNameLookupTable.moduleNameAt context.lookupTable fnRange
+                ModuleNameLookup.moduleNameAt context.lookupTable fnRange
                     |> Maybe.andThen (\moduleName -> Dict.get ( moduleName, fnName ) functionCallChecks)
             of
                 Just checkFn ->
@@ -1611,7 +1611,7 @@ expressionVisitorHelp node context =
         ----------
         Expression.OperatorApplication "|>" _ firstArg (Node fnRange (Expression.FunctionOrValue _ fnName)) ->
             case
-                ModuleNameLookupTable.moduleNameAt context.lookupTable fnRange
+                ModuleNameLookup.moduleNameAt context.lookupTable fnRange
                     |> Maybe.andThen (\moduleName -> Dict.get ( moduleName, fnName ) functionCallChecks)
             of
                 Just checkFn ->
@@ -1631,7 +1631,7 @@ expressionVisitorHelp node context =
 
         Expression.OperatorApplication "|>" _ lastArg (Node applicationRange (Expression.Application ((Node fnRange (Expression.FunctionOrValue _ fnName)) :: firstArg :: argsBetweenFirstAndLast))) ->
             case
-                ModuleNameLookupTable.moduleNameAt context.lookupTable fnRange
+                ModuleNameLookup.moduleNameAt context.lookupTable fnRange
                     |> Maybe.andThen (\moduleName -> Dict.get ( moduleName, fnName ) functionCallChecks)
             of
                 Just checkFn ->
@@ -2077,7 +2077,7 @@ needsParens expr =
 
 
 type alias CheckInfo =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , importLookup : ImportLookup
     , extractSourceCode : Range -> String
     , moduleBindings : Set String
@@ -2201,7 +2201,7 @@ functionCallChecks =
 
 
 type alias OperatorCheckInfo =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , importLookup : ImportLookup
     , moduleBindings : Set String
     , localBindings : RangeDict (Set String)
@@ -2237,7 +2237,7 @@ operatorChecks =
 
 
 type alias CompositionCheckInfo =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , importLookup : ImportLookup
     , moduleBindings : Set String
     , localBindings : RangeDict (Set String)
@@ -2286,7 +2286,7 @@ compositionChecks =
 
 removeAlongWithOtherFunctionCheck :
     { message : String, details : List String }
-    -> (ModuleNameLookupTable -> Node Expression -> Maybe Range)
+    -> (ModuleNameLookup -> Node Expression -> Maybe Range)
     -> CheckInfo
     -> List (Error {})
 removeAlongWithOtherFunctionCheck errorMessage secondFunctionCheck checkInfo =
@@ -2659,7 +2659,7 @@ negateCompositionCheck checkInfo =
                             []
 
 
-getNegateComposition : ModuleNameLookupTable -> Bool -> Node Expression -> Maybe Range
+getNegateComposition : ModuleNameLookup -> Bool -> Node Expression -> Maybe Range
 getNegateComposition lookupTable takeFirstFunction node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.OperatorApplication "<<" _ left right ->
@@ -2689,11 +2689,11 @@ basicsNegateChecks checkInfo =
     removeAlongWithOtherFunctionCheck negateNegateCompositionErrorMessage getNegateFunction checkInfo
 
 
-getNegateFunction : ModuleNameLookupTable -> Node Expression -> Maybe Range
+getNegateFunction : ModuleNameLookup -> Node Expression -> Maybe Range
 getNegateFunction lookupTable baseNode =
     case AstHelpers.removeParens baseNode of
         Node range (Expression.FunctionOrValue _ "negate") ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable range of
+            case ModuleNameLookup.moduleNameAt lookupTable range of
                 Just [ "Basics" ] ->
                     Just range
 
@@ -2786,7 +2786,7 @@ notNotCompositionErrorMessage =
     }
 
 
-getNotComposition : ModuleNameLookupTable -> Bool -> Node Expression -> Maybe Range
+getNotComposition : ModuleNameLookup -> Bool -> Node Expression -> Maybe Range
 getNotComposition lookupTable takeFirstFunction node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.OperatorApplication "<<" _ left right ->
@@ -3159,11 +3159,11 @@ equalityChecks isEqual checkInfo =
                         []
 
 
-getNotCall : ModuleNameLookupTable -> Node Expression -> Maybe Range
+getNotCall : ModuleNameLookup -> Node Expression -> Maybe Range
 getNotCall lookupTable baseNode =
     case Node.value (AstHelpers.removeParens baseNode) of
         Expression.Application ((Node notRange (Expression.FunctionOrValue _ "not")) :: _) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable notRange of
+            case ModuleNameLookup.moduleNameAt lookupTable notRange of
                 Just [ "Basics" ] ->
                     Just notRange
 
@@ -3337,21 +3337,21 @@ alwaysCompositionCheck checkInfo =
         []
 
 
-isAlwaysCall : ModuleNameLookupTable -> Node Expression -> Bool
+isAlwaysCall : ModuleNameLookup -> Node Expression -> Bool
 isAlwaysCall lookupTable node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: _ :: []) ->
-            ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ]
+            ModuleNameLookup.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ]
 
         _ ->
             False
 
 
-getAlwaysArgument : ModuleNameLookupTable -> Node Expression -> Maybe { alwaysRange : Range, rangeToRemove : Range }
+getAlwaysArgument : ModuleNameLookup -> Node Expression -> Maybe { alwaysRange : Range, rangeToRemove : Range }
 getAlwaysArgument lookupTable node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: arg :: []) ->
-            if ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ] then
+            if ModuleNameLookup.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ] then
                 Just
                     { alwaysRange = alwaysRange
                     , rangeToRemove = { start = alwaysRange.start, end = (Node.range arg).start }
@@ -3361,7 +3361,7 @@ getAlwaysArgument lookupTable node =
                 Nothing
 
         Expression.OperatorApplication "<|" _ (Node alwaysRange (Expression.FunctionOrValue _ "always")) arg ->
-            if ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ] then
+            if ModuleNameLookup.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ] then
                 Just
                     { alwaysRange = alwaysRange
                     , rangeToRemove = { start = alwaysRange.start, end = (Node.range arg).start }
@@ -3371,7 +3371,7 @@ getAlwaysArgument lookupTable node =
                 Nothing
 
         Expression.OperatorApplication "|>" _ arg (Node alwaysRange (Expression.FunctionOrValue _ "always")) ->
-            if ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ] then
+            if ModuleNameLookup.moduleNameAt lookupTable alwaysRange == Just [ "Basics" ] then
                 Just
                     { alwaysRange = alwaysRange
                     , rangeToRemove = { start = (Node.range arg).end, end = alwaysRange.end }
@@ -3892,8 +3892,8 @@ maybeMapCompositionChecks checkInfo =
         case ( AstHelpers.removeParens checkInfo.left, Node.value (AstHelpers.removeParens checkInfo.right) ) of
             ( Node justRange (Expression.FunctionOrValue _ "Just"), Expression.Application ((Node maybeMapRange (Expression.FunctionOrValue _ "map")) :: mapperFunction :: []) ) ->
                 if
-                    (ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable justRange == Just [ "Maybe" ])
-                        && (ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable maybeMapRange == Just [ "Maybe" ])
+                    (ModuleNameLookup.moduleNameAt checkInfo.lookupTable justRange == Just [ "Maybe" ])
+                        && (ModuleNameLookup.moduleNameAt checkInfo.lookupTable maybeMapRange == Just [ "Maybe" ])
                 then
                     [ Rule.errorWithFix
                         { message = "Calling Maybe.map on a value that is Just"
@@ -3914,7 +3914,7 @@ maybeMapCompositionChecks checkInfo =
     else
         case ( Node.value (AstHelpers.removeParens checkInfo.left), AstHelpers.removeParens checkInfo.right ) of
             ( Expression.Application ((Node maybeMapRange (Expression.FunctionOrValue _ "map")) :: mapperFunction :: []), Node justRange (Expression.FunctionOrValue _ "Just") ) ->
-                if ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable justRange == Just [ "Maybe" ] && ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable maybeMapRange == Just [ "Maybe" ] then
+                if ModuleNameLookup.moduleNameAt checkInfo.lookupTable justRange == Just [ "Maybe" ] && ModuleNameLookup.moduleNameAt checkInfo.lookupTable maybeMapRange == Just [ "Maybe" ] then
                     [ Rule.errorWithFix
                         { message = "Calling Maybe.map on a value that is Just"
                         , details = [ "The function can be called without Maybe.map." ]
@@ -3939,8 +3939,8 @@ resultMapCompositionChecks checkInfo =
         case ( AstHelpers.removeParens checkInfo.left, Node.value (AstHelpers.removeParens checkInfo.right) ) of
             ( Node justRange (Expression.FunctionOrValue _ "Ok"), Expression.Application ((Node resultMapRange (Expression.FunctionOrValue _ "map")) :: mapperFunction :: []) ) ->
                 if
-                    (ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable justRange == Just [ "Result" ])
-                        && (ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable resultMapRange == Just [ "Result" ])
+                    (ModuleNameLookup.moduleNameAt checkInfo.lookupTable justRange == Just [ "Result" ])
+                        && (ModuleNameLookup.moduleNameAt checkInfo.lookupTable resultMapRange == Just [ "Result" ])
                 then
                     [ Rule.errorWithFix
                         { message = "Calling Result.map on a value that is Ok"
@@ -3962,7 +3962,7 @@ resultMapCompositionChecks checkInfo =
     else
         case ( Node.value (AstHelpers.removeParens checkInfo.left), AstHelpers.removeParens checkInfo.right ) of
             ( Expression.Application ((Node resultMapRange (Expression.FunctionOrValue _ "map")) :: mapperFunction :: []), Node justRange (Expression.FunctionOrValue _ "Ok") ) ->
-                if ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable justRange == Just [ "Result" ] && ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable resultMapRange == Just [ "Result" ] then
+                if ModuleNameLookup.moduleNameAt checkInfo.lookupTable justRange == Just [ "Result" ] && ModuleNameLookup.moduleNameAt checkInfo.lookupTable resultMapRange == Just [ "Result" ] then
                     [ Rule.errorWithFix
                         { message = "Calling Result.map on a value that is Ok"
                         , details = [ "The function can be called without Result.map." ]
@@ -5322,7 +5322,7 @@ listFilterMapChecks checkInfo =
                 []
 
 
-collectJusts : ModuleNameLookupTable -> List (Node Expression) -> List Range -> Maybe (List Range)
+collectJusts : ModuleNameLookup -> List (Node Expression) -> List Range -> Maybe (List Range)
 collectJusts lookupTable list acc =
     case list of
         [] ->
@@ -5331,7 +5331,7 @@ collectJusts lookupTable list acc =
         element :: restOfList ->
             case Node.value element of
                 Expression.Application ((Node justRange (Expression.FunctionOrValue _ "Just")) :: justArg :: []) ->
-                    case ModuleNameLookupTable.moduleNameAt lookupTable justRange of
+                    case ModuleNameLookup.moduleNameAt lookupTable justRange of
                         Just [ "Maybe" ] ->
                             collectJusts lookupTable restOfList ({ start = justRange.start, end = (Node.range justArg).start } :: acc)
 
@@ -5845,7 +5845,7 @@ subAndCmdBatchChecks moduleName checkInfo =
                     (\( prev, arg, next ) ->
                         case AstHelpers.removeParens arg of
                             Node batchRange (Expression.FunctionOrValue _ "none") ->
-                                if ModuleNameLookupTable.moduleNameAt checkInfo.lookupTable batchRange == Just [ "Platform", moduleName ] then
+                                if ModuleNameLookup.moduleNameAt checkInfo.lookupTable batchRange == Just [ "Platform", moduleName ] then
                                     Just
                                         (Rule.errorWithFix
                                             { message = "Unnecessary " ++ moduleName ++ ".none"
@@ -6021,9 +6021,9 @@ type alias Collection =
     , represents : String
     , emptyAsString : QualifyResources {} -> String
     , emptyDescription : String
-    , isEmpty : ModuleNameLookupTable -> Node Expression -> Bool
+    , isEmpty : ModuleNameLookup -> Node Expression -> Bool
     , nameForSize : String
-    , determineSize : ModuleNameLookupTable -> Node Expression -> Maybe CollectionSize
+    , determineSize : ModuleNameLookup -> Node Expression -> Maybe CollectionSize
     }
 
 
@@ -6085,7 +6085,7 @@ type alias Mappable =
     , represents : String
     , emptyAsString : QualifyResources {} -> String
     , emptyDescription : String
-    , isEmpty : ModuleNameLookupTable -> Node Expression -> Bool
+    , isEmpty : ModuleNameLookup -> Node Expression -> Bool
     }
 
 
@@ -6094,7 +6094,7 @@ type alias Defaultable =
     , represents : String
     , emptyAsString : QualifyResources {} -> String
     , emptyDescription : String
-    , isEmpty : ModuleNameLookupTable -> Node Expression -> Bool
+    , isEmpty : ModuleNameLookup -> Node Expression -> Bool
     , isSomethingConstructor : QualifyResources {} -> String
     }
 
@@ -6159,7 +6159,7 @@ collectionMapChecks :
         , represents : String
         , emptyDescription : String
         , emptyAsString : QualifyResources {} -> String
-        , isEmpty : ModuleNameLookupTable -> Node Expression -> Bool
+        , isEmpty : ModuleNameLookup -> Node Expression -> Bool
     }
     -> CheckInfo
     -> List (Error {})
@@ -6826,7 +6826,7 @@ type CollectionSize
     | NotEmpty
 
 
-determineListLength : ModuleNameLookupTable -> Node Expression -> Maybe CollectionSize
+determineListLength : ModuleNameLookup -> Node Expression -> Maybe CollectionSize
 determineListLength lookupTable node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.ListExpr list ->
@@ -6841,7 +6841,7 @@ determineListLength lookupTable node =
                     Just NotEmpty
 
         Expression.Application ((Node fnRange (Expression.FunctionOrValue _ "singleton")) :: _ :: []) ->
-            if ModuleNameLookupTable.moduleNameAt lookupTable fnRange == Just [ "List" ] then
+            if ModuleNameLookup.moduleNameAt lookupTable fnRange == Just [ "List" ] then
                 Just (Exactly 1)
 
             else
@@ -6851,7 +6851,7 @@ determineListLength lookupTable node =
             Nothing
 
 
-replaceSingleElementListBySingleValue_RENAME : QualifyResources { a | lookupTable : ModuleNameLookupTable } -> Range -> Node Expression -> Maybe (List (Error {}))
+replaceSingleElementListBySingleValue_RENAME : QualifyResources { a | lookupTable : ModuleNameLookup } -> Range -> Node Expression -> Maybe (List (Error {}))
 replaceSingleElementListBySingleValue_RENAME resources fnRange node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.LambdaExpression { expression } ->
@@ -6876,14 +6876,14 @@ replaceSingleElementListBySingleValue_RENAME resources fnRange node =
             Nothing
 
 
-replaceSingleElementListBySingleValue : ModuleNameLookupTable -> Node Expression -> Maybe (List Fix)
+replaceSingleElementListBySingleValue : ModuleNameLookup -> Node Expression -> Maybe (List Fix)
 replaceSingleElementListBySingleValue lookupTable node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.ListExpr [ listElement ] ->
             Just (replaceBySubExpressionFix (Node.range node) listElement)
 
         Expression.Application ((Node fnRange (Expression.FunctionOrValue _ "singleton")) :: _ :: []) ->
-            if ModuleNameLookupTable.moduleNameAt lookupTable fnRange == Just [ "List" ] then
+            if ModuleNameLookup.moduleNameAt lookupTable fnRange == Just [ "List" ] then
                 Just [ Fix.removeRange fnRange ]
 
             else
@@ -6899,7 +6899,7 @@ replaceSingleElementListBySingleValue lookupTable node =
             Nothing
 
 
-combineSingleElementFixes : ModuleNameLookupTable -> List (Node Expression) -> List Fix -> Maybe (List Fix)
+combineSingleElementFixes : ModuleNameLookup -> List (Node Expression) -> List Fix -> Maybe (List Fix)
 combineSingleElementFixes lookupTable nodes soFar =
     case nodes of
         [] ->
@@ -6914,7 +6914,7 @@ combineSingleElementFixes lookupTable nodes soFar =
                     combineSingleElementFixes lookupTable restOfNodes (fixes ++ soFar)
 
 
-determineIfCollectionIsEmpty : ModuleName -> Int -> ModuleNameLookupTable -> Node Expression -> Maybe CollectionSize
+determineIfCollectionIsEmpty : ModuleName -> Int -> ModuleNameLookup -> Node Expression -> Maybe CollectionSize
 determineIfCollectionIsEmpty moduleName singletonNumberOfArgs lookupTable node =
     if AstHelpers.isSpecificValueOrFunction moduleName "empty" lookupTable node then
         Just (Exactly 0)
@@ -6922,14 +6922,14 @@ determineIfCollectionIsEmpty moduleName singletonNumberOfArgs lookupTable node =
     else
         case Node.value (AstHelpers.removeParens node) of
             Expression.Application ((Node fnRange (Expression.FunctionOrValue _ "singleton")) :: args) ->
-                if List.length args == singletonNumberOfArgs && ModuleNameLookupTable.moduleNameAt lookupTable fnRange == Just moduleName then
+                if List.length args == singletonNumberOfArgs && ModuleNameLookup.moduleNameAt lookupTable fnRange == Just moduleName then
                     Just (Exactly 1)
 
                 else
                     Nothing
 
             Expression.Application ((Node fnRange (Expression.FunctionOrValue _ "fromList")) :: (Node _ (Expression.ListExpr list)) :: []) ->
-                if ModuleNameLookupTable.moduleNameAt lookupTable fnRange == Just moduleName then
+                if ModuleNameLookup.moduleNameAt lookupTable fnRange == Just moduleName then
                     if moduleName == [ "Set" ] then
                         case list of
                             [] ->
@@ -7321,7 +7321,7 @@ introducesVariableOrUsesTypeConstructor context nodesToLookAt =
                     introducesVariableOrUsesTypeConstructor context (nodes ++ remaining)
 
                 Pattern.NamedPattern { name } nodes ->
-                    case ModuleNameLookupTable.fullModuleNameFor context.lookupTable node of
+                    case ModuleNameLookup.fullModuleNameFor context.lookupTable node of
                         Just moduleName ->
                             if Set.member ( moduleName, name ) context.customTypesToReportInCases then
                                 introducesVariableOrUsesTypeConstructor context (nodes ++ remaining)
@@ -7336,7 +7336,7 @@ introducesVariableOrUsesTypeConstructor context nodesToLookAt =
                     introducesVariableOrUsesTypeConstructor context remaining
 
 
-booleanCaseOfChecks : ModuleNameLookupTable -> Range -> Expression.CaseBlock -> List (Error {})
+booleanCaseOfChecks : ModuleNameLookup -> Range -> Expression.CaseBlock -> List (Error {})
 booleanCaseOfChecks lookupTable parentRange { expression, cases } =
     case cases of
         [ ( firstPattern, Node firstRange _ ), ( Node secondPatternRange _, Node secondExprRange _ ) ] ->
@@ -7728,7 +7728,7 @@ isSimpleDestructurePattern pattern =
             False
 
 
-isAlwaysMaybe : ModuleNameLookupTable -> Node Expression -> Match (Maybe { ranges : List Range, throughLambdaFunction : Bool })
+isAlwaysMaybe : ModuleNameLookup -> Node Expression -> Match (Maybe { ranges : List Range, throughLambdaFunction : Bool })
 isAlwaysMaybe lookupTable baseNode =
     let
         node : Node Expression
@@ -7737,7 +7737,7 @@ isAlwaysMaybe lookupTable baseNode =
     in
     case Node.value node of
         Expression.FunctionOrValue _ "Just" ->
-            case ModuleNameLookupTable.moduleNameFor lookupTable node of
+            case ModuleNameLookup.moduleNameFor lookupTable node of
                 Just [ "Maybe" ] ->
                     Determined (Just { ranges = [ Node.range node ], throughLambdaFunction = False })
 
@@ -7745,7 +7745,7 @@ isAlwaysMaybe lookupTable baseNode =
                     Undetermined
 
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: value :: []) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     getMaybeValues lookupTable value
                         |> Match.map (Maybe.map (\ranges -> { ranges = ranges, throughLambdaFunction = False }))
@@ -7761,11 +7761,11 @@ isAlwaysMaybe lookupTable baseNode =
             Undetermined
 
 
-isAlwaysEmptyList : ModuleNameLookupTable -> Node Expression -> Bool
+isAlwaysEmptyList : ModuleNameLookup -> Node Expression -> Bool
 isAlwaysEmptyList lookupTable node =
     case Node.value (AstHelpers.removeParens node) of
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: alwaysValue :: []) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     AstHelpers.isEmptyList alwaysValue
 
@@ -7783,7 +7783,7 @@ getAlwaysResult : Infer.Resources a -> Node Expression -> Maybe (Node Expression
 getAlwaysResult inferResources expressionNode =
     case Node.value (AstHelpers.removeParens expressionNode) of
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: result :: []) ->
-            case ModuleNameLookupTable.moduleNameAt inferResources.lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt inferResources.lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     Just result
 
@@ -7791,7 +7791,7 @@ getAlwaysResult inferResources expressionNode =
                     Nothing
 
         Expression.OperatorApplication "<|" _ (Node alwaysRange (Expression.FunctionOrValue _ "always")) result ->
-            case ModuleNameLookupTable.moduleNameAt inferResources.lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt inferResources.lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     Just result
 
@@ -7799,7 +7799,7 @@ getAlwaysResult inferResources expressionNode =
                     Nothing
 
         Expression.OperatorApplication "|>" _ result (Node alwaysRange (Expression.FunctionOrValue _ "always")) ->
-            case ModuleNameLookupTable.moduleNameAt inferResources.lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt inferResources.lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     Just result
 
@@ -7833,7 +7833,7 @@ getAlwaysResult inferResources expressionNode =
             Nothing
 
 
-isAlwaysResult : ModuleNameLookupTable -> Node Expression -> Maybe (Result Range { ranges : List Range, throughLambdaFunction : Bool })
+isAlwaysResult : ModuleNameLookup -> Node Expression -> Maybe (Result Range { ranges : List Range, throughLambdaFunction : Bool })
 isAlwaysResult lookupTable baseNode =
     let
         node : Node Expression
@@ -7842,7 +7842,7 @@ isAlwaysResult lookupTable baseNode =
     in
     case Node.value node of
         Expression.FunctionOrValue _ "Ok" ->
-            case ModuleNameLookupTable.moduleNameFor lookupTable node of
+            case ModuleNameLookup.moduleNameFor lookupTable node of
                 Just [ "Result" ] ->
                     Just (Ok { ranges = [ Node.range node ], throughLambdaFunction = False })
 
@@ -7850,7 +7850,7 @@ isAlwaysResult lookupTable baseNode =
                     Nothing
 
         Expression.FunctionOrValue _ "Err" ->
-            case ModuleNameLookupTable.moduleNameFor lookupTable node of
+            case ModuleNameLookup.moduleNameFor lookupTable node of
                 Just [ "Result" ] ->
                     Just (Err (Node.range node))
 
@@ -7858,7 +7858,7 @@ isAlwaysResult lookupTable baseNode =
                     Nothing
 
         Expression.Application ((Node alwaysRange (Expression.FunctionOrValue _ "always")) :: value :: []) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable alwaysRange of
+            case ModuleNameLookup.moduleNameAt lookupTable alwaysRange of
                 Just [ "Basics" ] ->
                     getResultValues lookupTable value
                         |> Maybe.map (Result.map (\ranges -> { ranges = ranges, throughLambdaFunction = False }))
@@ -7874,7 +7874,7 @@ isAlwaysResult lookupTable baseNode =
             Nothing
 
 
-getMaybeValues : ModuleNameLookupTable -> Node Expression -> Match (Maybe (List Range))
+getMaybeValues : ModuleNameLookup -> Node Expression -> Match (Maybe (List Range))
 getMaybeValues lookupTable baseNode =
     let
         node : Node Expression
@@ -7883,7 +7883,7 @@ getMaybeValues lookupTable baseNode =
     in
     case Node.value node of
         Expression.Application ((Node justRange (Expression.FunctionOrValue _ "Just")) :: arg :: []) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable justRange of
+            case ModuleNameLookup.moduleNameAt lookupTable justRange of
                 Just [ "Maybe" ] ->
                     Determined (Just [ { start = justRange.start, end = (Node.range arg).start } ])
 
@@ -7891,7 +7891,7 @@ getMaybeValues lookupTable baseNode =
                     Undetermined
 
         Expression.OperatorApplication "|>" _ arg (Node justRange (Expression.FunctionOrValue _ "Just")) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable justRange of
+            case ModuleNameLookup.moduleNameAt lookupTable justRange of
                 Just [ "Maybe" ] ->
                     Determined (Just [ { start = (Node.range arg).end, end = justRange.end } ])
 
@@ -7899,7 +7899,7 @@ getMaybeValues lookupTable baseNode =
                     Undetermined
 
         Expression.OperatorApplication "<|" _ (Node justRange (Expression.FunctionOrValue _ "Just")) arg ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable justRange of
+            case ModuleNameLookup.moduleNameAt lookupTable justRange of
                 Just [ "Maybe" ] ->
                     Determined (Just [ { start = justRange.start, end = (Node.range arg).start } ])
 
@@ -7907,7 +7907,7 @@ getMaybeValues lookupTable baseNode =
                     Undetermined
 
         Expression.FunctionOrValue _ "Nothing" ->
-            case ModuleNameLookupTable.moduleNameFor lookupTable node of
+            case ModuleNameLookup.moduleNameFor lookupTable node of
                 Just [ "Maybe" ] ->
                     Determined Nothing
 
@@ -7927,7 +7927,7 @@ getMaybeValues lookupTable baseNode =
             Undetermined
 
 
-combineMaybeValues : ModuleNameLookupTable -> List (Node Expression) -> Match (Maybe (List Range))
+combineMaybeValues : ModuleNameLookup -> List (Node Expression) -> Match (Maybe (List Range))
 combineMaybeValues lookupTable nodes =
     case nodes of
         node :: restOfNodes ->
@@ -7942,7 +7942,7 @@ combineMaybeValues lookupTable nodes =
             Undetermined
 
 
-combineMaybeValuesHelp : ModuleNameLookupTable -> List (Node Expression) -> Maybe (List Range) -> Match (Maybe (List Range))
+combineMaybeValuesHelp : ModuleNameLookup -> List (Node Expression) -> Maybe (List Range) -> Match (Maybe (List Range))
 combineMaybeValuesHelp lookupTable nodes soFar =
     case nodes of
         node :: restOfNodes ->
@@ -7968,7 +7968,7 @@ combineMaybeValuesHelp lookupTable nodes soFar =
             Determined soFar
 
 
-getResultValues : ModuleNameLookupTable -> Node Expression -> Maybe (Result Range (List Range))
+getResultValues : ModuleNameLookup -> Node Expression -> Maybe (Result Range (List Range))
 getResultValues lookupTable baseNode =
     let
         node : Node Expression
@@ -7977,7 +7977,7 @@ getResultValues lookupTable baseNode =
     in
     case Node.value node of
         Expression.Application ((Node okRange (Expression.FunctionOrValue _ "Ok")) :: arg :: []) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable okRange of
+            case ModuleNameLookup.moduleNameAt lookupTable okRange of
                 Just [ "Result" ] ->
                     Just (Ok [ { start = okRange.start, end = (Node.range arg).start } ])
 
@@ -7985,7 +7985,7 @@ getResultValues lookupTable baseNode =
                     Nothing
 
         Expression.OperatorApplication "|>" _ arg (Node okRange (Expression.FunctionOrValue _ "Ok")) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable okRange of
+            case ModuleNameLookup.moduleNameAt lookupTable okRange of
                 Just [ "Result" ] ->
                     Just (Ok [ { start = (Node.range arg).end, end = okRange.end } ])
 
@@ -7993,7 +7993,7 @@ getResultValues lookupTable baseNode =
                     Nothing
 
         Expression.OperatorApplication "<|" _ (Node okRange (Expression.FunctionOrValue _ "Ok")) arg ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable okRange of
+            case ModuleNameLookup.moduleNameAt lookupTable okRange of
                 Just [ "Result" ] ->
                     Just (Ok [ { start = okRange.start, end = (Node.range arg).start } ])
 
@@ -8001,7 +8001,7 @@ getResultValues lookupTable baseNode =
                     Nothing
 
         Expression.Application ((Node errRange (Expression.FunctionOrValue _ "Err")) :: arg :: []) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable errRange of
+            case ModuleNameLookup.moduleNameAt lookupTable errRange of
                 Just [ "Result" ] ->
                     Just (Err { start = errRange.start, end = (Node.range arg).start })
 
@@ -8009,7 +8009,7 @@ getResultValues lookupTable baseNode =
                     Nothing
 
         Expression.OperatorApplication "|>" _ arg (Node errRange (Expression.FunctionOrValue _ "Err")) ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable errRange of
+            case ModuleNameLookup.moduleNameAt lookupTable errRange of
                 Just [ "Result" ] ->
                     Just (Err { start = (Node.range arg).end, end = errRange.end })
 
@@ -8017,7 +8017,7 @@ getResultValues lookupTable baseNode =
                     Nothing
 
         Expression.OperatorApplication "<|" _ (Node errRange (Expression.FunctionOrValue _ "Err")) arg ->
-            case ModuleNameLookupTable.moduleNameAt lookupTable errRange of
+            case ModuleNameLookup.moduleNameAt lookupTable errRange of
                 Just [ "Result" ] ->
                     Just (Err { start = errRange.start, end = (Node.range arg).start })
 
@@ -8037,7 +8037,7 @@ getResultValues lookupTable baseNode =
             Nothing
 
 
-combineResultValues : ModuleNameLookupTable -> List (Node Expression) -> Maybe (Result Range (List Range))
+combineResultValues : ModuleNameLookup -> List (Node Expression) -> Maybe (Result Range (List Range))
 combineResultValues lookupTable nodes =
     case nodes of
         node :: restOfNodes ->
@@ -8052,7 +8052,7 @@ combineResultValues lookupTable nodes =
             Nothing
 
 
-combineResultValuesHelp : ModuleNameLookupTable -> List (Node Expression) -> Result Range (List Range) -> Maybe (Result Range (List Range))
+combineResultValuesHelp : ModuleNameLookup -> List (Node Expression) -> Result Range (List Range) -> Maybe (Result Range (List Range))
 combineResultValuesHelp lookupTable nodes soFar =
     case nodes of
         node :: restOfNodes ->

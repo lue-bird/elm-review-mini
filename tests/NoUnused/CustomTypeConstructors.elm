@@ -21,7 +21,7 @@ import Elm.Syntax.Type as Type
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import List.Extra
 import Review.Fix as Fix exposing (Fix)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 import Set exposing (Set)
 import String.Extra
@@ -195,7 +195,7 @@ type alias ProjectContext =
 
 
 type alias ModuleContext =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , exposedCustomTypesWithConstructors : Set CustomTypeName
     , isExposed : Bool
     , exposesEverything : Bool
@@ -627,7 +627,7 @@ findRangeToRemove previousConstructor constructor nextConstructor =
                     Nothing
 
 
-isPhantomCustomType : ModuleNameLookupTable -> String -> List (Node Type.ValueConstructor) -> Bool
+isPhantomCustomType : ModuleNameLookup -> String -> List (Node Type.ValueConstructor) -> Bool
 isPhantomCustomType lookupTable typeName constructors =
     case constructors of
         [ Node _ constructor ] ->
@@ -642,11 +642,11 @@ isPhantomCustomType lookupTable typeName constructors =
             False
 
 
-isNeverOrItself : ModuleNameLookupTable -> String -> Node TypeAnnotation -> Bool
+isNeverOrItself : ModuleNameLookup -> String -> Node TypeAnnotation -> Bool
 isNeverOrItself lookupTable typeName node =
     case Node.value node of
         TypeAnnotation.Typed (Node neverRange ( _, "Never" )) [] ->
-            ModuleNameLookupTable.moduleNameAt lookupTable neverRange == Just [ "Basics" ]
+            ModuleNameLookup.moduleNameAt lookupTable neverRange == Just [ "Basics" ]
 
         TypeAnnotation.Typed (Node _ ( [], argName )) [] ->
             typeName == argName
@@ -663,7 +663,7 @@ expressionVisitor : Node Expression -> ModuleContext -> ModuleContext
 expressionVisitor node moduleContext =
     case Node.value node of
         Expression.FunctionOrValue _ name ->
-            case ModuleNameLookupTable.moduleNameFor moduleContext.lookupTable node of
+            case ModuleNameLookup.moduleNameFor moduleContext.lookupTable node of
                 Just moduleName ->
                     registerUsedFunctionOrValue (Node.range node) moduleName name moduleContext
 
@@ -885,13 +885,13 @@ staticRanges nodes acc =
                     staticRanges restOfNodes acc
 
 
-findConstructors : ModuleNameLookupTable -> List (Node Expression) -> Set ( ModuleNameAsString, ConstructorName ) -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
+findConstructors : ModuleNameLookup -> List (Node Expression) -> Set ( ModuleNameAsString, ConstructorName ) -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
 findConstructors lookupTable nodes fromOtherModulesBase =
     findConstructorsHelp lookupTable nodes { fromThisModule = [], fromOtherModules = fromOtherModulesBase }
 
 
 findConstructorsHelp :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> List (Node Expression)
     -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
     -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
@@ -962,13 +962,13 @@ findConstructorsHelp lookupTable nodes acc =
 
 
 addElementToUniqueList :
-    ModuleNameLookupTable
+    ModuleNameLookup
     -> Node Expression
     -> ConstructorName
     -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
     -> { fromThisModule : List ( ModuleNameAsString, ConstructorName ), fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
 addElementToUniqueList lookupTable node name acc =
-    case ModuleNameLookupTable.moduleNameFor lookupTable node of
+    case ModuleNameLookup.moduleNameFor lookupTable node of
         Just realModuleName ->
             let
                 moduleName : ModuleNameAsString
@@ -997,7 +997,7 @@ addElementToUniqueList lookupTable node name acc =
             acc
 
 
-constructorsInPattern : ModuleNameLookupTable -> List (Node Pattern) -> { fromThisModule : Set ConstructorName, fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) } -> { fromThisModule : Set ConstructorName, fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
+constructorsInPattern : ModuleNameLookup -> List (Node Pattern) -> { fromThisModule : Set ConstructorName, fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) } -> { fromThisModule : Set ConstructorName, fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
 constructorsInPattern lookupTable nodes acc =
     case nodes of
         [] ->
@@ -1009,7 +1009,7 @@ constructorsInPattern lookupTable nodes acc =
                     let
                         newAcc : { fromThisModule : Set ConstructorName, fromOtherModules : Set ( ModuleNameAsString, ConstructorName ) }
                         newAcc =
-                            case ModuleNameLookupTable.moduleNameFor lookupTable node of
+                            case ModuleNameLookup.moduleNameFor lookupTable node of
                                 Just [] ->
                                     { fromThisModule = Set.insert qualifiedNameRef.name acc.fromThisModule
                                     , fromOtherModules = acc.fromOtherModules
@@ -1247,7 +1247,7 @@ collectTypesUsedAsPhantomVariables moduleContext phantomVariables nodes used =
 
                 TypeAnnotation.Typed (Node.Node typeRange ( _, name )) params ->
                     case
-                        ModuleNameLookupTable.moduleNameAt moduleContext.lookupTable typeRange
+                        ModuleNameLookup.moduleNameAt moduleContext.lookupTable typeRange
                             |> Maybe.andThen (\moduleNameOfPhantomContainer -> Dict.get moduleNameOfPhantomContainer phantomVariables)
                     of
                         Just things ->
@@ -1262,7 +1262,7 @@ collectTypesUsedAsPhantomVariables moduleContext phantomVariables nodes used =
                                             else
                                                 case listAtIndex index params |> Maybe.map Node.value of
                                                     Just (TypeAnnotation.Typed (Node.Node subTypeRange ( _, typeName )) _) ->
-                                                        case ModuleNameLookupTable.moduleNameAt moduleContext.lookupTable subTypeRange of
+                                                        case ModuleNameLookup.moduleNameAt moduleContext.lookupTable subTypeRange of
                                                             Just moduleNameOfPhantomVariable ->
                                                                 updateToInsert (String.join "." moduleNameOfPhantomVariable) typeName acc
 

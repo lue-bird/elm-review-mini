@@ -1,4 +1,4 @@
-module Review.ModuleNameLookupTable.Internal exposing (ModuleNameLookupTable(..), add, empty, fromList, toRangeLike)
+module Review.ModuleNameLookup.Internal exposing (ModuleNameLookup(..), add, empty, fromList, toRangeLike)
 
 import Bitwise
 import Dict exposing (Dict)
@@ -6,20 +6,20 @@ import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Range exposing (Range)
 
 
-type ModuleNameLookupTable
-    = ModuleNameLookupTable ModuleName (Dict RangeLike ModuleName)
+type ModuleNameLookup
+    = ModuleNameLookup ModuleName (Dict RangeLike ModuleName)
 
 
 type alias RangeLike =
     Int
 
 
-empty : ModuleName -> ModuleNameLookupTable
+empty : ModuleName -> ModuleNameLookup
 empty currentModuleName =
-    ModuleNameLookupTable currentModuleName Dict.empty
+    ModuleNameLookup currentModuleName Dict.empty
 
 
-fromList : ModuleName -> List ( Range, ModuleName ) -> ModuleNameLookupTable
+fromList : ModuleName -> List ( Range, ModuleName ) -> ModuleNameLookup
 fromList fileModuleName list =
     List.foldl
         (\( range, moduleName ) acc -> add range moduleName acc)
@@ -27,9 +27,9 @@ fromList fileModuleName list =
         list
 
 
-add : Range -> ModuleName -> ModuleNameLookupTable -> ModuleNameLookupTable
-add range moduleName (ModuleNameLookupTable currentModuleName moduleNameLookupTable) =
-    ModuleNameLookupTable currentModuleName (Dict.insert (toRangeLike range) moduleName moduleNameLookupTable)
+add : Range -> ModuleName -> ModuleNameLookup -> ModuleNameLookup
+add range moduleName (ModuleNameLookup currentModuleName moduleNameLookup) =
+    ModuleNameLookup currentModuleName (Dict.insert (toRangeLike range) moduleName moduleNameLookup)
 
 
 toRangeLike : Range -> RangeLike

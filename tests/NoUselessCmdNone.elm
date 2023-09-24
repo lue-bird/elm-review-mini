@@ -10,7 +10,7 @@ import Elm.Syntax.Declaration as Declaration exposing (Declaration)
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 import Set exposing (Set)
 
@@ -68,7 +68,7 @@ rule =
 
 
 type alias Context =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , ranges : List Range
     }
 
@@ -169,7 +169,7 @@ resultsInCmdNone : Context -> Node Expression -> Maybe Range
 resultsInCmdNone context node =
     case Node.value node of
         Expression.TupledExpression (_ :: (Node range (Expression.FunctionOrValue _ "none")) :: []) ->
-            case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+            case ModuleNameLookup.moduleNameAt context.lookupTable range of
                 Just [ "Platform", "Cmd" ] ->
                     Just range
 

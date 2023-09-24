@@ -10,7 +10,7 @@ import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
 import Review.Fix
-import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
+import Review.ModuleNameLookup as ModuleNameLookup exposing (ModuleNameLookup)
 import Review.Rule as Rule exposing (Error, Rule)
 
 
@@ -73,7 +73,7 @@ rule =
 
 
 type alias Context =
-    { lookupTable : ModuleNameLookupTable
+    { lookupTable : ModuleNameLookup
     , rangesToIgnore : List Range
     }
 
@@ -111,7 +111,7 @@ handleWhenSingleArg : (() -> Range) -> Context -> Node Expression -> ( List (Err
 handleWhenSingleArg rangeToPotentiallyRemove context node =
     case Node.value node of
         Expression.Application (((Node logFunctionRange (Expression.FunctionOrValue _ "log")) as logFunctionNode) :: logArguments) ->
-            case ModuleNameLookupTable.moduleNameAt context.lookupTable logFunctionRange of
+            case ModuleNameLookup.moduleNameAt context.lookupTable logFunctionRange of
                 Just [ "Debug" ] ->
                     let
                         rangeToRemove : Maybe Range
@@ -234,7 +234,7 @@ reportIfDebugLog node context rangeToRemove =
         ( [], context )
 
     else
-        case ModuleNameLookupTable.moduleNameFor context.lookupTable node of
+        case ModuleNameLookup.moduleNameFor context.lookupTable node of
             Just [ "Debug" ] ->
                 ( [ error node (rangeToRemove ()) ]
                 , { context | rangesToIgnore = Node.range node :: context.rangesToIgnore }
