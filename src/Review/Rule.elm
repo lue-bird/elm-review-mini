@@ -1,7 +1,6 @@
 module Review.Rule exposing
     ( Rule
     , ModuleRuleSchema, newModuleRuleSchema, fromModuleRuleSchema
-    , withSimpleModuleDefinitionVisitor, withSimpleCommentsVisitor, withSimpleImportVisitor, withSimpleDeclarationVisitor, withSimpleExpressionVisitor
     , newModuleRuleSchemaUsingContextCreator
     , withModuleDefinitionVisitor
     , withModuleDocumentationVisitor
@@ -167,14 +166,14 @@ The traversal of a module rule is the following:
       - The `README.md` file, visited by [`withReadmeModuleVisitor`](#withReadmeModuleVisitor)
       - The definition for dependencies, visited by [`withDirectDependenciesModuleVisitor`](#withDirectDependenciesModuleVisitor) and [`withDependenciesModuleVisitor`](#withDependenciesModuleVisitor)
   - Visit the Elm module (in the following order)
-      - The module definition, visited by [`withSimpleModuleDefinitionVisitor`](#withSimpleModuleDefinitionVisitor) and [`withModuleDefinitionVisitor`](#withModuleDefinitionVisitor)
+      - The module definition, visited by [`withModuleDefinitionVisitor`](#withModuleDefinitionVisitor)
       - The module documentation, visited by [`withModuleDocumentationVisitor`](#withModuleDocumentationVisitor)
-      - The module's list of comments, visited by [`withSimpleCommentsVisitor`](#withSimpleCommentsVisitor) and [`withCommentsVisitor`](#withCommentsVisitor)
-      - Each import, visited by [`withSimpleImportVisitor`](#withSimpleImportVisitor) and [`withImportVisitor`](#withImportVisitor)
+      - The module's list of comments, visited by [`withCommentsVisitor`](#withCommentsVisitor)
+      - Each import, visited by [`withImportVisitor`](#withImportVisitor)
       - The list of declarations, visited by [`withDeclarationListVisitor`](#withDeclarationListVisitor)
       - Each declaration, visited in the following order:
-          - [`withSimpleDeclarationVisitor`](#withSimpleDeclarationVisitor) and [`withDeclarationEnterVisitor`](#withDeclarationEnterVisitor)
-          - The expression contained in the declaration will be visited recursively by [`withSimpleExpressionVisitor`](#withSimpleExpressionVisitor), [`withExpressionEnterVisitor`](#withExpressionEnterVisitor) and [`withExpressionExitVisitor`](#withExpressionExitVisitor).
+          - [`withDeclarationEnterVisitor`](#withDeclarationEnterVisitor)
+          - The expression contained in the declaration will be visited recursively by [`withExpressionEnterVisitor`](#withExpressionEnterVisitor) and [`withExpressionExitVisitor`](#withExpressionExitVisitor).
           - [`withDeclarationExitVisitor`](#withDeclarationExitVisitor)
       - A final evaluation is made when the module has fully been visited, using [`withFinalModuleEvaluation`](#withFinalModuleEvaluation)
 
@@ -188,12 +187,7 @@ Evaluating/visiting a node means two things:
 @docs ModuleRuleSchema, newModuleRuleSchema, fromModuleRuleSchema
 
 
-## Builder functions without context
-
-@docs withSimpleModuleDefinitionVisitor, withSimpleCommentsVisitor, withSimpleImportVisitor, withSimpleDeclarationVisitor, withSimpleExpressionVisitor
-
-
-## Builder functions with context
+## Builder functions
 
 @docs newModuleRuleSchemaUsingContextCreator
 @docs withModuleDefinitionVisitor
@@ -364,7 +358,7 @@ Start by using [`newModuleRuleSchema`](#newModuleRuleSchema), then add visitors 
     rule : Rule
     rule =
         Rule.newModuleRuleSchema "NoDebug" ()
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
+            |> Rule.withExpressionEnterVisitor expressionVisitor
             |> Rule.fromModuleRuleSchema
 
 -}
@@ -948,7 +942,7 @@ type Direction
 {-| Creates a schema for a module rule. Will require adding module visitors
 calling [`fromModuleRuleSchema`](#fromModuleRuleSchema) to create a usable
 [`Rule`](#Rule). Use "with\*" functions from this module, like
-[`withSimpleExpressionVisitor`](#withSimpleExpressionVisitor) or [`withSimpleImportVisitor`](#withSimpleImportVisitor)
+[`withExpressionEnterVisitor`](#withExpressionEnterVisitor) or [`withImportVisitor`](#withImportVisitor)
 to make it report something.
 
 The first argument is the rule name. I _highly_ recommend naming it just like the
@@ -957,8 +951,7 @@ module name (including all the `.` there may be).
 The second argument is the initial `moduleContext`, i.e. the data that the rule will
 accumulate as the module will be traversed, and allows the rule to know/remember
 what happens in other parts of the module. If you don't need a context, I
-recommend specifying `()`, and using functions from this module with names
-starting with "withSimple".
+recommend specifying `()`.
 
     module My.Rule.Name exposing (rule)
 
@@ -967,13 +960,12 @@ starting with "withSimple".
     rule : Rule
     rule =
         Rule.newModuleRuleSchema "My.Rule.Name" ()
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
-            |> Rule.withSimpleImportVisitor importVisitor
+            |> Rule.withExpressionEnterVisitor expressionVisitor
+            |> Rule.withImportVisitor importVisitor
             |> Rule.fromModuleRuleSchema
 
 If you do need information from other parts of the module, then you should specify
-an initial context, and I recommend using "with\*" functions without "Simple" in
-their name, like [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
+an initial context and functions like [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
 [`withImportVisitor`](#withImportVisitor) or [`withFinalModuleEvaluation`](#withFinalModuleEvaluation).
 
     import Review.Rule as Rule exposing (Rule)
@@ -1032,8 +1024,8 @@ newModuleRuleSchema name initialModuleContext =
     rule : Rule
     rule =
         Rule.newModuleRuleSchema "My.Rule.Name" ()
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
-            |> Rule.withSimpleImportVisitor importVisitor
+            |> Rule.withExpressionEnterVisitor expressionVisitor
+            |> Rule.withImportVisitor importVisitor
             |> Rule.fromModuleRuleSchema
 
 If you do need information from other parts of the module, then you should specify
@@ -1961,250 +1953,6 @@ withContextFromImportedModules (ProjectRuleSchema schema) =
     ProjectRuleSchema { schema | traversalType = ImportedModulesFirst }
 
 
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's [module definition](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`) and report patterns.
-
-The following example forbids having `_` in any part of a module name.
-
-    import Elm.Syntax.Module as Module exposing (Module)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoUnderscoreInModuleName" ()
-            |> Rule.withSimpleModuleDefinitionVisitor moduleDefinitionVisitor
-            |> Rule.fromModuleRuleSchema
-
-    moduleDefinitionVisitor : Node Module -> List (Rule.Error {})
-    moduleDefinitionVisitor node =
-        if List.any (String.contains "_") (Node.value node |> Module.moduleName) then
-            [ Rule.error
-                { message = "Do not use `_` in a module name"
-                , details = [ "By convention, Elm modules names use Pascal case (like `MyModuleName`). Please rename your module using this format." ]
-                }
-                (Node.range node)
-            ]
-
-        else
-            []
-
-Note: `withSimpleModuleDefinitionVisitor` is a simplified version of [`withModuleDefinitionVisitor`](#withModuleDefinitionVisitor),
-which isn't passed a `context` and doesn't return one. You can use `withSimpleModuleDefinitionVisitor` even if you use "non-simple with\*" functions.
-
--}
-withSimpleModuleDefinitionVisitor : (Node Module -> List (Error {})) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withSimpleModuleDefinitionVisitor visitor schema =
-    withModuleDefinitionVisitor (\node moduleContext -> ( visitor node, moduleContext )) schema
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's comments.
-
-This visitor will give you access to the list of comments (in source order) in
-the module all at once. Note that comments that are parsed as documentation comments by
-[`elm-syntax`](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/)
-are not included in this list.
-
-As such, the following comments are included (✅) / excluded (❌):
-
-  - ✅ Module documentation (`{-| -}`)
-  - ✅ Port documentation comments (`{-| -}`)
-  - ✅ Top-level comments not internal to a function/type/etc.
-  - ✅ Comments internal to a function/type/etc.
-  - ❌ Function/type/type alias documentation comments (`{-| -}`)
-
-The following example forbids words like "TODO" appearing in a comment.
-
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Elm.Syntax.Range exposing (Range)
-    import Review.Rule as Rule exposing (Rule)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoTodoComment" ()
-            |> Rule.withSimpleCommentsVisitor commentsVisitor
-            |> Rule.fromModuleRuleSchema
-
-    commentsVisitor : List (Node String) -> List (Rule.Error {})
-    commentsVisitor comments =
-        comments
-            |> List.concatMap
-                (\commentNode ->
-                    String.indexes "TODO" (Node.value commentNode)
-                        |> List.map (errorAtPosition (Node.range commentNode))
-                )
-
-    errorAtPosition : Range -> Int -> Error {}
-    errorAtPosition range index =
-        Rule.error
-            { message = "TODO needs to be handled"
-            , details = [ "At fruits.com, we prefer not to have lingering TODO comments. Either fix the TODO now or create an issue for it." ]
-            }
-            -- Here you would ideally only target the TODO keyword
-            -- or the rest of the line it appears on,
-            -- so you would change `range` using `index`.
-            range
-
-Note: `withSimpleCommentsVisitor` is a simplified version of [`withCommentsVisitor`](#withCommentsVisitor),
-which isn't passed a `context` and doesn't return one. You can use `withCommentsVisitor` even if you use "non-simple with\*" functions.
-
--}
-withSimpleCommentsVisitor : (List (Node String) -> List (Error {})) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withSimpleCommentsVisitor visitor schema =
-    withCommentsVisitor (\node moduleContext -> ( visitor node, moduleContext )) schema
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's [import statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Import) (`import Html as H exposing (div)`) in order of their definition and report patterns.
-
-The following example forbids using the core Html package and suggests using
-`elm-css` instead.
-
-    import Elm.Syntax.Import exposing (Import)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoCoreHtml" ()
-            |> Rule.withSimpleImportVisitor importVisitor
-            |> Rule.fromModuleRuleSchema
-
-    importVisitor : Node Import -> List (Rule.Error {})
-    importVisitor node =
-        let
-            moduleName : List String
-            moduleName =
-                node
-                    |> Node.value
-                    |> .moduleName
-                    |> Node.value
-        in
-        case moduleName of
-            [ "Html" ] ->
-                [ Rule.error
-                    { message = "Use `elm-css` instead of the core HTML package."
-                    , details =
-                        [ "At fruits.com, we chose to use the `elm-css` package (https://package.elm-lang.org/packages/rtfeldman/elm-css/latest/Css) to build our HTML and CSS rather than the core Html package. To keep things simple, we think it is best to not mix these different libraries."
-                        , "The API is very similar, but instead of using the `Html` module, use the `Html.Styled`. CSS is then defined using the Html.Styled.Attributes.css function (https://package.elm-lang.org/packages/rtfeldman/elm-css/latest/Html-Styled-Attributes#css)."
-                        ]
-                    }
-                    (Node.range node)
-                ]
-
-            _ ->
-                []
-
-Note: `withSimpleImportVisitor` is a simplified version of [`withImportVisitor`](#withImportVisitor),
-which isn't passed a `context` and doesn't return one. You can use `withSimpleImportVisitor` even if you use "non-simple with\*" functions.
-
--}
-withSimpleImportVisitor : (Node Import -> List (Error {})) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withSimpleImportVisitor visitor schema =
-    withImportVisitor (\node moduleContext -> ( visitor node, moduleContext )) schema
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
-[declaration statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Declaration)
-(`someVar = add 1 2`, `type Bool = True | False`, `port output : Json.Encode.Value -> Cmd msg`)
-and report patterns. The declarations will be visited in the order of their definition.
-
-The following example forbids declaring a function or a value without a type
-annotation.
-
-    import Elm.Syntax.Declaration as Declaration exposing (Declaration)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoMissingTypeAnnotation" ()
-            |> Rule.withSimpleDeclarationVisitor declarationVisitor
-            |> Rule.fromModuleRuleSchema
-
-    declarationVisitor : Node Declaration -> List (Rule.Error {})
-    declarationVisitor node =
-        case Node.value node of
-            Declaration.FunctionDeclaration { signature, declaration } ->
-                case signature of
-                    Just _ ->
-                        []
-
-                    Nothing ->
-                        let
-                            functionName : String
-                            functionName =
-                                declaration |> Node.value |> .name |> Node.value
-                        in
-                        [ Rule.error
-                            { message = "Missing type annotation for `" ++ functionName ++ "`"
-                            , details =
-                                [ "Type annotations are very helpful for people who read your code. It can give a lot of information without having to read the contents of the function. When encountering problems, the compiler will also give much more precise and helpful information to help you solve the problem."
-                                , "To add a type annotation, add a line like `" functionName ++ " : ()`, and replace the `()` by the type of the function. If you don't replace `()`, the compiler should give you a suggestion of what the type should be."
-                                ]
-                            }
-                            (Node.range node)
-                        ]
-
-            _ ->
-                []
-
-Note: `withSimpleDeclarationVisitor` is a simplified version of [`withDeclarationEnterVisitor`](#withDeclarationEnterVisitor),
-which isn't passed a `context` and doesn't return one either. You can use `withSimpleDeclarationVisitor` even if you use "non-simple with\*" functions.
-
--}
-withSimpleDeclarationVisitor : (Node Declaration -> List (Error {})) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withSimpleDeclarationVisitor visitor schema =
-    withDeclarationEnterVisitor
-        (\node moduleContext -> ( visitor node, moduleContext ))
-        schema
-
-
-{-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
-[expressions](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Expression)
-(`1`, `True`, `add 1 2`, `1 + 2`). The expressions are visited in pre-order
-depth-first search, meaning that an expression will be visited, then its first
-child, the first child's children (and so on), then the second child (and so on).
-
-The following example forbids using the Debug module.
-
-    import Elm.Syntax.Expression as Expression exposing (Expression)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoDebug" ()
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
-            |> Rule.fromModuleRuleSchema
-
-    expressionVisitor : Node Expression -> List (Rule.Error {})
-    expressionVisitor node =
-        case Node.value node of
-            Expression.FunctionOrValue moduleName fnName ->
-                if List.member "Debug" moduleName then
-                    [ Rule.error
-                        { message = "Remove the use of `Debug` before shipping to production"
-                        , details = [ "The `Debug` module is useful when developing, but is not meant to be shipped to production or published in a package. I suggest removing its use before committing and attempting to push to production." ]
-                        }
-                        (Node.range node)
-                    ]
-
-                else
-                    []
-
-            _ ->
-                []
-
-Note: `withSimpleExpressionVisitor` is a simplified version of [`withExpressionEnterVisitor`](#withExpressionEnterVisitor),
-which isn't passed a `context` and doesn't return one either. You can use `withSimpleExpressionVisitor` even if you use "non-simple with\*" functions.
-
--}
-withSimpleExpressionVisitor : (Node Expression -> List (Error {})) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withSimpleExpressionVisitor visitor schema =
-    withExpressionEnterVisitor
-        (\node moduleContext -> ( visitor node, moduleContext ))
-        schema
-
-
 {-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the project's
 [`elm.json`](https://package.elm-lang.org/packages/elm/project-metadata-utils/latest/Elm-Project) file.
 
@@ -2369,9 +2117,6 @@ The example is simplified to only forbid the use of the `Html.button` expression
             _ ->
                 ( [], context )
 
-Tip: If you do not need to collect data in this visitor, you may wish to use the
-simpler [`withSimpleModuleDefinitionVisitor`](#withSimpleModuleDefinitionVisitor) function.
-
 Tip: The rule above is very brittle. What if `button` was imported using `import Html exposing (button)` or `import Html exposing (..)`, or if `Html` was aliased (`import Html as H`)? Then the rule above would
 not catch and report the use `Html.button`. To handle this, check out [`withModuleNameLookupTable`](#withModuleNameLookupTable).
 
@@ -2396,9 +2141,6 @@ As such, the following comments are included (✅) / excluded (❌):
   - ✅ Top-level comments not internal to a function/type/etc.
   - ✅ Comments internal to a function/type/etc.
   - ❌ Function/type/type alias documentation comments (`{-| -}`)
-
-Tip: If you do not need to collect data in this visitor, you may wish to use the
-simpler [`withSimpleCommentsVisitor`](#withSimpleCommentsVisitor) function.
 
 Tip: If you only need to access the module documentation, you should use
 [`withModuleDocumentationVisitor`](#withModuleDocumentationVisitor) instead.
@@ -2488,9 +2230,6 @@ The following example forbids importing both `Element` (`elm-ui`) and
 
 This example was written in a different way in the example for [`withFinalModuleEvaluation`](#withFinalModuleEvaluation).
 
-Tip: If you do not need to collect or use the `context` in this visitor, you may wish to use the
-simpler [`withSimpleImportVisitor`](#withSimpleImportVisitor) function.
-
 -}
 withImportVisitor : (Node Import -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
 withImportVisitor visitor (ModuleRuleSchema schema) =
@@ -2509,8 +2248,7 @@ Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit th
 (`someVar = add 1 2`, `type Bool = True | False`, `port output : Json.Encode.Value -> Cmd msg`),
 collect data and/or report patterns. The declarations will be visited in the order of their definition.
 
-Contrary to [`withSimpleDeclarationVisitor`](#withSimpleDeclarationVisitor), the
-visitor function will be called twice with different [`Direction`](#Direction)
+The visitor function will be called twice with different [`Direction`](#Direction)
 values. It will be visited with `OnEnter`, then the children will be visited,
 and then it will be visited again with `OnExit`. If you do not check the value of
 the `Direction` parameter, you might end up with duplicate errors and/or an
@@ -2590,9 +2328,6 @@ type annotation.
 
             OnlySome exposedList ->
                 List.member name exposedList
-
-Tip: If you do not need to collect or use the `context` in this visitor, you may wish to use the
-simpler [`withSimpleDeclarationVisitor`](#withSimpleDeclarationVisitor) function.
 
 -}
 withDeclarationVisitor : (Node Declaration -> Direction -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
@@ -2684,9 +2419,6 @@ type annotation.
             OnlySome exposedList ->
                 List.member name exposedList
 
-Tip: If you do not need to collect or use the `context` in this visitor, you may wish to use the
-simpler [`withSimpleDeclarationVisitor`](#withSimpleDeclarationVisitor) function.
-
 -}
 withDeclarationEnterVisitor : (Node Declaration -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
 withDeclarationEnterVisitor visitor (ModuleRuleSchema schema) =
@@ -2773,8 +2505,7 @@ The expressions are visited in pre-order depth-first search, meaning that an
 expression will be visited, then its first child, the first child's children
 (and so on), then the second child (and so on).
 
-Contrary to [`withSimpleExpressionVisitor`](#withSimpleExpressionVisitor), the
-visitor function will be called twice with different [`Direction`](#Direction)
+The visitor function will be called twice with different [`Direction`](#Direction)
 values. It will be visited with `OnEnter`, then the children will be visited,
 and then it will be visited again with `OnExit`. If you do not check the value of
 the `Direction` parameter, you might end up with duplicate errors and/or an
@@ -2846,9 +2577,6 @@ The following example forbids the use of `Debug.log` even when it is imported li
 
                     _ ->
                         ( [], context )
-
-Tip: If you do not need to collect or use the `context` in this visitor, you may wish to use the
-simpler [`withSimpleExpressionVisitor`](#withSimpleExpressionVisitor) function.
 
 -}
 withExpressionVisitor : (Node Expression -> Direction -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
@@ -2937,9 +2665,6 @@ The following example forbids the use of `Debug.log` even when it is imported li
 
                     _ ->
                         ( [], context )
-
-Tip: If you do not need to collect or use the `context` in this visitor, you may wish to use the
-simpler [`withSimpleExpressionVisitor`](#withSimpleExpressionVisitor) function.
 
 -}
 withExpressionEnterVisitor : (Node Expression -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
@@ -3949,7 +3674,7 @@ forbids using `Debug.todo` anywhere in the code, except in tests.
     rule : Rule
     rule =
         Rule.newModuleRuleSchema "NoDebugEvenIfImported" DebugLogWasNotImported
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
+            |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
             |> Rule.fromModuleRuleSchema
             |> Rule.ignoreErrorsForDirectories [ "tests/" ]
 
@@ -4017,13 +3742,13 @@ by hardcoding an exception into the rule (that forbids the use of `Html.button` 
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "NoHtmlButton"
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
+        Rule.newModuleRuleSchema "NoHtmlButton" ()
+            |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
             |> Rule.fromModuleRuleSchema
             |> Rule.ignoreErrorsForFiles [ "src/Button.elm" ]
 
     expressionVisitor : Node Expression -> List (Rule.Error {})
-    expressionVisitor node context =
+    expressionVisitor node =
         case Node.value node of
             Expression.FunctionOrValue [ "Html" ] "button" ->
                 [ Rule.error
@@ -4091,7 +3816,7 @@ forbids using strings with hardcoded URLs, but only in the `src/Api/` folder.
     rule : Rule
     rule =
         Rule.newModuleRuleSchema "NoHardcodedURLs" ()
-            |> Rule.withSimpleExpressionVisitor expressionVisitor
+            |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
             |> Rule.fromModuleRuleSchema
             |> Rule.filterErrorsForFiles (String.startsWith "src/Api/")
 

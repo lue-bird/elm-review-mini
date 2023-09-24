@@ -155,8 +155,8 @@ moduleVisitor :
     -> Rule.ModuleRuleSchema { hasAtLeastOneVisitor : () } ()
 moduleVisitor words schema =
     schema
-        |> Rule.withSimpleCommentsVisitor (commentsVisitor words)
-        |> Rule.withSimpleDeclarationVisitor (declarationVisitor words)
+        |> Rule.withCommentsVisitor (\comments context -> ( commentsVisitor words comments, context ))
+        |> Rule.withDeclarationEnterVisitor (\decl context -> ( declarationVisitor words decl, context ))
 
 
 commentsVisitor : List String -> List (Node String) -> List (Rule.Error {})

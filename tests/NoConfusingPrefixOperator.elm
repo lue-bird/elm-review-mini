@@ -84,7 +84,7 @@ elm-review --template jfmengels/elm-review-common/example --rules NoConfusingPre
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoConfusingPrefixOperator" ()
-        |> Rule.withSimpleExpressionVisitor expressionVisitor
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.fromModuleRuleSchema
 
 

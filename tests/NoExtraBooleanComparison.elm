@@ -63,7 +63,7 @@ You should not use this rule if you
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoExtraBooleanComparison" ()
-        |> Rule.withSimpleExpressionVisitor expressionVisitor
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.fromModuleRuleSchema
 
 

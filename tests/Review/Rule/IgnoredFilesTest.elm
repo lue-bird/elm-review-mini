@@ -13,14 +13,16 @@ import Test exposing (Test, describe, test)
 moduleRule : Rule
 moduleRule =
     Rule.newModuleRuleSchema "TestRule" ()
-        |> Rule.withSimpleExpressionVisitor
-            (\node ->
-                [ Rule.error
-                    { message = "Error reported"
-                    , details = [ "No details" ]
-                    }
-                    (Node.range node)
-                ]
+        |> Rule.withExpressionEnterVisitor
+            (\node context ->
+                ( [ Rule.error
+                        { message = "Error reported"
+                        , details = [ "No details" ]
+                        }
+                        (Node.range node)
+                  ]
+                , context
+                )
             )
         |> Rule.fromModuleRuleSchema
 
@@ -31,14 +33,16 @@ projectRule =
         |> Rule.withModuleVisitor
             (\schema ->
                 schema
-                    |> Rule.withSimpleExpressionVisitor
-                        (\node ->
-                            [ Rule.error
-                                { message = "Error reported"
-                                , details = [ "No details" ]
-                                }
-                                (Node.range node)
-                            ]
+                    |> Rule.withExpressionEnterVisitor
+                        (\node context ->
+                            ( [ Rule.error
+                                    { message = "Error reported"
+                                    , details = [ "No details" ]
+                                    }
+                                    (Node.range node)
+                              ]
+                            , context
+                            )
                         )
             )
         |> Rule.withModuleContextUsingContextCreator
@@ -223,7 +227,7 @@ a = ()
 ruleThatListsIgnoredFiles : Rule
 ruleThatListsIgnoredFiles =
     Rule.newProjectRuleSchema "ListIgnoredFiles" Set.empty
-        |> Rule.withModuleVisitor (Rule.withSimpleExpressionVisitor (always []))
+        |> Rule.withModuleVisitor (Rule.withExpressionEnterVisitor (\_ context -> ( [], context )))
         |> Rule.withModuleContextUsingContextCreator
             { fromProjectToModule = Rule.initContextCreator (\_ -> ())
             , fromModuleToProject = fromModuleToProject

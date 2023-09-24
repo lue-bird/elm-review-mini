@@ -71,7 +71,7 @@ elm-review --template jfmengels/elm-review-simplification/example --rules NoBool
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoBooleanCaseOf" ()
-        |> Rule.withSimpleExpressionVisitor expressionVisitor
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.fromModuleRuleSchema
 
 

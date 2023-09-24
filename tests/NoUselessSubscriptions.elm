@@ -54,7 +54,7 @@ elm-review --template jfmengels/elm-review-the-elm-architecture/example --rules 
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoUselessSubscriptions" ()
-        |> Rule.withSimpleDeclarationVisitor declarationVisitor
+        |> Rule.withDeclarationEnterVisitor (\decl context -> ( declarationVisitor decl, context ))
         |> Rule.fromModuleRuleSchema
 
 

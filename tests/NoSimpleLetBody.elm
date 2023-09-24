@@ -80,7 +80,7 @@ elm-review --template jfmengels/elm-review-code-style/example --rules NoSimpleLe
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoSimpleLetBody" ()
-        |> Rule.withSimpleExpressionVisitor expressionVisitor
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.providesFixesForModuleRule
         |> Rule.fromModuleRuleSchema
 

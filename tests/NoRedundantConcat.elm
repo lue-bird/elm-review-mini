@@ -45,7 +45,7 @@ To use this rule, add it to your `elm-review` config like so:
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoRedundantConcat" ()
-        |> Rule.withSimpleExpressionVisitor expressionVisitor
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.providesFixesForModuleRule
         |> Rule.fromModuleRuleSchema
 

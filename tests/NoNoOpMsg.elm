@@ -47,7 +47,7 @@ elm - review --template jfmengels/elm-review-noop/preview --rules NoNoOpMsg
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoNoOpMsg" ()
-        |> Rule.withSimpleDeclarationVisitor declarationVisitor
+        |> Rule.withDeclarationEnterVisitor (\decl context -> ( declarationVisitor decl, context ))
         |> Rule.fromModuleRuleSchema
 
 

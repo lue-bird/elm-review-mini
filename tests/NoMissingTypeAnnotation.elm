@@ -56,7 +56,7 @@ elm-review --template jfmengels/elm-review-common/example --rules NoMissingTypeA
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoMissingTypeAnnotation" ()
-        |> Rule.withSimpleDeclarationVisitor declarationVisitor
+        |> Rule.withDeclarationEnterVisitor (\decl context -> ( declarationVisitor decl, context ))
         |> Rule.fromModuleRuleSchema
 
 

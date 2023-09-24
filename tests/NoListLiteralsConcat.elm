@@ -73,7 +73,7 @@ elm-review --template jfmengels/elm-review-simplification/example --rules NoList
 rule : Rule
 rule =
     Rule.newModuleRuleSchema "NoListLiteralsConcat" ()
-        |> Rule.withSimpleExpressionVisitor expressionVisitor
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor expr, context ))
         |> Rule.fromModuleRuleSchema
 
 

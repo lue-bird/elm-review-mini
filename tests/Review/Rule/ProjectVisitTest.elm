@@ -22,7 +22,7 @@ initialContext =
 baseRule : Rule.ProjectRuleSchema { hasAtLeastOneVisitor : (), withModuleContext : Rule.Forbidden } ProjectContext ()
 baseRule =
     Rule.newProjectRuleSchema "Visitor order" initialContext
-        |> Rule.withModuleVisitor (Rule.withSimpleModuleDefinitionVisitor (always []))
+        |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
         |> Rule.withModuleContextUsingContextCreator
             { fromProjectToModule = Rule.initContextCreator (\_ -> ())
             , fromModuleToProject = fromModuleToProject

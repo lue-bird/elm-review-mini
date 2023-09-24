@@ -61,19 +61,23 @@ all =
 testRuleWithMessage : (String -> { message : String, details : List String }) -> Rule
 testRuleWithMessage createMessage =
     Rule.newModuleRuleSchema "TestRule" ()
-        |> Rule.withSimpleExpressionVisitor (expressionVisitor createMessage)
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor createMessage expr, context ))
         |> Rule.fromModuleRuleSchema
 
 
 testRuleReportsLiterals : Rule
 testRuleReportsLiterals =
     Rule.newModuleRuleSchema "TestRule" ()
-        |> Rule.withSimpleExpressionVisitor
-            (expressionVisitor
-                (\string ->
-                    { message = "Some message including " ++ string
-                    , details = [ "Some details including " ++ string ]
-                    }
+        |> Rule.withExpressionEnterVisitor
+            (\expr context ->
+                ( expressionVisitor
+                    (\string ->
+                        { message = "Some message including " ++ string
+                        , details = [ "Some details including " ++ string ]
+                        }
+                    )
+                    expr
+                , context
                 )
             )
         |> Rule.fromModuleRuleSchema
@@ -92,7 +96,7 @@ expressionVisitor createMessage node =
 testRuleWithError : (Range -> Error {}) -> Rule
 testRuleWithError error =
     Rule.newModuleRuleSchema "TestRule" ()
-        |> Rule.withSimpleExpressionVisitor (\node -> [ error (Node.range node) ])
+        |> Rule.withExpressionEnterVisitor (\node context -> ( [ error (Node.range node) ], context ))
         |> Rule.fromModuleRuleSchema
 
 
@@ -1439,7 +1443,7 @@ ignoredChangedResultsTest =
                 testRule : Rule
                 testRule =
                     Rule.newProjectRuleSchema "TestRule" initialContext
-                        |> Rule.withModuleVisitor (Rule.withSimpleModuleDefinitionVisitor (always []))
+                        |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
                         |> Rule.withModuleContextUsingContextCreator
                             { fromProjectToModule = fromProjectToModule
                             , fromModuleToProject = fromModuleToProject

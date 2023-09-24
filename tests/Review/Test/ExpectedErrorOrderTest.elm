@@ -265,14 +265,14 @@ a = foo
 ruleWithDifferentMessage : Rule
 ruleWithDifferentMessage =
     Rule.newModuleRuleSchema "NoValues" ()
-        |> Rule.withSimpleExpressionVisitor (expressionVisitor (\fnName -> "Detected " ++ fnName))
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor (\fnName -> "Detected " ++ fnName) expr, context ))
         |> Rule.fromModuleRuleSchema
 
 
 ruleWithSameMessage : Rule
 ruleWithSameMessage =
     Rule.newModuleRuleSchema "NoValues" ()
-        |> Rule.withSimpleExpressionVisitor (expressionVisitor (always "message"))
+        |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor (always "message") expr, context ))
         |> Rule.fromModuleRuleSchema
 
 
