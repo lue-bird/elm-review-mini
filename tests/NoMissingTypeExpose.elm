@@ -608,7 +608,7 @@ formatTypeName ( moduleName, name ) =
 
 fromProjectToModuleContext : Rule.ContextCreator (ProjectContext -> ModuleContext)
 fromProjectToModuleContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable moduleName { exposedModules, moduleTypes } ->
             let
                 moduleType : ModuleType
@@ -630,7 +630,7 @@ fromProjectToModuleContext =
 
 fromModuleToProjectContext : Rule.ContextCreator (ModuleContext -> ProjectContext)
 fromModuleToProjectContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName context ->
             case context.moduleType of
                 InternalModule { exposedTypes } ->

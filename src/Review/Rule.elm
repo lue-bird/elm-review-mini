@@ -14,7 +14,7 @@ module Review.Rule exposing
     , withFinalModuleEvaluation
     , ProjectRuleSchema, newProjectRuleSchema, fromProjectRuleSchema, withModuleVisitor, withElmJsonProjectVisitor, withReadmeProjectVisitor, withDirectDependenciesProjectVisitor, withDependenciesProjectVisitor, withFinalProjectEvaluation, withContextFromImportedModules
     , providesFixesForProjectRule
-    , ContextCreator, initContextCreator, withModuleName, withModuleNameNode, withIsInSourceDirectories, withFilePath, withIsFileIgnored, withModuleNameLookupTable, withModuleKey, withSourceCodeExtractor, withFullAst, withModuleDocumentation
+    , ContextCreator, createContext, withModuleName, withModuleNameNode, withIsInSourceDirectories, withFilePath, withIsFileIgnored, withModuleNameLookupTable, withModuleKey, withSourceCodeExtractor, withFullAst, withModuleDocumentation
     , Metadata, withMetadata, moduleNameFromMetadata, moduleNameNodeFromMetadata, isInSourceDirectories
     , Error, error, errorWithFix, ModuleKey, errorForModule, errorForModuleWithFix, ElmJsonKey, errorForElmJson, errorForElmJsonWithFix, ReadmeKey, errorForReadme, errorForReadmeWithFix
     , globalError, configurationError
@@ -219,7 +219,7 @@ first, as they are in practice a simpler version of project rules.
 
 ## Requesting more information
 
-@docs ContextCreator, initContextCreator, withModuleName, withModuleNameNode, withIsInSourceDirectories, withFilePath, withIsFileIgnored, withModuleNameLookupTable, withModuleKey, withSourceCodeExtractor, withFullAst, withModuleDocumentation
+@docs ContextCreator, createContext, withModuleName, withModuleNameNode, withIsInSourceDirectories, withFilePath, withIsFileIgnored, withModuleNameLookupTable, withModuleKey, withSourceCodeExtractor, withFullAst, withModuleDocumentation
 
 
 ### Requesting more information (DEPRECATED)
@@ -899,7 +899,7 @@ recommend specifying `()`.
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "My.Rule.Name" (Rule.initContextCreator ())
+        Rule.newModuleRuleSchema "My.Rule.Name" (Rule.createContext ())
             |> Rule.withExpressionEnterVisitor (\expr () -> ( expressionVisitor expr, () ))
             |> Rule.withImportVisitor (\import () -> ( importVisitor import, () ))
             |> Rule.fromModuleRuleSchema
@@ -912,7 +912,7 @@ an initial context and functions like [`withExpressionEnterVisitor`](#withExpres
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "NoUnusedVariables" (Rule.initContextCreator initialContext)
+        Rule.newModuleRuleSchema "NoUnusedVariables" (Rule.createContext initialContext)
             |> Rule.withExpressionEnterVisitor expressionVisitor
             |> Rule.withImportVisitor importVisitor
             |> Rule.fromModuleRuleSchema
@@ -938,7 +938,7 @@ Here's an example of how you would supply information to the initialization:
 
     contextCreator : Rule.ContextCreator Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\isInSourceDirectories ->
                 { hasTodoBeenImported = False
                 , hasToStringBeenImported = False
@@ -985,7 +985,7 @@ fromModuleRuleSchema ((ModuleRuleSchema schema) as moduleVisitor) =
         |> withModuleVisitor
             (\_ -> moduleVisitor)
             { projectToModule = contextCreatorToLazy schema.moduleContextCreator
-            , moduleToProject = initContextCreator (\_ -> ())
+            , moduleToProject = createContext (\_ -> ())
             , foldProjectContexts = \() () -> ()
             }
         |> (if schema.providesFixes then
@@ -1205,7 +1205,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
             ModuleRuleSchema
                 { name = ruleName_
                 , initialModuleContext = Just initialModuleContext
-                , moduleContextCreator = initContextCreator initialModuleContext
+                , moduleContextCreator = createContext initialModuleContext
                 , moduleDefinitionVisitor = Nothing
                 , moduleDocumentationVisitor = Nothing
                 , commentsVisitor = Nothing
@@ -1411,7 +1411,7 @@ but are unused in the rest of the project.
 
     projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
     projectToModule projectContext =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleName ->
                 { isExposed = Set.member moduleName projectContext.exposedModules
                 , exposed = Dict.empty
@@ -1422,7 +1422,7 @@ but are unused in the rest of the project.
 
     moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
     moduleToProject moduleKey moduleName moduleContext =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleKey moduleName moduleContext ->
                 { -- We don't care about this value, we'll take
                   -- the one from the initial context when folding
@@ -1491,7 +1491,7 @@ you to request more information
 
     projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
     projectToModule =
-        Rule.initContextCreator
+        Rule.createContext
             (\projectContext ->
                 { -- something
                 }
@@ -1499,7 +1499,7 @@ you to request more information
 
     moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
     moduleToProject =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleKey moduleName moduleContext ->
                 { moduleKeys = Dict.singleton moduleName moduleKey
                 }
@@ -5401,7 +5401,7 @@ requestedDataFromContextCreator (ContextCreator _ requestedData) =
 
     contextCreator : Rule.ContextCreator Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleName ->
                 { moduleName = moduleName
 
@@ -5411,8 +5411,8 @@ requestedDataFromContextCreator (ContextCreator _ requestedData) =
             |> Rule.withModuleName
 
 -}
-initContextCreator : create -> ContextCreator create
-initContextCreator create =
+createContext : create -> ContextCreator create
+createContext create =
     ContextCreator
         (\_ _ -> create)
         RequestedData.none
@@ -5456,7 +5456,7 @@ withMetadata (ContextCreator fn requestedData) =
 
     contextCreator : Rule.ContextCreator Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleName ->
                 { moduleName = moduleName
 
@@ -5477,7 +5477,7 @@ withModuleName (ContextCreator fn requestedData) =
 
     contextCreator : Rule.ContextCreator Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleNameNode ->
                 { moduleNameNode = moduleNameNode
 
@@ -5498,7 +5498,7 @@ know whether the module is part of the tests or of the production code.
 
     contextCreator : Rule.ContextCreator () Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\isInSourceDirectories () ->
                 { isInSourceDirectories = isInSourceDirectories
 
@@ -5523,7 +5523,7 @@ Note that for module rules, ignored files will be skipped automatically anyway.
 
     contextCreator : Rule.ContextCreator Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\isFileIgnored ->
                 { isFileIgnored = isFileIgnored
 
@@ -5566,7 +5566,7 @@ type or value comes from.
 
     initialContext : Rule.ContextCreator Context
     initialContext =
-        Rule.initContextCreator
+        Rule.createContext
             (\lookupTable -> { lookupTable = lookupTable })
             |> Rule.withModuleNameLookupTable
 
@@ -5612,7 +5612,7 @@ Using the full AST, you can simplify the implementation by computing the data in
 
     contextCreator : Rule.ContextCreator Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\ast ->
                 { exposed = collectExposed ast.moduleDefinition ast.declarations
 
@@ -5634,7 +5634,7 @@ When that is the case, the module documentation will be `Nothing`.
 
     contextCreator : Rule.ContextCreator () Context
     contextCreator =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleDocumentation () ->
                 { moduleDocumentation = moduleDocumentation
 
@@ -5665,7 +5665,7 @@ withModuleDocumentation (ContextCreator fn requested) =
 
     moduleToProject : Rule.ContextCreator Context
     moduleToProject =
-        Rule.initContextCreator
+        Rule.createContext
             (\moduleKey -> { moduleKey = moduleKey })
             |> Rule.withModuleKey
 
@@ -5689,7 +5689,7 @@ Using [`newModuleRuleSchema`](#newModuleRuleSchema):
 
     initialContext : Rule.ContextCreator () Context
     initialContext =
-        Rule.initContextCreator
+        Rule.createContext
             (\filePath () -> { filePath = filePath })
             |> Rule.withFilePath
 
@@ -5707,7 +5707,7 @@ Using [`withModuleContext`](#withModuleContext) in a project rule:
 
     moduleToProject : Rule.ContextCreator Context
     moduleToProject =
-        Rule.initContextCreator
+        Rule.createContext
             (\filePath -> { filePath = filePath })
             |> Rule.withFilePath
 
@@ -5733,7 +5733,7 @@ withFilePath (ContextCreator fn requestedData) =
 
     initialContext : Rule.ContextCreator Context
     initialContext =
-        Rule.initContextCreator
+        Rule.createContext
             (\extractSourceCode -> { extractSourceCode = extractSourceCode })
             |> Rule.withSourceCodeExtractor
 

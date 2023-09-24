@@ -137,7 +137,7 @@ elm-review --template jfmengels/elm-review-code-style/example --rules NoUnnecess
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoUnnecessaryTrailingUnderscore" (Rule.initContextCreator initialContext)
+    Rule.newModuleRuleSchema "NoUnnecessaryTrailingUnderscore" (Rule.createContext initialContext)
         |> Rule.withDeclarationListVisitor declarationListVisitor
         |> Rule.withDeclarationEnterVisitor declarationVisitor
         |> Rule.withExpressionEnterVisitor expressionVisitor

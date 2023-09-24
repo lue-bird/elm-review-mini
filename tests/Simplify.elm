@@ -953,7 +953,7 @@ initialContext =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleContext ->
             { customTypesToReportInCases = Set.empty
             , exposedVariants =
@@ -965,7 +965,7 @@ moduleToProject =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable metadata extractSourceCode fullAst projectContext ->
             let
                 moduleExposedVariantTypes : Exposed

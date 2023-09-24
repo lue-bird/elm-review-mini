@@ -80,7 +80,7 @@ type alias Context =
 
 initContext : Rule.ContextCreator Context
 initContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable ->
             { lookupTable = lookupTable
             , rangesToIgnore = []

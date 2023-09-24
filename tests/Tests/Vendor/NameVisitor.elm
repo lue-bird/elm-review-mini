@@ -469,8 +469,8 @@ projectRuleTests =
                                     |> NameVisitor.withNameVisitor nameVisitor
                             )
                             { foldProjectContexts = \() () -> ()
-                            , projectToModule = Rule.initContextCreator (\() -> "context")
-                            , moduleToProject = Rule.initContextCreator (\_ -> ())
+                            , projectToModule = Rule.createContext (\() -> "context")
+                            , moduleToProject = Rule.createContext (\_ -> ())
                             }
                         |> Rule.fromProjectRuleSchema
             in
@@ -522,14 +522,14 @@ expectedTypeError context name =
 
 nameVisitorRule : String -> Rule
 nameVisitorRule context =
-    Rule.newModuleRuleSchema "NameVisitor" (Rule.initContextCreator context)
+    Rule.newModuleRuleSchema "NameVisitor" (Rule.createContext context)
         |> NameVisitor.withNameVisitor nameVisitor
         |> Rule.fromModuleRuleSchema
 
 
 valueOrTypeVisitorRule : String -> Rule
 valueOrTypeVisitorRule context =
-    Rule.newModuleRuleSchema "ValueOrTypeVisitor" (Rule.initContextCreator context)
+    Rule.newModuleRuleSchema "ValueOrTypeVisitor" (Rule.createContext context)
         |> NameVisitor.withValueAndTypeVisitors
             { valueVisitor = valueVisitor
             , typeVisitor = typeVisitor
@@ -539,14 +539,14 @@ valueOrTypeVisitorRule context =
 
 valueVisitorRule : String -> Rule
 valueVisitorRule context =
-    Rule.newModuleRuleSchema "ValueVisitor" (Rule.initContextCreator context)
+    Rule.newModuleRuleSchema "ValueVisitor" (Rule.createContext context)
         |> NameVisitor.withValueVisitor valueVisitor
         |> Rule.fromModuleRuleSchema
 
 
 typeVisitorRule : String -> Rule
 typeVisitorRule context =
-    Rule.newModuleRuleSchema "TypeVisitor" (Rule.initContextCreator context)
+    Rule.newModuleRuleSchema "TypeVisitor" (Rule.createContext context)
         |> NameVisitor.withTypeVisitor typeVisitor
         |> Rule.fromModuleRuleSchema
 
@@ -568,7 +568,7 @@ typeVisitor node context =
 
 countingVisitorRule : Int -> Rule
 countingVisitorRule counter =
-    Rule.newModuleRuleSchema "NameVisitor" (Rule.initContextCreator counter)
+    Rule.newModuleRuleSchema "NameVisitor" (Rule.createContext counter)
         |> NameVisitor.withNameVisitor countingVisitor
         |> Rule.fromModuleRuleSchema
 

@@ -126,7 +126,7 @@ initialProjectContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\projectContext ->
             { moduleNameToDependency = projectContext.moduleNameToDependency
             , usedDependencies = Set.empty
@@ -136,7 +136,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\isInSourceDirectories { usedDependencies } ->
             { moduleNameToDependency = Dict.empty
             , dependencies = Dict.empty

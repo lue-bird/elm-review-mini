@@ -26,7 +26,7 @@ all =
 
                     rule : Rule
                     rule =
-                        Rule.newModuleRuleSchema "Visitor order" (Rule.initContextCreator "\n0 - initial context")
+                        Rule.newModuleRuleSchema "Visitor order" (Rule.createContext "\n0 - initial context")
                             |> Rule.withModuleDefinitionVisitor (\_ context -> ( [], context ++ "\n1.1 - withModuleDefinitionVisitor" ))
                             |> Rule.withModuleDefinitionVisitor (\_ context -> ( [], context ++ "\n1.2 - withModuleDefinitionVisitor" ))
                             |> Rule.withModuleDocumentationVisitor (\_ context -> ( [], context ++ "\n2.1 - withModuleDocumentationVisitor" ))
@@ -95,7 +95,7 @@ a = 1
                 let
                     rule : Rule
                     rule =
-                        Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator "")
+                        Rule.newModuleRuleSchema "TestRule" (Rule.createContext "")
                             |> Rule.withExpressionEnterVisitor (declarationEnterVisitor "A")
                             |> Rule.withExpressionExitVisitor (declarationExitVisitor "A")
                             |> Rule.withExpressionEnterVisitor (declarationEnterVisitor "B")
@@ -143,7 +143,7 @@ Exit A"""
                 let
                     rule : Rule
                     rule =
-                        Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator "")
+                        Rule.newModuleRuleSchema "TestRule" (Rule.createContext "")
                             |> Rule.withDeclarationEnterVisitor (declarationEnterVisitor "A")
                             |> Rule.withDeclarationExitVisitor (declarationExitVisitor "A")
                             |> Rule.withDeclarationEnterVisitor (declarationEnterVisitor "B")
@@ -191,7 +191,7 @@ Exit A"""
                 let
                     rule : Rule
                     rule =
-                        Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator "")
+                        Rule.newModuleRuleSchema "TestRule" (Rule.createContext "")
                             |> Rule.withLetDeclarationEnterVisitor (letDeclarationVisitor "A enter")
                             |> Rule.withLetDeclarationEnterVisitor (letDeclarationVisitor "B enter")
                             |> Rule.withLetDeclarationExitVisitor (letDeclarationVisitor "C exit")
@@ -249,7 +249,7 @@ C exit: c"""
                 let
                     rule : Rule
                     rule =
-                        Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator "")
+                        Rule.newModuleRuleSchema "TestRule" (Rule.createContext "")
                             |> Rule.withCaseBranchEnterVisitor (caseBranchVisitor "A enter")
                             |> Rule.withCaseBranchEnterVisitor (caseBranchVisitor "B enter")
                             |> Rule.withCaseBranchExitVisitor (caseBranchVisitor "C exit")

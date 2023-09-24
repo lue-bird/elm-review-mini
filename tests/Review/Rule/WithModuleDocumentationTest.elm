@@ -36,7 +36,7 @@ rule =
 
 initContext : Rule.ContextCreator Context
 initContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleDocumentation ->
             { moduleDocumentation = moduleDocumentation
             }

@@ -12,7 +12,7 @@ import Test exposing (Test, describe, test)
 
 moduleRule : Rule
 moduleRule =
-    Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "TestRule" (Rule.createContext ())
         |> Rule.withExpressionEnterVisitor
             (\node context ->
                 ( [ Rule.error
@@ -45,8 +45,8 @@ projectRule =
                             )
                         )
             )
-            { projectToModule = Rule.initContextCreator identity
-            , moduleToProject = Rule.initContextCreator identity
+            { projectToModule = Rule.createContext identity
+            , moduleToProject = Rule.createContext identity
             , foldProjectContexts = \_ b -> b
             }
         |> Rule.withContextFromImportedModules
@@ -227,7 +227,7 @@ ruleThatListsIgnoredFiles : Rule
 ruleThatListsIgnoredFiles =
     Rule.newProjectRuleSchema "ListIgnoredFiles" Set.empty
         |> Rule.withModuleVisitor (Rule.withExpressionEnterVisitor (\_ context -> ( [], context )))
-            { projectToModule = Rule.initContextCreator (\_ -> ())
+            { projectToModule = Rule.createContext (\_ -> ())
             , moduleToProject = moduleToProject
             , foldProjectContexts = Set.union
             }
@@ -237,7 +237,7 @@ ruleThatListsIgnoredFiles =
 
 moduleToProject : Rule.ContextCreator (() -> Set ModuleName)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName isIgnored () ->
             if isIgnored then
                 Set.singleton moduleName

@@ -613,7 +613,7 @@ createRule visitor =
 
 contextCreator : Rule.ContextCreator ModuleContext
 contextCreator =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable ->
             { lookupTable = lookupTable
             , texts = []

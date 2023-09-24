@@ -31,7 +31,7 @@ port input : (Json.Decode.Value -> msg) -> Sub msg"""
 
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "WithDeclarationListVisitorTestRule" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "WithDeclarationListVisitorTestRule" (Rule.createContext ())
         |> Rule.withDeclarationListVisitor declarationListVisitor
         |> Rule.fromModuleRuleSchema
 

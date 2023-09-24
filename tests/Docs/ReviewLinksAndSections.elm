@@ -190,7 +190,7 @@ type alias MaybeExposedLinkData =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\ast moduleName projectContext ->
             let
                 exposedElements : Set String
@@ -216,7 +216,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleKey moduleContext ->
             { fileLinksAndSections =
                 [ { moduleName = moduleContext.moduleName

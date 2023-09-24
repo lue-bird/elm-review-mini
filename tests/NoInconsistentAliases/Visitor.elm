@@ -21,7 +21,7 @@ rule config =
         options =
             Options.fromConfig config
     in
-    Rule.newModuleRuleSchema "NoInconsistentAliases" (Rule.initContextCreator Context.initial)
+    Rule.newModuleRuleSchema "NoInconsistentAliases" (Rule.createContext Context.initial)
         |> Rule.withImportVisitor (importVisitor options)
         |> NameVisitor.withNameVisitor moduleCallVisitor
         |> Rule.withFinalModuleEvaluation (finalEvaluation options.lookupAlias)

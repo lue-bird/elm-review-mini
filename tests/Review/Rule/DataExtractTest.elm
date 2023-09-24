@@ -47,7 +47,7 @@ moduleVisitor schema =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\_ ->
             { declarations = []
             }
@@ -56,7 +56,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName moduleContext ->
             Dict.singleton (String.join "." moduleName) moduleContext.declarations
         )

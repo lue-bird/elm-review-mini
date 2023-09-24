@@ -156,7 +156,7 @@ type DeprecationReason
 
 projectToModule : StableConfiguration -> Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule (StableConfiguration configuration) =
-    Rule.initContextCreator
+    Rule.createContext
         (\metadata lookupTable projectContext ->
             let
                 moduleName : ModuleName
@@ -177,7 +177,7 @@ projectToModule (StableConfiguration configuration) =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\metadata moduleContext ->
             { deprecatedModules =
                 if moduleContext.isModuleDeprecated then

@@ -140,7 +140,7 @@ initialProjectContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable ast moduleDocumentation projectContext ->
             let
                 exposed : Dict String ExposedElement
@@ -168,7 +168,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleKey (Node moduleNameRange moduleName) moduleContext ->
             { projectType = IsApplication ElmApplication
             , modules =

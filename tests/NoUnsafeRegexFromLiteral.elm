@@ -181,7 +181,7 @@ initialProjectContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable _ ->
             { lookupTable = lookupTable
             , allowedFunctionOrValues = []
@@ -193,7 +193,7 @@ projectToModule =
 
 moduleToProject : Target -> Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject target =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName moduleContext ->
             { foundTargetFunction = moduleContext.foundTargetFunction && (moduleName == target.moduleName)
             }

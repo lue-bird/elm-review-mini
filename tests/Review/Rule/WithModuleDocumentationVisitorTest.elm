@@ -77,7 +77,7 @@ port a : String -> Cmd msg
 
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "WithModuleDocumentationVisitorTestRule" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "WithModuleDocumentationVisitorTestRule" (Rule.createContext ())
         |> Rule.withModuleDocumentationVisitor (\node () -> ( moduleDocumentationVisitor node, () ))
         |> Rule.fromModuleRuleSchema
 

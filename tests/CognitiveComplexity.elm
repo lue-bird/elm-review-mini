@@ -276,7 +276,7 @@ initialContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (always
             { nesting = 0
             , operandsToIgnore = []
@@ -291,7 +291,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName moduleContext ->
             let
                 recursiveCalls : RecursiveCalls

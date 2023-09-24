@@ -111,7 +111,7 @@ initialProjectContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\projectContext ->
             { importedModules = Set.empty
             , containsMainFunction = False
@@ -122,7 +122,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\(Node moduleNameRange moduleName) moduleKey moduleContext ->
             { modules =
                 Dict.singleton

@@ -58,7 +58,7 @@ elm-review --template jfmengels/elm-review-common/example --rules NoExposingEver
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoExposingEverything" (Rule.initContextCreator ExposingOk)
+    Rule.newModuleRuleSchema "NoExposingEverything" (Rule.createContext ExposingOk)
         |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
         |> Rule.withDeclarationListVisitor declarationListVisitor
         |> Rule.providesFixesForModuleRule

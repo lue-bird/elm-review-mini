@@ -60,14 +60,14 @@ all =
 
 testRuleWithMessage : (String -> { message : String, details : List String }) -> Rule
 testRuleWithMessage createMessage =
-    Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "TestRule" (Rule.createContext ())
         |> Rule.withExpressionEnterVisitor (\expr context -> ( expressionVisitor createMessage expr, context ))
         |> Rule.fromModuleRuleSchema
 
 
 testRuleReportsLiterals : Rule
 testRuleReportsLiterals =
-    Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "TestRule" (Rule.createContext ())
         |> Rule.withExpressionEnterVisitor
             (\expr context ->
                 ( expressionVisitor
@@ -95,7 +95,7 @@ expressionVisitor createMessage node =
 
 testRuleWithError : (Range -> Error {}) -> Rule
 testRuleWithError error =
-    Rule.newModuleRuleSchema "TestRule" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "TestRule" (Rule.createContext ())
         |> Rule.withExpressionEnterVisitor (\node context -> ( [ error (Node.range node) ], context ))
         |> Rule.fromModuleRuleSchema
 
@@ -1457,11 +1457,11 @@ ignoredChangedResultsTest =
 
                 projectToModule : Rule.ContextCreator (IgnoredChangedResultsContext -> ())
                 projectToModule =
-                    Rule.initContextCreator (\_ -> ())
+                    Rule.createContext (\_ -> ())
 
                 moduleToProject : Rule.ContextCreator (() -> IgnoredChangedResultsContext)
                 moduleToProject =
-                    Rule.initContextCreator
+                    Rule.createContext
                         (\ast isFileIgnored moduleName () ->
                             if isFileIgnored then
                                 Dict.empty

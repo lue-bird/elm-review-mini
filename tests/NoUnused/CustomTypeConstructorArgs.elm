@@ -158,7 +158,7 @@ initialProjectContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable moduleName projectContext ->
             { lookupTable = lookupTable
             , isModuleExposed = Set.member moduleName projectContext.exposedModules
@@ -174,7 +174,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleKey moduleName moduleContext ->
             { exposedModules = Set.empty
             , customTypeArgs =

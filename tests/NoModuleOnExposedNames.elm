@@ -91,7 +91,7 @@ Or remove `Attribute` from `exposing`:
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoModuleOnExposedNames" (Rule.initContextCreator Context.initial)
+    Rule.newModuleRuleSchema "NoModuleOnExposedNames" (Rule.createContext Context.initial)
         |> Rule.withImportVisitor importVisitor
         |> NameVisitor.withValueAndTypeVisitors
             { valueVisitor = valueVisitor

@@ -110,7 +110,7 @@ rule configuration =
                     |> Rule.withDeclarationEnterVisitor (declarationVisitor configuration.document)
             )
             { projectToModule = projectContextToModule
-            , moduleToProject = Rule.initContextCreator (\_ -> initialProjectContext)
+            , moduleToProject = Rule.createContext (\_ -> initialProjectContext)
             , foldProjectContexts = \a _ -> a
             }
         |> Rule.withElmJsonProjectVisitor (\maybeElmJson context -> ( [], elmJsonVisitor maybeElmJson context ))
@@ -135,7 +135,7 @@ initialProjectContext =
 
 projectContextToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectContextToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\projectContext ->
             { moduleNameNode = Node Range.emptyRange ""
             , exposedModules = projectContext.exposedModules

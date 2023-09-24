@@ -30,7 +30,7 @@ rule =
 
 initContext : Rule.ContextCreator Context
 initContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\filePath ->
             { filePath = filePath
             }

@@ -228,7 +228,7 @@ emptyBranching =
 
 initialContext : Rule.ContextCreator Context
 initialContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable extractSourceCode ->
             { lookupTable = lookupTable
             , extractSourceCode = extractSourceCode

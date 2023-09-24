@@ -63,7 +63,7 @@ elm-review --template jfmengels/elm-review-the-elm-architecture/example --rules 
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoRecursiveUpdate" (Rule.initContextCreator { isInUpdateFunction = False })
+    Rule.newModuleRuleSchema "NoRecursiveUpdate" (Rule.createContext { isInUpdateFunction = False })
         |> Rule.withDeclarationEnterVisitor declarationVisitor
         |> Rule.withExpressionEnterVisitor expressionVisitor
         |> Rule.fromModuleRuleSchema

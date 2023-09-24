@@ -232,7 +232,7 @@ initialProjectContext phantomTypes =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable moduleName projectContext ->
             { lookupTable = lookupTable
             , exposedCustomTypesWithConstructors = Set.empty
@@ -256,7 +256,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleKey moduleName moduleContext ->
             let
                 localUsed : Set ConstructorName

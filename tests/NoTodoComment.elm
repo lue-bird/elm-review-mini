@@ -7,7 +7,7 @@ import Review.Rule as Rule exposing (Error, Rule)
 
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoTodoComment" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "NoTodoComment" (Rule.createContext ())
         |> Rule.withCommentsVisitor (\comments context -> ( commentsVisitor comments, context ))
         |> Rule.fromModuleRuleSchema
 

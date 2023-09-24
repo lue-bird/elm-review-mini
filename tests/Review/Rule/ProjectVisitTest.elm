@@ -23,7 +23,7 @@ baseRule : Rule.ProjectRuleSchema { hasAtLeastOneVisitor : () } ProjectContext (
 baseRule =
     Rule.newProjectRuleSchema "Visitor order" initialContext
         |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
-            { projectToModule = Rule.initContextCreator (\_ -> ())
+            { projectToModule = Rule.createContext (\_ -> ())
             , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
@@ -32,7 +32,7 @@ baseRule =
 
 moduleToProject : Rule.ContextCreator (a -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleKey moduleName _ ->
             { aModuleKey = Just moduleKey
             , moduleNames = Set.singleton (String.join "." moduleName)

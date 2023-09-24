@@ -105,7 +105,7 @@ initialProjectContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable projectContext ->
             { lookupTable = lookupTable
             , modulesThatExposeSubscriptionsAndUpdate = projectContext.modulesThatExposeSubscriptionsAndUpdate
@@ -120,7 +120,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName moduleContext ->
             { modulesThatExposeSubscriptionsAndUpdate =
                 if moduleContext.definesSubscriptions && moduleContext.definesUpdate then

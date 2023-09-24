@@ -99,7 +99,7 @@ rule =
                     |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor
                     |> Rule.withDeclarationListVisitor (\nodes context -> ( declarationListVisitor nodes context, context ))
             )
-            { moduleToProject = Rule.initContextCreator (\_ -> initialProjectContext)
+            { moduleToProject = Rule.createContext (\_ -> initialProjectContext)
             , projectToModule = initialContext
             , foldProjectContexts = \a _ -> a
             }
@@ -127,7 +127,7 @@ initialProjectContext =
 
 initialContext : Rule.ContextCreator (ProjectContext -> Context)
 initialContext =
-    Rule.initContextCreator
+    Rule.createContext
         (\projectContext ->
             { exposedModulesFromProject = projectContext.exposedModulesFromProject
             , moduleIsExposed = False

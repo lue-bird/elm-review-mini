@@ -56,7 +56,7 @@ elm-review --template jfmengels/elm-review-common/example --rules NoImportingEve
 -}
 rule : List String -> Rule
 rule exceptions =
-    Rule.newModuleRuleSchema "NoImportingEverything" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "NoImportingEverything" (Rule.createContext ())
         |> Rule.withImportVisitor (\import_ context -> ( importVisitor (exceptionsToSet exceptions) import_, context ))
         |> Rule.fromModuleRuleSchema
 

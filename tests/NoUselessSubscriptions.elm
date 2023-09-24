@@ -53,7 +53,7 @@ elm-review --template jfmengels/elm-review-the-elm-architecture/example --rules 
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoUselessSubscriptions" (Rule.initContextCreator ())
+    Rule.newModuleRuleSchema "NoUselessSubscriptions" (Rule.createContext ())
         |> Rule.withDeclarationEnterVisitor (\decl context -> ( declarationVisitor decl, context ))
         |> Rule.fromModuleRuleSchema
 

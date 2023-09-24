@@ -229,7 +229,7 @@ initialContext =
 
 projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
 projectToModule =
-    Rule.initContextCreator
+    Rule.createContext
         (\lookupTable { isApplication, customTypes } ->
             { lookupTable = lookupTable
             , scopes = NonemptyList.fromElement emptyScope
@@ -251,7 +251,7 @@ projectToModule =
 
 moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
 moduleToProject =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleName moduleContext ->
             { customTypes =
                 moduleContext.localTypes

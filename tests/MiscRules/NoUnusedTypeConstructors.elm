@@ -71,7 +71,7 @@ in your editor, rather than when running your tests or [elm-xref](https://github
 -}
 rule : Rule
 rule =
-    Rule.newModuleRuleSchema "NoUnusedTypeConstructors" (Rule.initContextCreator initialContext)
+    Rule.newModuleRuleSchema "NoUnusedTypeConstructors" (Rule.createContext initialContext)
         |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
         |> Rule.withDeclarationEnterVisitor declarationVisitor
         |> Rule.withExpressionEnterVisitor expressionVisitor

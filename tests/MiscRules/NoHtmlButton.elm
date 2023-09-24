@@ -21,7 +21,7 @@ type alias Context =
 
 contextCreator : Rule.ContextCreator Context
 contextCreator =
-    Rule.initContextCreator
+    Rule.createContext
         (\moduleNameLookup ->
             { moduleNameLookup = moduleNameLookup
             }
