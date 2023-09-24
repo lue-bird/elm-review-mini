@@ -5386,8 +5386,7 @@ accumulate params visitor ( previousErrors, previousContext ) =
 -- TODO Breaking change: Move this to a different module later on
 
 
-{-| Create a module context from a project context or the other way around.
-Use functions like [`withModuleName`](#withModuleName) to request more information.
+{-| Creating a module context or a project context using functions like [`withModuleName`](#withModuleName) to request more information.
 -}
 type ContextCreator create
     = ContextCreator (AvailableData -> Bool -> create) RequestedData
