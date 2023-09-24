@@ -45,7 +45,6 @@ projectRule =
                             )
                         )
             )
-        |> Rule.withModuleContext
             { fromProjectToModule = Rule.initContextCreator identity
             , fromModuleToProject = Rule.initContextCreator identity
             , foldProjectContexts = \_ b -> b
@@ -228,7 +227,6 @@ ruleThatListsIgnoredFiles : Rule
 ruleThatListsIgnoredFiles =
     Rule.newProjectRuleSchema "ListIgnoredFiles" Set.empty
         |> Rule.withModuleVisitor (Rule.withExpressionEnterVisitor (\_ context -> ( [], context )))
-        |> Rule.withModuleContext
             { fromProjectToModule = Rule.initContextCreator (\_ -> ())
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = Set.union

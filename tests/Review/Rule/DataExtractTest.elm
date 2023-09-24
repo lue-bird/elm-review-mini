@@ -22,7 +22,6 @@ rule : Maybe (Rule.Error { useErrorForModule : () }) -> Rule
 rule maybeError =
     Rule.newProjectRuleSchema "TestRule" Dict.empty
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

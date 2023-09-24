@@ -82,7 +82,6 @@ rule =
     Rule.newProjectRuleSchema "NoUnused.CustomTypeConstructorArgs" initialProjectContext
         |> Rule.withElmJsonProjectVisitor elmJsonVisitor
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

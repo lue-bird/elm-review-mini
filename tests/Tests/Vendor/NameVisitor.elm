@@ -468,7 +468,6 @@ projectRuleTests =
                                 schema
                                     |> NameVisitor.withNameVisitor nameVisitor
                             )
-                        |> Rule.withModuleContext
                             { foldProjectContexts = \() () -> ()
                             , fromProjectToModule = Rule.initContextCreator (\() -> "context")
                             , fromModuleToProject = Rule.initContextCreator (\_ -> ())

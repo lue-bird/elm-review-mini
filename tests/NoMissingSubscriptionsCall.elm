@@ -66,7 +66,6 @@ rule : Rule
 rule =
     Rule.newProjectRuleSchema "NoMissingSubscriptionsCall" initialProjectContext
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

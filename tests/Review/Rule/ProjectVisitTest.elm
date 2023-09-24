@@ -19,11 +19,10 @@ initialContext =
     }
 
 
-baseRule : Rule.ProjectRuleSchema { hasAtLeastOneVisitor : (), withModuleContext : Rule.Forbidden } ProjectContext ()
+baseRule : Rule.ProjectRuleSchema { hasAtLeastOneVisitor : () } ProjectContext ()
 baseRule =
     Rule.newProjectRuleSchema "Visitor order" initialContext
         |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
-        |> Rule.withModuleContext
             { fromProjectToModule = Rule.initContextCreator (\_ -> ())
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

@@ -125,7 +125,6 @@ rule =
         |> Rule.withElmJsonProjectVisitor elmJsonVisitor
         |> Rule.withReadmeProjectVisitor readmeVisitor
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

@@ -13,7 +13,7 @@ module Review.Rule exposing
     , providesFixesForModuleRule
     , withFinalModuleEvaluation
     , withElmJsonModuleVisitor, withReadmeModuleVisitor, withDirectDependenciesModuleVisitor, withDependenciesModuleVisitor
-    , ProjectRuleSchema, newProjectRuleSchema, fromProjectRuleSchema, withModuleVisitor, withModuleContext, withElmJsonProjectVisitor, withReadmeProjectVisitor, withDirectDependenciesProjectVisitor, withDependenciesProjectVisitor, withFinalProjectEvaluation, withContextFromImportedModules
+    , ProjectRuleSchema, newProjectRuleSchema, fromProjectRuleSchema, withModuleVisitor, withElmJsonProjectVisitor, withReadmeProjectVisitor, withDirectDependenciesProjectVisitor, withDependenciesProjectVisitor, withFinalProjectEvaluation, withContextFromImportedModules
     , providesFixesForProjectRule
     , ContextCreator, initContextCreator, withModuleName, withModuleNameNode, withIsInSourceDirectories, withFilePath, withIsFileIgnored, withModuleNameLookupTable, withModuleKey, withSourceCodeExtractor, withFullAst, withModuleDocumentation
     , Metadata, withMetadata, moduleNameFromMetadata, moduleNameNodeFromMetadata, isInSourceDirectories
@@ -23,7 +23,6 @@ module Review.Rule exposing
     , ignoreErrorsForDirectories, ignoreErrorsForFiles, filterErrorsForFiles
     , withDataExtractor, preventExtract
     , reviewV3, reviewV2, review, ProjectData, ruleName, ruleProvidesFixes, ruleKnowsAboutIgnoredFiles, withRuleId, getConfigurationError
-    , Required, Forbidden
     )
 
 {-| This module contains functions that are used for writing rules.
@@ -220,7 +219,7 @@ Project rules can also report errors in the `elm.json` or the `README.md` files.
 If you are new to writing rules, I would recommend learning [how to build a module rule](#creating-a-module-rule)
 first, as they are in practice a simpler version of project rules.
 
-@docs ProjectRuleSchema, newProjectRuleSchema, fromProjectRuleSchema, withModuleVisitor, withModuleContext, withModuleContext, withElmJsonProjectVisitor, withReadmeProjectVisitor, withDirectDependenciesProjectVisitor, withDependenciesProjectVisitor, withFinalProjectEvaluation, withContextFromImportedModules
+@docs ProjectRuleSchema, newProjectRuleSchema, fromProjectRuleSchema, withModuleVisitor, withElmJsonProjectVisitor, withReadmeProjectVisitor, withDirectDependenciesProjectVisitor, withDependenciesProjectVisitor, withFinalProjectEvaluation, withContextFromImportedModules
 @docs providesFixesForProjectRule
 
 
@@ -279,11 +278,6 @@ find the tools to extract data below.
 # Running rules
 
 @docs reviewV3, reviewV2, review, ProjectData, ruleName, ruleProvidesFixes, ruleKnowsAboutIgnoredFiles, withRuleId, getConfigurationError
-
-
-# Internals
-
-@docs Required, Forbidden
 
 -}
 
@@ -1113,7 +1107,7 @@ Evaluating/visiting a node means two things:
     part of the traversal evaluation.
 
 -}
-newProjectRuleSchema : String -> projectContext -> ProjectRuleSchema { canAddModuleVisitor : (), withModuleContext : Forbidden } projectContext moduleContext
+newProjectRuleSchema : String -> projectContext -> ProjectRuleSchema { canAddModuleVisitor : () } projectContext moduleContext
 newProjectRuleSchema name initialProjectContext =
     ProjectRuleSchema
         { name = name
@@ -1134,7 +1128,7 @@ newProjectRuleSchema name initialProjectContext =
 
 {-| Create a [`Rule`](#Rule) from a configured [`ProjectRuleSchema`](#ProjectRuleSchema).
 -}
-fromProjectRuleSchema : ProjectRuleSchema { schemaState | withModuleContext : Forbidden, hasAtLeastOneVisitor : () } projectContext moduleContext -> Rule
+fromProjectRuleSchema : ProjectRuleSchema { schemaState | hasAtLeastOneVisitor : () } projectContext moduleContext -> Rule
 fromProjectRuleSchema (ProjectRuleSchema schema) =
     Rule
         { name = schema.name
@@ -1283,98 +1277,7 @@ as [`withElmJsonProjectVisitor`](#withElmJsonProjectVisitor)).
 rule schema and adds visitors to it, using the same functions as for building a
 [`ModuleRuleSchema`](#ModuleRuleSchema).
 
-When you use `withModuleVisitor`, you will be required to use [`withModuleContext`](#withModuleContext),
-in order to specify how to create a `moduleContext` from a `projectContext` and vice-versa.
-
--}
-withModuleVisitor :
-    (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { moduleSchemaState | hasAtLeastOneVisitor : () } moduleContext)
-    -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : () } projectContext moduleContext
-    -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : (), hasAtLeastOneVisitor : (), withModuleContext : Required } projectContext moduleContext
-withModuleVisitor visitor (ProjectRuleSchema schema) =
-    ProjectRuleSchema { schema | moduleVisitors = removeExtensibleRecordTypeVariable visitor :: schema.moduleVisitors }
-
-
-{-| This function that is supplied by the user will be stored in the `ProjectRuleSchema`,
-but it contains an extensible record. This means that `ProjectRuleSchema` will
-need an additional type variable for no useful value. Because we have full control
-over the `ModuleRuleSchema` in this module, we can change the phantom type to be
-whatever we want it to be, and we'll change it something that makes sense but
-without the extensible record type variable.
--}
-removeExtensibleRecordTypeVariable :
-    (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { a | hasAtLeastOneVisitor : () } moduleContext)
-    -> (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { hasAtLeastOneVisitor : () } moduleContext)
-removeExtensibleRecordTypeVariable function =
-    function >> (\(ModuleRuleSchema param) -> ModuleRuleSchema param)
-
-
-{-| Creates a rule that will **only** report a configuration error, which stops `elm-review` from reviewing the project
-until the user has addressed the issue.
-
-When writing rules, some of them may take configuration arguments that specify what exactly the rule should do.
-I recommend to define custom types to limit the possibilities of what can be considered valid and invalid configuration,
-so that the user gets information from the compiler when the configuration is unexpected.
-
-Unfortunately it is not always possible or practical to let the type system forbid invalid possibilities, and you may need to
-manually parse or validate the arguments.
-
-    rule : SomeCustomConfiguration -> Rule
-    rule config =
-        case parseFunctionName config.functionName of
-            Nothing ->
-                Rule.configurationError "RuleName"
-                    { message = config.functionName ++ " is not a valid function name"
-                    , details =
-                        [ "I was expecting functionName to be a valid Elm function name."
-                        , "When that is not the case, I am not able to function as expected."
-                        ]
-                    }
-
-            Just functionName ->
-                Rule.newModuleRuleSchema "RuleName" ()
-                    |> Rule.withExpressionEnterVisitor (expressionVisitor functionName)
-                    |> Rule.fromModuleRuleSchema
-
-When you need to look at the project before determining whether something is actually a configuration error, for instance
-when reporting that a targeted function does not fit some criteria (unexpected arguments, ...), you should go for more
-usual errors like [`error`](#error) or potentially [`globalError`](#globalError). [`error`](#error) would be better because
-it will give the user a starting place to fix the issue.
-
-Be careful that the rule name is the same for the rule and for the configuration error.
-
-The `message` and `details` represent the [message you want to display to the user](#a-helpful-error-message-and-details).
-The `details` is a list of paragraphs, and each item will be visually separated
-when shown to the user. The details may not be empty, and this will be enforced
-by the tests automatically.
-
--}
-configurationError : String -> { message : String, details : List String } -> Rule
-configurationError name configurationError_ =
-    -- IGNORE TCO
-    Rule
-        { name = name
-        , id = 0
-        , exceptions = Exceptions.init
-        , requestedData = RequestedData.none
-        , providesFixes = False
-        , ruleProjectVisitor = Err configurationError_
-        }
-
-
-{-| Used for phantom type constraints. You can safely ignore this type.
--}
-type Required
-    = Required Never
-
-
-{-| Used for phantom type constraints. You can safely ignore this type.
--}
-type Forbidden
-    = Forbidden Never
-
-
-{-| Specify, if the project rule has a [module visitor](#withModuleVisitor), how to:
+When you use `withModuleVisitor`, you also need to specify how to:
 
   - convert a project context to a module context, through [`fromProjectToModule`]
   - convert a module context to a project context, through [`fromModuleToProject`]
@@ -1641,22 +1544,92 @@ you to request more information
 [`withContextFromImportedModules`]: #withContextFromImportedModules
 
 -}
-withModuleContext :
-    { fromProjectToModule : ContextCreator (projectContext -> moduleContext)
-    , fromModuleToProject : ContextCreator (moduleContext -> projectContext)
-    , foldProjectContexts : projectContext -> projectContext -> projectContext
-    }
-    -> ProjectRuleSchema { schemaState | canAddModuleVisitor : (), withModuleContext : Required } projectContext moduleContext
-    -> ProjectRuleSchema { schemaState | hasAtLeastOneVisitor : (), withModuleContext : Forbidden } projectContext moduleContext
-withModuleContext functions (ProjectRuleSchema schema) =
+withModuleVisitor :
+    (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { moduleSchemaState | hasAtLeastOneVisitor : () } moduleContext)
+    ->
+        { fromProjectToModule : ContextCreator (projectContext -> moduleContext)
+        , fromModuleToProject : ContextCreator (moduleContext -> projectContext)
+        , foldProjectContexts : projectContext -> projectContext -> projectContext
+        }
+    -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : () } projectContext moduleContext
+    -> ProjectRuleSchema { projectSchemaState | hasAtLeastOneVisitor : () } projectContext moduleContext
+withModuleVisitor visitor functions (ProjectRuleSchema schema) =
     ProjectRuleSchema
         { schema
-            | moduleContextCreator = Just functions.fromProjectToModule
+            | moduleVisitors = removeExtensibleRecordTypeVariable visitor :: schema.moduleVisitors
+            , moduleContextCreator = Just functions.fromProjectToModule
             , folder =
                 Just
                     { fromModuleToProject = functions.fromModuleToProject
                     , foldProjectContexts = functions.foldProjectContexts
                     }
+        }
+
+
+{-| This function that is supplied by the user will be stored in the `ProjectRuleSchema`,
+but it contains an extensible record. This means that `ProjectRuleSchema` will
+need an additional type variable for no useful value. Because we have full control
+over the `ModuleRuleSchema` in this module, we can change the phantom type to be
+whatever we want it to be, and we'll change it something that makes sense but
+without the extensible record type variable.
+-}
+removeExtensibleRecordTypeVariable :
+    (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { a | hasAtLeastOneVisitor : () } moduleContext)
+    -> (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { hasAtLeastOneVisitor : () } moduleContext)
+removeExtensibleRecordTypeVariable function =
+    function >> (\(ModuleRuleSchema param) -> ModuleRuleSchema param)
+
+
+{-| Creates a rule that will **only** report a configuration error, which stops `elm-review` from reviewing the project
+until the user has addressed the issue.
+
+When writing rules, some of them may take configuration arguments that specify what exactly the rule should do.
+I recommend to define custom types to limit the possibilities of what can be considered valid and invalid configuration,
+so that the user gets information from the compiler when the configuration is unexpected.
+
+Unfortunately it is not always possible or practical to let the type system forbid invalid possibilities, and you may need to
+manually parse or validate the arguments.
+
+    rule : SomeCustomConfiguration -> Rule
+    rule config =
+        case parseFunctionName config.functionName of
+            Nothing ->
+                Rule.configurationError "RuleName"
+                    { message = config.functionName ++ " is not a valid function name"
+                    , details =
+                        [ "I was expecting functionName to be a valid Elm function name."
+                        , "When that is not the case, I am not able to function as expected."
+                        ]
+                    }
+
+            Just functionName ->
+                Rule.newModuleRuleSchema "RuleName" ()
+                    |> Rule.withExpressionEnterVisitor (expressionVisitor functionName)
+                    |> Rule.fromModuleRuleSchema
+
+When you need to look at the project before determining whether something is actually a configuration error, for instance
+when reporting that a targeted function does not fit some criteria (unexpected arguments, ...), you should go for more
+usual errors like [`error`](#error) or potentially [`globalError`](#globalError). [`error`](#error) would be better because
+it will give the user a starting place to fix the issue.
+
+Be careful that the rule name is the same for the rule and for the configuration error.
+
+The `message` and `details` represent the [message you want to display to the user](#a-helpful-error-message-and-details).
+The `details` is a list of paragraphs, and each item will be visually separated
+when shown to the user. The details may not be empty, and this will be enforced
+by the tests automatically.
+
+-}
+configurationError : String -> { message : String, details : List String } -> Rule
+configurationError name configurationError_ =
+    -- IGNORE TCO
+    Rule
+        { name = name
+        , id = 0
+        , exceptions = Exceptions.init
+        , requestedData = RequestedData.none
+        , providesFixes = False
+        , ruleProjectVisitor = Err configurationError_
         }
 
 

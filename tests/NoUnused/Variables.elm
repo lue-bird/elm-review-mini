@@ -104,7 +104,6 @@ rule =
         |> Rule.withElmJsonProjectVisitor (\project context -> ( [], elmJsonVisitor project context ))
         |> Rule.withDirectDependenciesProjectVisitor dependenciesVisitor
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

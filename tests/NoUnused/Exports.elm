@@ -57,7 +57,6 @@ rule : Rule
 rule =
     Rule.newProjectRuleSchema "NoUnused.Exports" initialProjectContext
         |> Rule.withModuleVisitor moduleVisitor
-        |> Rule.withModuleContext
             { fromProjectToModule = fromProjectToModule
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts

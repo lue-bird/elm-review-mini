@@ -83,7 +83,6 @@ rule config =
         Ok target ->
             Rule.newProjectRuleSchema "NoUnsafeRegexFromLiteral" initialProjectContext
                 |> Rule.withModuleVisitor (moduleVisitor target)
-                |> Rule.withModuleContext
                     { fromProjectToModule = fromProjectToModule
                     , fromModuleToProject = fromModuleToProject target
                     , foldProjectContexts = foldProjectContexts
