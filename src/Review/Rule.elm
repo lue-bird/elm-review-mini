@@ -1290,8 +1290,7 @@ in order to specify how to create a `moduleContext` from a `projectContext` and 
 withModuleVisitor :
     (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { moduleSchemaState | hasAtLeastOneVisitor : () } moduleContext)
     -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : () } projectContext moduleContext
-    -- TODO BREAKING Change: add hasAtLeastOneVisitor : ()
-    -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : (), withModuleContext : Required } projectContext moduleContext
+    -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : (), hasAtLeastOneVisitor : (), withModuleContext : Required } projectContext moduleContext
 withModuleVisitor visitor (ProjectRuleSchema schema) =
     ProjectRuleSchema { schema | moduleVisitors = removeExtensibleRecordTypeVariable visitor :: schema.moduleVisitors }
 
