@@ -1035,8 +1035,6 @@ type alias ProjectRuleSchemaData projectContext moduleContext =
 
     -- TODO Jeroen Only allow to set it if there is a folder, but not several times
     , traversalType : TraversalType
-
-    -- TODO Jeroen Only allow to set it if there is a folder and module visitors?
     , finalEvaluationFn : Maybe (projectContext -> List (Error {}))
 
     -- TODO Breaking change only allow a single data extractor, and only for project rules
