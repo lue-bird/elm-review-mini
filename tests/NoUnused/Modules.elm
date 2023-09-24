@@ -52,8 +52,8 @@ rule : Rule
 rule =
     Rule.newProjectRuleSchema "NoUnused.Modules" initialProjectContext
         |> Rule.withModuleVisitor moduleVisitor
-            { fromProjectToModule = fromProjectToModule
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = projectToModule
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withElmJsonProjectVisitor elmJsonVisitor
@@ -109,8 +109,8 @@ initialProjectContext =
     }
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (\projectContext ->
             { importedModules = Set.empty
@@ -120,8 +120,8 @@ fromProjectToModule =
         )
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\(Node moduleNameRange moduleName) moduleKey moduleContext ->
             { modules =

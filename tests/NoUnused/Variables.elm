@@ -104,8 +104,8 @@ rule =
         |> Rule.withElmJsonProjectVisitor (\project context -> ( [], elmJsonVisitor project context ))
         |> Rule.withDirectDependenciesProjectVisitor dependenciesVisitor
         |> Rule.withModuleVisitor moduleVisitor
-            { fromProjectToModule = fromProjectToModule
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = projectToModule
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withContextFromImportedModules
@@ -227,8 +227,8 @@ initialContext =
     }
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (\lookupTable { isApplication, customTypes } ->
             { lookupTable = lookupTable
@@ -249,8 +249,8 @@ fromProjectToModule =
         |> Rule.withModuleNameLookupTable
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\moduleName moduleContext ->
             { customTypes =

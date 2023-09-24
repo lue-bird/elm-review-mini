@@ -22,8 +22,8 @@ rule : Maybe (Rule.Error { useErrorForModule : () }) -> Rule
 rule maybeError =
     Rule.newProjectRuleSchema "TestRule" Dict.empty
         |> Rule.withModuleVisitor moduleVisitor
-            { fromProjectToModule = fromProjectToModule
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = projectToModule
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withFinalProjectEvaluation
@@ -45,8 +45,8 @@ moduleVisitor schema =
         |> Rule.withDeclarationListVisitor (\node context -> ( [], declarationListVisitor node context ))
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (\_ ->
             { declarations = []
@@ -54,8 +54,8 @@ fromProjectToModule =
         )
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\moduleName moduleContext ->
             Dict.singleton (String.join "." moduleName) moduleContext.declarations

@@ -165,7 +165,7 @@ computeHelp cacheKey moduleName module_ project =
             let
                 moduleContext : Context
                 moduleContext =
-                    fromProjectToModule moduleName imported
+                    projectToModule moduleName imported
                         |> collectModuleDocs moduleAst
                         |> collectLookupTable moduleAst.declarations
             in
@@ -217,7 +217,7 @@ computeOnlyModuleDocs moduleName module_ modulesByModuleName deps projectCache =
 
         moduleContext : Context
         moduleContext =
-            fromProjectToModule moduleName imported
+            projectToModule moduleName imported
                 |> collectModuleDocs moduleAst
 
         moduleDocs : Elm.Docs.Module
@@ -388,8 +388,8 @@ computeDependencies project =
         |> List.foldl (\dependencyModule acc -> Dict.insert (String.split "." dependencyModule.name) dependencyModule acc) Dict.empty
 
 
-fromProjectToModule : ModuleName -> Dict ModuleName Elm.Docs.Module -> Context
-fromProjectToModule moduleName modules =
+projectToModule : ModuleName -> Dict ModuleName Elm.Docs.Module -> Context
+projectToModule moduleName modules =
     { scopes = NonEmpty.fromElement emptyScope
     , localTypes = Set.empty
     , importAliases = Dict.empty

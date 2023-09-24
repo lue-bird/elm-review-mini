@@ -45,8 +45,8 @@ projectRule =
                             )
                         )
             )
-            { fromProjectToModule = Rule.initContextCreator identity
-            , fromModuleToProject = Rule.initContextCreator identity
+            { projectToModule = Rule.initContextCreator identity
+            , moduleToProject = Rule.initContextCreator identity
             , foldProjectContexts = \_ b -> b
             }
         |> Rule.withContextFromImportedModules
@@ -227,16 +227,16 @@ ruleThatListsIgnoredFiles : Rule
 ruleThatListsIgnoredFiles =
     Rule.newProjectRuleSchema "ListIgnoredFiles" Set.empty
         |> Rule.withModuleVisitor (Rule.withExpressionEnterVisitor (\_ context -> ( [], context )))
-            { fromProjectToModule = Rule.initContextCreator (\_ -> ())
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = Rule.initContextCreator (\_ -> ())
+            , moduleToProject = moduleToProject
             , foldProjectContexts = Set.union
             }
         |> Rule.withDataExtractor (\set -> set |> Set.toList |> List.sort |> Encode.list (String.join "." >> Encode.string))
         |> Rule.fromProjectRuleSchema
 
 
-fromModuleToProject : Rule.ContextCreator (() -> Set ModuleName)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (() -> Set ModuleName)
+moduleToProject =
     Rule.initContextCreator
         (\moduleName isIgnored () ->
             if isIgnored then

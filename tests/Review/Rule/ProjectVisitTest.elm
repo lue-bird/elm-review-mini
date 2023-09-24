@@ -23,15 +23,15 @@ baseRule : Rule.ProjectRuleSchema { hasAtLeastOneVisitor : () } ProjectContext (
 baseRule =
     Rule.newProjectRuleSchema "Visitor order" initialContext
         |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
-            { fromProjectToModule = Rule.initContextCreator (\_ -> ())
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = Rule.initContextCreator (\_ -> ())
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withFinalProjectEvaluation finalEvaluation
 
 
-fromModuleToProject : Rule.ContextCreator (a -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (a -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\moduleKey moduleName _ ->
             { aModuleKey = Just moduleKey

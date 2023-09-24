@@ -125,8 +125,8 @@ rule =
         |> Rule.withElmJsonProjectVisitor elmJsonVisitor
         |> Rule.withReadmeProjectVisitor readmeVisitor
         |> Rule.withModuleVisitor moduleVisitor
-            { fromProjectToModule = fromProjectToModule
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = projectToModule
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withFinalProjectEvaluation finalEvaluation
@@ -188,8 +188,8 @@ type alias MaybeExposedLinkData =
     }
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (\ast moduleName projectContext ->
             let
@@ -214,8 +214,8 @@ fromProjectToModule =
         |> Rule.withModuleName
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\moduleKey moduleContext ->
             { fileLinksAndSections =

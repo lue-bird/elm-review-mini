@@ -1444,8 +1444,8 @@ ignoredChangedResultsTest =
                 testRule =
                     Rule.newProjectRuleSchema "TestRule" initialContext
                         |> Rule.withModuleVisitor (Rule.withModuleDefinitionVisitor (\_ context -> ( [], context )))
-                            { fromProjectToModule = fromProjectToModule
-                            , fromModuleToProject = fromModuleToProject
+                            { projectToModule = projectToModule
+                            , moduleToProject = moduleToProject
                             , foldProjectContexts = foldProjectContexts
                             }
                         |> Rule.withFinalProjectEvaluation finalEvaluation
@@ -1455,12 +1455,12 @@ ignoredChangedResultsTest =
                 initialContext =
                     Dict.empty
 
-                fromProjectToModule : Rule.ContextCreator (IgnoredChangedResultsContext -> ())
-                fromProjectToModule =
+                projectToModule : Rule.ContextCreator (IgnoredChangedResultsContext -> ())
+                projectToModule =
                     Rule.initContextCreator (\_ -> ())
 
-                fromModuleToProject : Rule.ContextCreator (() -> IgnoredChangedResultsContext)
-                fromModuleToProject =
+                moduleToProject : Rule.ContextCreator (() -> IgnoredChangedResultsContext)
+                moduleToProject =
                     Rule.initContextCreator
                         (\ast isFileIgnored moduleName () ->
                             if isFileIgnored then

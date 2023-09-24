@@ -984,8 +984,8 @@ fromModuleRuleSchema ((ModuleRuleSchema schema) as moduleVisitor) =
     newProjectRuleSchema schema.name ()
         |> withModuleVisitor
             (\_ -> moduleVisitor)
-            { fromProjectToModule = contextCreatorToLazy schema.moduleContextCreator
-            , fromModuleToProject = initContextCreator (\_ -> ())
+            { projectToModule = contextCreatorToLazy schema.moduleContextCreator
+            , moduleToProject = initContextCreator (\_ -> ())
             , foldProjectContexts = \() () -> ()
             }
         |> (if schema.providesFixes then
@@ -1109,7 +1109,7 @@ fromProjectRuleSchema (ProjectRuleSchema schema) =
         , requestedData =
             RequestedData.combine
                 (Maybe.map requestedDataFromContextCreator schema.moduleContextCreator)
-                (Maybe.map (.fromModuleToProject >> requestedDataFromContextCreator) schema.folder)
+                (Maybe.map (.moduleToProject >> requestedDataFromContextCreator) schema.folder)
         , providesFixes = schema.providesFixes
         , ruleProjectVisitor =
             Ok
@@ -1251,8 +1251,8 @@ rule schema and adds visitors to it, using the same functions as for building a
 
 When you use `withModuleVisitor`, you also need to specify how to:
 
-  - convert a project context to a module context, through [`fromProjectToModule`]
-  - convert a module context to a project context, through [`fromModuleToProject`]
+  - convert a project context to a module context, through [`projectToModule`]
+  - convert a module context to a project context, through [`moduleToProject`]
   - fold (merge) project contexts, through [`foldProjectContexts`]
 
 **NOTE**: I suggest reading the section about [`foldProjectContexts`] carefully,
@@ -1284,9 +1284,9 @@ The following sections will explain each function, and will be summarized by an
 example.
 
 
-### `fromProjectToModule`
+### `projectToModule`
 
-The initial `moduleContext` of the module visitor is computed using `fromProjectToModule`
+The initial `moduleContext` of the module visitor is computed using `projectToModule`
 from a `projectContext`. By default, this `projectContext` will be the result of
 visiting the project-related files (`elm.json`, `README.md`, ...).
 If [`withContextFromImportedModules`] was used, then the value will be this last
@@ -1296,7 +1296,7 @@ using [`foldProjectContexts`].
 The [`ModuleKey`] will allow you to report errors for this specific module
 using [`errorForModule`](#errorForModule) from the [final project evaluation] or
 while visiting another module. If you plan to do that, you should store this in
-the `moduleContext`. You can also get it from [`fromModuleToProject`], so choose
+the `moduleContext`. You can also get it from [`moduleToProject`], so choose
 what's most convenient.
 
 The [`Node`] containing the module name is passed for convenience, so you don't
@@ -1305,15 +1305,15 @@ it is in [`elm-syntax`](https://package.elm-lang.org/packages/stil4m/elm-syntax/
 the value will be `[ "My", "Module" ]` if the module name is `My.Module`.
 
 
-### `fromModuleToProject`
+### `moduleToProject`
 
 When a module has finished being analyzed, the final `moduleContext` will be
 converted into a `projectContext`, so that it can later be folded with the other
 project contexts using `foldProjectContexts`. The resulting `projectContext`
 will be fed into the [final project evaluation] and potentially into
-[`fromProjectToModule`] for modules that import the current one.
+[`projectToModule`] for modules that import the current one.
 
-Similarly to `fromProjectToModule`, the [`Node`] containing the module name and
+Similarly to `projectToModule`, the [`Node`] containing the module name and
 the [`ModuleKey`] are passed for convenience, so you don't have to store them in
 the `moduleContext` only to store them in the `projectContext`.
 
@@ -1343,7 +1343,7 @@ It is not necessary for the function to be commutative (i.e. that
 `foldProjectContexts a b` equals `foldProjectContexts b a`). It is fine to take
 the value from the "initial" `projectContext` and ignore the other one, especially
 for data computed in the project-related visitors (for which you will probably
-define a dummy value in the `fromModuleToProject` function). If it helps, imagine
+define a dummy value in the `moduleToProject` function). If it helps, imagine
 that the second argument is the initial `projectContext`, or that it is an accumulator
 just like in `List.foldl`.
 
@@ -1363,8 +1363,8 @@ but are unused in the rest of the project.
             |> Rule.withElmJsonProjectVisitor elmJsonVisitor
             |> Rule.withModuleVisitor moduleVisitor
             |> Rule.withModuleContext
-                { fromProjectToModule = fromProjectToModule
-                , fromModuleToProject = fromModuleToProject
+                { projectToModule = projectToModule
+                , moduleToProject = moduleToProject
                 , foldProjectContexts = foldProjectContexts
                 }
             |> Rule.withFinalProjectEvaluation finalEvaluationForProject
@@ -1409,8 +1409,8 @@ but are unused in the rest of the project.
         , used = Set.empty
         }
 
-    fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-    fromProjectToModule projectContext =
+    projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+    projectToModule projectContext =
         Rule.initContextCreator
             (\moduleName ->
                 { isExposed = Set.member moduleName projectContext.exposedModules
@@ -1420,8 +1420,8 @@ but are unused in the rest of the project.
             )
             |> Rule.withModuleName
 
-    fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-    fromModuleToProject moduleKey moduleName moduleContext =
+    moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+    moduleToProject moduleKey moduleName moduleContext =
         Rule.initContextCreator
             (\moduleKey moduleName moduleContext ->
                 { -- We don't care about this value, we'll take
@@ -1483,22 +1483,22 @@ you to request more information
         Rule.newProjectRuleSchema "NoMissingSubscriptionsCall" initialProjectContext
             |> Rule.withModuleVisitor moduleVisitor
             |> Rule.withModuleContext
-                { fromProjectToModule = fromProjectToModule
-                , fromModuleToProject = fromModuleToProject
+                { projectToModule = projectToModule
+                , moduleToProject = moduleToProject
                 , foldProjectContexts = foldProjectContexts
                 }
             |> Rule.fromProjectRuleSchema
 
-    fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-    fromProjectToModule =
+    projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+    projectToModule =
         Rule.initContextCreator
             (\projectContext ->
                 { -- something
                 }
             )
 
-    fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-    fromModuleToProject =
+    moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+    moduleToProject =
         Rule.initContextCreator
             (\moduleKey moduleName moduleContext ->
                 { moduleKeys = Dict.singleton moduleName moduleKey
@@ -1509,8 +1509,8 @@ you to request more information
 
 [`ModuleKey`]: #ModuleKey
 [`Node`]: https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Node#Node
-[`fromProjectToModule`]: #-fromprojecttomodule-
-[`fromModuleToProject`]: #-frommoduletoproject-
+[`projectToModule`]: #-fromprojecttomodule-
+[`moduleToProject`]: #-frommoduletoproject-
 [`foldProjectContexts`]: #-foldprojectcontexts-
 [final project evaluation]: #withFinalProjectEvaluation
 [`withContextFromImportedModules`]: #withContextFromImportedModules
@@ -1519,8 +1519,8 @@ you to request more information
 withModuleVisitor :
     (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { moduleSchemaState | hasAtLeastOneVisitor : () } moduleContext)
     ->
-        { fromProjectToModule : ContextCreator (projectContext -> moduleContext)
-        , fromModuleToProject : ContextCreator (moduleContext -> projectContext)
+        { projectToModule : ContextCreator (projectContext -> moduleContext)
+        , moduleToProject : ContextCreator (moduleContext -> projectContext)
         , foldProjectContexts : projectContext -> projectContext -> projectContext
         }
     -> ProjectRuleSchema { projectSchemaState | canAddModuleVisitor : () } projectContext moduleContext
@@ -1529,10 +1529,10 @@ withModuleVisitor visitor functions (ProjectRuleSchema schema) =
     ProjectRuleSchema
         { schema
             | moduleVisitors = removeExtensibleRecordTypeVariable visitor :: schema.moduleVisitors
-            , moduleContextCreator = Just functions.fromProjectToModule
+            , moduleContextCreator = Just functions.projectToModule
             , folder =
                 Just
-                    { fromModuleToProject = functions.fromModuleToProject
+                    { moduleToProject = functions.moduleToProject
                     , foldProjectContexts = functions.foldProjectContexts
                     }
         }
@@ -1750,7 +1750,7 @@ currently visited module. You can use for instance to know what is exposed in a
 different module.
 
 When you finish analyzing a module, the `moduleContext` is turned into a `projectContext`
-through [`fromModuleToProject`](#newProjectRuleSchema). Before analyzing a module,
+through [`moduleToProject`](#newProjectRuleSchema). Before analyzing a module,
 the `projectContext`s of its imported modules get folded into a single one
 starting with the initial context (that may have visited the
 [`elm.json` file](#withElmJsonProjectVisitor) and/or the [project's dependencies](#withDependenciesProjectVisitor))
@@ -2723,7 +2723,7 @@ errorWithFix info range fixes =
 key in order to use the [`errorForModule`](#errorForModule) function. This is to
 prevent creating errors for modules you have not visited, or files that do not exist.
 
-You can get a `ModuleKey` from the `fromProjectToModule` and `fromModuleToProject`
+You can get a `ModuleKey` from the `projectToModule` and `moduleToProject`
 functions that you define when using [`newProjectRuleSchema`](#newProjectRuleSchema).
 
 -}
@@ -2734,7 +2734,7 @@ type ModuleKey
 {-| Just like [`error`](#error), create an [`Error`](#Error) but for a specific module, instead of the module that is being
 visited.
 
-You will need a [`ModuleKey`](#ModuleKey), which you can get from the `fromProjectToModule` and `fromModuleToProject`
+You will need a [`ModuleKey`](#ModuleKey), which you can get from the `projectToModule` and `moduleToProject`
 functions that you define when using [`newProjectRuleSchema`](#newProjectRuleSchema).
 
 -}
@@ -3379,7 +3379,7 @@ type TraversalAndFolder projectContext moduleContext
 
 
 type alias Folder projectContext moduleContext =
-    { fromModuleToProject : ContextCreator (moduleContext -> projectContext)
+    { moduleToProject : ContextCreator (moduleContext -> projectContext)
     , foldProjectContexts : projectContext -> projectContext -> projectContext
     }
 
@@ -5055,8 +5055,8 @@ createModuleVisitorFromProjectVisitorHelp schema raise hidden traversalAndFolder
                                     outputProjectContext : projectContext
                                     outputProjectContext =
                                         case getFolderFromTraversal traversalAndFolder of
-                                            Just { fromModuleToProject } ->
-                                                applyContextCreator availableData isFileIgnored fromModuleToProject resultModuleContext
+                                            Just { moduleToProject } ->
+                                                applyContextCreator availableData isFileIgnored moduleToProject resultModuleContext
 
                                             Nothing ->
                                                 schema.initialProjectContext
@@ -5659,13 +5659,13 @@ withModuleDocumentation (ContextCreator fn requested) =
         Rule.newProjectRuleSchema "NoMissingSubscriptionsCall" initialProjectContext
             |> Rule.withModuleVisitor moduleVisitor
             |> Rule.withModuleContext
-                { fromProjectToModule = fromProjectToModule
-                , fromModuleToProject = fromModuleToProject
+                { projectToModule = projectToModule
+                , moduleToProject = moduleToProject
                 , foldProjectContexts = foldProjectContexts
                 }
 
-    fromModuleToProject : Rule.ContextCreator Context
-    fromModuleToProject =
+    moduleToProject : Rule.ContextCreator Context
+    moduleToProject =
         Rule.initContextCreator
             (\moduleKey -> { moduleKey = moduleKey })
             |> Rule.withModuleKey
@@ -5701,13 +5701,13 @@ Using [`withModuleContext`](#withModuleContext) in a project rule:
         Rule.newProjectRuleSchema "YourRuleName" initialProjectContext
             |> Rule.withModuleVisitor moduleVisitor
             |> Rule.withModuleContext
-                { fromProjectToModule = fromProjectToModule
-                , fromModuleToProject = fromModuleToProject
+                { projectToModule = projectToModule
+                , moduleToProject = moduleToProject
                 , foldProjectContexts = foldProjectContexts
                 }
 
-    fromModuleToProject : Rule.ContextCreator Context
-    fromModuleToProject =
+    moduleToProject : Rule.ContextCreator Context
+    moduleToProject =
         Rule.initContextCreator
             (\filePath -> { filePath = filePath })
             |> Rule.withFilePath

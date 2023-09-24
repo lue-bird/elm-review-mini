@@ -11,8 +11,8 @@ rule =
     Rule.newProjectRuleSchema "No_WithModuleVisitor_After_WithModuleContext" ()
         |> Rule.withModuleVisitor moduleVisitor
         |> Rule.withModuleContext
-            { fromProjectToModule = \_ _ () -> ()
-            , fromModuleToProject = \_ _ () -> ()
+            { projectToModule = \_ _ () -> ()
+            , moduleToProject = \_ _ () -> ()
             , foldProjectContexts = \_ () -> ()
             }
         |> Rule.withModuleVisitor moduleVisitor

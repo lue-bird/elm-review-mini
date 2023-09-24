@@ -99,8 +99,8 @@ rule =
                     |> Rule.withModuleDocumentationVisitor moduleDocumentationVisitor
                     |> Rule.withDeclarationListVisitor (\nodes context -> ( declarationListVisitor nodes context, context ))
             )
-            { fromModuleToProject = Rule.initContextCreator (\_ -> initialProjectContext)
-            , fromProjectToModule = initialContext
+            { moduleToProject = Rule.initContextCreator (\_ -> initialProjectContext)
+            , projectToModule = initialContext
             , foldProjectContexts = \a _ -> a
             }
         |> Rule.withElmJsonProjectVisitor (\maybeElmJson context -> ( [], elmJsonVisitor maybeElmJson context ))

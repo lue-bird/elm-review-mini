@@ -209,8 +209,8 @@ rule : Int -> Rule
 rule threshold =
     Rule.newProjectRuleSchema "CognitiveComplexity" initialContext
         |> Rule.withModuleVisitor (moduleVisitor threshold)
-            { fromProjectToModule = fromProjectToModule
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = projectToModule
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withDataExtractor dataExtractor
@@ -274,8 +274,8 @@ initialContext =
     Dict.empty
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (always
             { nesting = 0
@@ -289,8 +289,8 @@ fromProjectToModule =
         )
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\moduleName moduleContext ->
             let

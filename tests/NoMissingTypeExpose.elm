@@ -90,8 +90,8 @@ rule =
         |> Rule.withElmJsonProjectVisitor elmJsonVisitor
         |> Rule.withDirectDependenciesProjectVisitor dependencyDictVisitor
         |> Rule.withModuleVisitor moduleVisitor
-            { fromProjectToModule = fromProjectToModuleContext
-            , fromModuleToProject = fromModuleToProjectContext
+            { projectToModule = fromProjectToModuleContext
+            , moduleToProject = fromModuleToProjectContext
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withContextFromImportedModules

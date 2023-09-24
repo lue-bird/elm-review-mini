@@ -83,8 +83,8 @@ rule config =
         Ok target ->
             Rule.newProjectRuleSchema "NoUnsafeRegexFromLiteral" initialProjectContext
                 |> Rule.withModuleVisitor (moduleVisitor target)
-                    { fromProjectToModule = fromProjectToModule
-                    , fromModuleToProject = fromModuleToProject target
+                    { projectToModule = projectToModule
+                    , moduleToProject = moduleToProject target
                     , foldProjectContexts = foldProjectContexts
                     }
                 |> Rule.withFinalProjectEvaluation (finalProjectEvaluation target)
@@ -179,8 +179,8 @@ initialProjectContext =
     }
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (\lookupTable _ ->
             { lookupTable = lookupTable
@@ -191,8 +191,8 @@ fromProjectToModule =
         |> Rule.withModuleNameLookupTable
 
 
-fromModuleToProject : Target -> Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject target =
+moduleToProject : Target -> Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject target =
     Rule.initContextCreator
         (\moduleName moduleContext ->
             { foundTargetFunction = moduleContext.foundTargetFunction && (moduleName == target.moduleName)

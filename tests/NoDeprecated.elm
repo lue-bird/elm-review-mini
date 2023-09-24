@@ -107,8 +107,8 @@ rule configuration =
             Rule.newProjectRuleSchema "NoDeprecated" initialProjectContext
                 |> Rule.withDirectDependenciesProjectVisitor (dependenciesVisitor stableConfiguration)
                 |> Rule.withModuleVisitor (moduleVisitor stableConfiguration)
-                    { fromProjectToModule = fromProjectToModule stableConfiguration
-                    , fromModuleToProject = fromModuleToProject
+                    { projectToModule = projectToModule stableConfiguration
+                    , moduleToProject = moduleToProject
                     , foldProjectContexts = foldProjectContexts
                     }
                 |> Rule.withContextFromImportedModules
@@ -154,8 +154,8 @@ type DeprecationReason
     | DeprecatedDependency
 
 
-fromProjectToModule : StableConfiguration -> Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule (StableConfiguration configuration) =
+projectToModule : StableConfiguration -> Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule (StableConfiguration configuration) =
     Rule.initContextCreator
         (\metadata lookupTable projectContext ->
             let
@@ -175,8 +175,8 @@ fromProjectToModule (StableConfiguration configuration) =
         |> Rule.withModuleNameLookupTable
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\metadata moduleContext ->
             { deprecatedModules =

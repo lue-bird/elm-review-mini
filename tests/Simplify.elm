@@ -795,8 +795,8 @@ rule (Configuration config) =
     Rule.newProjectRuleSchema "Simplify" initialContext
         |> Rule.withDirectDependenciesProjectVisitor (dependenciesVisitor (Set.fromList config.ignoreConstructors))
         |> Rule.withModuleVisitor moduleVisitor
-            { fromProjectToModule = fromProjectToModule
-            , fromModuleToProject = fromModuleToProject
+            { projectToModule = projectToModule
+            , moduleToProject = moduleToProject
             , foldProjectContexts = foldProjectContexts
             }
         |> Rule.withContextFromImportedModules
@@ -951,8 +951,8 @@ initialContext =
     }
 
 
-fromModuleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
-fromModuleToProject =
+moduleToProject : Rule.ContextCreator (ModuleContext -> ProjectContext)
+moduleToProject =
     Rule.initContextCreator
         (\moduleContext ->
             { customTypesToReportInCases = Set.empty
@@ -963,8 +963,8 @@ fromModuleToProject =
         )
 
 
-fromProjectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
-fromProjectToModule =
+projectToModule : Rule.ContextCreator (ProjectContext -> ModuleContext)
+projectToModule =
     Rule.initContextCreator
         (\lookupTable metadata extractSourceCode fullAst projectContext ->
             let

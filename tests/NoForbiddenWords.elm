@@ -46,8 +46,8 @@ rule words =
         |> Rule.withElmJsonProjectVisitor (elmJsonVisitor words)
         |> Rule.withReadmeProjectVisitor (readmeVisitor words)
         |> Rule.withModuleVisitor (moduleVisitor words)
-            { fromModuleToProject = Rule.initContextCreator (\() -> ())
-            , fromProjectToModule = Rule.initContextCreator (\() -> ())
+            { moduleToProject = Rule.initContextCreator (\() -> ())
+            , projectToModule = Rule.initContextCreator (\() -> ())
             , foldProjectContexts = \() () -> ()
             }
         |> Rule.fromProjectRuleSchema

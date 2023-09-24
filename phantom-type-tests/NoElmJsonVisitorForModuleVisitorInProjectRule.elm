@@ -11,8 +11,8 @@ rule =
     Rule.newProjectRuleSchema "NoElmJsonVisitorForModuleVisitorInProjectRule" ()
         |> Rule.withModuleVisitor moduleVisitor
         |> Rule.withModuleContext
-            { fromProjectToModule = \_ _ () -> ()
-            , fromModuleToProject = \_ _ () -> ()
+            { projectToModule = \_ _ () -> ()
+            , moduleToProject = \_ _ () -> ()
             , foldProjectContexts = \_ () -> ()
             }
         |> Rule.withFinalProjectEvaluation (\_ -> [])

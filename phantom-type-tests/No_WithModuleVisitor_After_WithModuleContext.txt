@@ -5,8 +5,8 @@ This function cannot handle the argument sent through the (|>) pipe:
 11|     Rule.newProjectRuleSchema "No_WithModuleVisitor_After_WithModuleContext" ()
 12|         |> Rule.withModuleVisitor moduleVisitor
 13|         |> Rule.withModuleContext
-14|             { fromProjectToModule = \_ _ () -> ()
-15|             , fromModuleToProject = \_ _ () -> ()
+14|             { projectToModule = \_ _ () -> ()
+15|             , moduleToProject = \_ _ () -> ()
 16|             , foldProjectContexts = \_ () -> ()
 17|             }
 18|         |> Rule.withModuleVisitor moduleVisitor
