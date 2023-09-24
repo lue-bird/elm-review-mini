@@ -194,8 +194,8 @@ Evaluating/visiting a node means two things:
 @docs withModuleDocumentationVisitor
 @docs withCommentsVisitor
 @docs withImportVisitor
-@docs Direction, withDeclarationEnterVisitor, withDeclarationExitVisitor, withDeclarationVisitor, withDeclarationListVisitor
-@docs withExpressionEnterVisitor, withExpressionExitVisitor, withExpressionVisitor
+@docs withDeclarationEnterVisitor, withDeclarationExitVisitor, withDeclarationListVisitor
+@docs withExpressionEnterVisitor, withExpressionExitVisitor
 @docs withCaseBranchEnterVisitor, withCaseBranchExitVisitor
 @docs withLetDeclarationEnterVisitor, withLetDeclarationExitVisitor
 @docs providesFixesForModuleRule
