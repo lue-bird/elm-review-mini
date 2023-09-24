@@ -112,20 +112,22 @@ a = 1
                     rule : Rule
                     rule =
                         Rule.newModuleRuleSchema "TestRule" ""
-                            |> Rule.withExpressionVisitor (declarationVisitor "A")
-                            |> Rule.withExpressionVisitor (declarationVisitor "B")
-                            |> Rule.withExpressionVisitor (declarationVisitor "C")
+                            |> Rule.withExpressionEnterVisitor (declarationEnterVisitor "A")
+                            |> Rule.withExpressionExitVisitor (declarationExitVisitor "A")
+                            |> Rule.withExpressionEnterVisitor (declarationEnterVisitor "B")
+                            |> Rule.withExpressionExitVisitor (declarationExitVisitor "B")
+                            |> Rule.withExpressionEnterVisitor (declarationEnterVisitor "C")
+                            |> Rule.withExpressionExitVisitor (declarationExitVisitor "C")
                             |> Rule.withFinalModuleEvaluation finalEvaluation
                             |> Rule.fromModuleRuleSchema
 
-                    declarationVisitor : String -> Node Expression -> Rule.Direction -> Context -> ( List (Error {}), Context )
-                    declarationVisitor text _ direction context =
-                        case direction of
-                            Rule.OnEnter ->
-                                ( [], context ++ "\nEnter " ++ text )
+                    declarationEnterVisitor : String -> Node Expression -> Context -> ( List (Error {}), Context )
+                    declarationEnterVisitor text _ context =
+                        ( [], context ++ "\nEnter " ++ text )
 
-                            Rule.OnExit ->
-                                ( [], context ++ "\nExit " ++ text )
+                    declarationExitVisitor : String -> Node Expression -> Context -> ( List (Error {}), Context )
+                    declarationExitVisitor text _ context =
+                        ( [], context ++ "\nExit " ++ text )
 
                     finalEvaluation : Context -> List (Error {})
                     finalEvaluation context =
@@ -158,20 +160,22 @@ Exit A"""
                     rule : Rule
                     rule =
                         Rule.newModuleRuleSchema "TestRule" ""
-                            |> Rule.withDeclarationVisitor (declarationVisitor "A")
-                            |> Rule.withDeclarationVisitor (declarationVisitor "B")
-                            |> Rule.withDeclarationVisitor (declarationVisitor "C")
+                            |> Rule.withDeclarationEnterVisitor (declarationEnterVisitor "A")
+                            |> Rule.withDeclarationExitVisitor (declarationExitVisitor "A")
+                            |> Rule.withDeclarationEnterVisitor (declarationEnterVisitor "B")
+                            |> Rule.withDeclarationExitVisitor (declarationExitVisitor "B")
+                            |> Rule.withDeclarationEnterVisitor (declarationEnterVisitor "C")
+                            |> Rule.withDeclarationExitVisitor (declarationExitVisitor "C")
                             |> Rule.withFinalModuleEvaluation finalEvaluation
                             |> Rule.fromModuleRuleSchema
 
-                    declarationVisitor : String -> Node Declaration -> Rule.Direction -> Context -> ( List (Error {}), Context )
-                    declarationVisitor text _ direction context =
-                        case direction of
-                            Rule.OnEnter ->
-                                ( [], context ++ "\nEnter " ++ text )
+                    declarationEnterVisitor : String -> Node Declaration -> Context -> ( List (Error {}), Context )
+                    declarationEnterVisitor text _ context =
+                        ( [], context ++ "\nEnter " ++ text )
 
-                            Rule.OnExit ->
-                                ( [], context ++ "\nExit " ++ text )
+                    declarationExitVisitor : String -> Node Declaration -> Context -> ( List (Error {}), Context )
+                    declarationExitVisitor text _ context =
+                        ( [], context ++ "\nExit " ++ text )
 
                     finalEvaluation : Context -> List (Error {})
                     finalEvaluation context =

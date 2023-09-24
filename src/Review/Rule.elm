@@ -6,8 +6,8 @@ module Review.Rule exposing
     , withModuleDocumentationVisitor
     , withCommentsVisitor
     , withImportVisitor
-    , Direction(..), withDeclarationEnterVisitor, withDeclarationExitVisitor, withDeclarationVisitor, withDeclarationListVisitor
-    , withExpressionEnterVisitor, withExpressionExitVisitor, withExpressionVisitor
+    , withDeclarationEnterVisitor, withDeclarationExitVisitor, withDeclarationListVisitor
+    , withExpressionEnterVisitor, withExpressionExitVisitor
     , withCaseBranchEnterVisitor, withCaseBranchExitVisitor
     , withLetDeclarationEnterVisitor, withLetDeclarationExitVisitor
     , providesFixesForModuleRule
@@ -889,54 +889,6 @@ getConfigurationError (Rule rule) =
 
         Err err ->
             Just err
-
-
-{-| **@deprecated**
-
-This is used in [`withDeclarationVisitor`](#withDeclarationVisitor) and [`withDeclarationVisitor`](#withDeclarationVisitor),
-which are deprecated and will be removed in the next major version. This type will be removed along with them.
-
-To replicate the same behavior, take a look at
-
-  - [`withDeclarationEnterVisitor`](#withDeclarationEnterVisitor) and [`withDeclarationExitVisitor`](#withDeclarationExitVisitor).
-  - [`withExpressionEnterVisitor`](#withExpressionEnterVisitor) and [`withExpressionExitVisitor`](#withExpressionExitVisitor).
-
-**/@deprecated**
-
-Represents whether a node is being traversed before having seen its children (`OnEnter`ing the node), or after (`OnExit`ing the node).
-
-When visiting the AST, declaration and expression nodes are visited twice: once
-with `OnEnter`, before the children of the node are visited, and once with
-`OnExit`, after the children of the node have been visited.
-In most cases, you'll only want to handle the `OnEnter` case, but there are cases
-where you'll want to visit a [`Node`](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Node#Node)
-after having seen its children.
-
-For instance, if you are trying to detect the unused variables defined inside
-of a let expression, you will want to collect the declaration of variables,
-note which ones are used, and at the end of the block report the ones that weren't used.
-
-    expressionVisitor : Node Expression -> Direction -> Context -> ( List (Rule.Error {}), Context )
-    expressionVisitor node direction context =
-        case ( direction, Node.value node ) of
-            ( Rule.OnEnter, Expression.FunctionOrValue moduleName name ) ->
-                ( [], markVariableAsUsed context name )
-
-            -- Find variables declared in let expression
-            ( Rule.OnEnter, Expression.LetExpression letBlock ) ->
-                ( [], registerVariables context letBlock )
-
-            -- When exiting the let expression, report the variables that were not used.
-            ( Rule.OnExit, Expression.LetExpression _ ) ->
-                ( unusedVariables context |> List.map createError, context )
-
-            _ ->
-                ( [], context )
-
--}
-type Direction
-    = OnEnter
-    | OnExit
 
 
 {-| Creates a schema for a module rule. Will require adding module visitors
@@ -2236,109 +2188,6 @@ withImportVisitor visitor (ModuleRuleSchema schema) =
     ModuleRuleSchema { schema | importVisitor = Just (combineVisitors visitor schema.importVisitor) }
 
 
-{-| **@deprecated**
-
-Use [`withDeclarationEnterVisitor`](#withDeclarationEnterVisitor) and [`withDeclarationExitVisitor`](#withDeclarationExitVisitor) instead.
-In the next major version, this function will be removed and [`withDeclarationEnterVisitor`](#withDeclarationEnterVisitor) will be renamed to `withDeclarationVisitor`.
-
-**/@deprecated**
-
-Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
-[declaration statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Declaration)
-(`someVar = add 1 2`, `type Bool = True | False`, `port output : Json.Encode.Value -> Cmd msg`),
-collect data and/or report patterns. The declarations will be visited in the order of their definition.
-
-The visitor function will be called twice with different [`Direction`](#Direction)
-values. It will be visited with `OnEnter`, then the children will be visited,
-and then it will be visited again with `OnExit`. If you do not check the value of
-the `Direction` parameter, you might end up with duplicate errors and/or an
-unexpected `moduleContext`. Read more about [`Direction` here](#Direction).
-
-The following example forbids exposing a function or a value without it having a
-type annotation.
-
-    import Elm.Syntax.Declaration as Declaration exposing (Declaration)
-    import Elm.Syntax.Exposing as Exposing
-    import Elm.Syntax.Module as Module exposing (Module)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    type ExposedFunctions
-        = All
-        | OnlySome (List String)
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoMissingDocumentationForExposedFunctions" (OnlySome [])
-            |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
-            |> Rule.withDeclarationVisitor declarationVisitor
-            |> Rule.fromModuleRuleSchema
-
-    moduleDefinitionVisitor : Node Module -> ExposedFunctions -> ( List (Rule.Error {}), ExposedFunctions )
-    moduleDefinitionVisitor node context =
-        case Node.value node |> Module.exposingList of
-            Exposing.All _ ->
-                ( [], All )
-
-            Exposing.Explicit exposedValues ->
-                ( [], OnlySome (List.filterMap exposedFunctionName exposedValues) )
-
-    exposedFunctionName : Node Exposing.TopLevelExpose -> Maybe String
-    exposedFunctionName value =
-        case Node.value value of
-            Exposing.FunctionExpose functionName ->
-                Just functionName
-
-            _ ->
-                Nothing
-
-    declarationVisitor : Node Declaration -> Rule.Direction -> ExposedFunctions -> ( List (Rule.Error {}), ExposedFunctions )
-    declarationVisitor node direction context =
-        case ( direction, Node.value node ) of
-            ( Rule.OnEnter, Declaration.FunctionDeclaration { documentation, declaration } ) ->
-                let
-                    functionName : String
-                    functionName =
-                        Node.value declaration |> .name |> Node.value
-                in
-                if documentation == Nothing && isExposed context functionName then
-                    ( [ Rule.error
-                            { message = "Exposed function " ++ functionName ++ " is missing a type annotation"
-                            , details =
-                                [ "Type annotations are very helpful for people who use the module. It can give a lot of information without having to read the contents of the function."
-                                , "To add a type annotation, add a line like `" functionName ++ " : ()`, and replace the `()` by the type of the function. If you don't replace `()`, the compiler should give you a suggestion of what the type should be."
-                                ]
-                            }
-                            (Node.range node)
-                      ]
-                    , context
-                    )
-
-                else
-                    ( [], context )
-
-            _ ->
-                ( [], context )
-
-    isExposed : ExposedFunctions -> String -> Bool
-    isExposed exposedFunctions name =
-        case exposedFunctions of
-            All ->
-                True
-
-            OnlySome exposedList ->
-                List.member name exposedList
-
--}
-withDeclarationVisitor : (Node Declaration -> Direction -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withDeclarationVisitor visitor (ModuleRuleSchema schema) =
-    ModuleRuleSchema
-        { schema
-            | declarationVisitorOnEnter = Just (combineVisitors (\node ctx -> visitor node OnEnter ctx) schema.declarationVisitorOnEnter)
-            , declarationVisitorOnExit = Just (combineExitVisitors (\node ctx -> visitor node OnExit ctx) schema.declarationVisitorOnExit)
-        }
-
-
 {-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
 [declaration statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Declaration)
 (`someVar = add 1 2`, `type Bool = True | False`, `port output : Json.Encode.Value -> Cmd msg`),
@@ -2489,103 +2338,6 @@ and [withExpressionEnterVisitor](#withExpressionEnterVisitor). Otherwise, using
 withDeclarationListVisitor : (List (Node Declaration) -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
 withDeclarationListVisitor visitor (ModuleRuleSchema schema) =
     ModuleRuleSchema { schema | declarationListVisitor = Just (combineVisitors visitor schema.declarationListVisitor) }
-
-
-{-| **@deprecated**
-
-Use [`withExpressionEnterVisitor`](#withExpressionEnterVisitor) and [`withExpressionExitVisitor`](#withExpressionExitVisitor) instead.
-In the next major version, this function will be removed and [`withExpressionEnterVisitor`](#withExpressionEnterVisitor) will be renamed to `withExpressionVisitor`.
-
-**/@deprecated**
-
-Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
-[expressions](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Expression)
-(`1`, `True`, `add 1 2`, `1 + 2`), collect data in the `context` and/or report patterns.
-The expressions are visited in pre-order depth-first search, meaning that an
-expression will be visited, then its first child, the first child's children
-(and so on), then the second child (and so on).
-
-The visitor function will be called twice with different [`Direction`](#Direction)
-values. It will be visited with `OnEnter`, then the children will be visited,
-and then it will be visited again with `OnExit`. If you do not check the value of
-the `Direction` parameter, you might end up with duplicate errors and/or an
-unexpected `moduleContext`. Read more about [`Direction` here](#Direction).
-
-The following example forbids the use of `Debug.log` even when it is imported like
-`import Debug exposing (log)`.
-
-    import Elm.Syntax.Exposing as Exposing exposing (TopLevelExpose)
-    import Elm.Syntax.Expression as Expression exposing (Expression)
-    import Elm.Syntax.Import exposing (Import)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
-
-    type Context
-        = DebugLogWasNotImported
-        | DebugLogWasImported
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoDebugEvenIfImported" DebugLogWasNotImported
-            |> Rule.withImportVisitor importVisitor
-            |> Rule.withExpressionVisitor expressionVisitor
-            |> Rule.fromModuleRuleSchema
-
-    importVisitor : Node Import -> Context -> ( List (Rule.Error {}), Context )
-    importVisitor node context =
-        case ( Node.value node |> .moduleName |> Node.value, (Node.value node).exposingList |> Maybe.map Node.value ) of
-            ( [ "Debug" ], Just (Exposing.All _) ) ->
-                ( [], DebugLogWasImported )
-
-            ( [ "Debug" ], Just (Exposing.Explicit exposedFunctions) ) ->
-                let
-                    isLogFunction : Node Exposing.TopLevelExpose -> Bool
-                    isLogFunction exposeNode =
-                        case Node.value exposeNode of
-                            Exposing.FunctionExpose "log" ->
-                                True
-
-                            _ ->
-                                False
-                in
-                if List.any isLogFunction exposedFunctions then
-                    ( [], DebugLogWasImported )
-
-                else
-                    ( [], DebugLogWasNotImported )
-
-            _ ->
-                ( [], DebugLogWasNotImported )
-
-    expressionVisitor : Node Expression -> Rule.Direction -> Context -> ( List (Error {}), Context )
-    expressionVisitor node direction context =
-        case context of
-            DebugLogWasNotImported ->
-                ( [], context )
-
-            DebugLogWasImported ->
-                case ( direction, Node.value node ) of
-                    ( Rule.OnEnter, Expression.FunctionOrValue [] "log" ) ->
-                        ( [ Rule.error
-                                { message = "Remove the use of `Debug` before shipping to production"
-                                , details = [ "The `Debug` module is useful when developing, but is not meant to be shipped to production or published in a package. I suggest removing its use before committing and attempting to push to production." ]
-                                }
-                                (Node.range node)
-                          ]
-                        , context
-                        )
-
-                    _ ->
-                        ( [], context )
-
--}
-withExpressionVisitor : (Node Expression -> Direction -> moduleContext -> ( List (Error {}), moduleContext )) -> ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema { schemaState | hasAtLeastOneVisitor : () } moduleContext
-withExpressionVisitor visitor (ModuleRuleSchema schema) =
-    ModuleRuleSchema
-        { schema
-            | expressionVisitorsOnEnter = Just (combineVisitors (\node ctx -> visitor node OnEnter ctx) schema.expressionVisitorsOnEnter)
-            , expressionVisitorsOnExit = Just (combineExitVisitors (\node ctx -> visitor node OnExit ctx) schema.expressionVisitorsOnExit)
-        }
 
 
 {-| Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
