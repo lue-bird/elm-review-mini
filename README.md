@@ -3,7 +3,7 @@
 It's my personal playground for testing ideas. Goals:
 
   - Making the `elm-review` API much simpler
-  - Getting familiar with the code so that my suggestions are more than my brain farts
+  - Getting familiar with the code so that my suggestions are more than brain farts
 
 Note that directly back-porting these changes to `elm-review` is not a goal.
 Breaking changes etc are not avoided.
