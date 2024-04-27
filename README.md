@@ -6,6 +6,8 @@
   - composable inspections so that multiple reviews can feed off the same bunch of collected contexts, published as packages by users. Examples: "data to determine all bindings in scope", "data to determine a given reference's full origin", "data to determine the reference's minimum qualification", "type information"
   - all the nice helpers: `Type/Pattern/Expression.map/subs/fold` etc
 
+> Status: Basic API seems promising, implementation is still brewing
+
 Directly back-porting these changes to `elm-review` is not an explicit goal
 and breaking changes etc are explicitly not avoided.
 
