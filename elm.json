@@ -1,7 +1,7 @@
 {
     "type": "package",
     "name": "lue-bird/elm-review-simple",
-    "summary": "Scan your project to find bugs and enforce conventions",
+    "summary": "scan your project to find bugs and enforce conventions",
     "license": "BSD-3-Clause",
     "version": "1.0.0",
     "exposed-modules": [
