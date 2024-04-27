@@ -4,7 +4,7 @@ module Review exposing
     , inspectDirectDependency, inspectDirectIndependency, inspectElmJson, inspectModule, inspectReadme
     , ElmJsonKey(..), ModuleData, ModuleKey(..), ReadmeKey(..)
     , inspectComposable, inspectMap
-    , ContextToErrors(..), ErrorTarget(..), Error, ErrorWithoutFixes
+    , ContextToErrors(..), FileTarget(..), Error, ErrorWithoutFixes
     , Fix(..), FixProblem(..), fixInsertAt, fixRemoveRange, fixReplaceRangeBy
     , declarationToFunction, expressionSubs, functionDeclarationExpression, moduleHeaderDocumentation, moduleHeaderNameNode, projectConfigSourceDirectories
     , run, FixMode(..)
@@ -76,7 +76,7 @@ Look at the global picture of an Elm project to collect context.
 
 ## reporting
 
-@docs ContextToErrors, ErrorTarget, Error, ErrorWithoutFixes
+@docs ContextToErrors, FileTarget, Error, ErrorWithoutFixes
 @docs Fix, FixProblem, fixInsertAt, fixRemoveRange, fixReplaceRangeBy
 
 
@@ -446,7 +446,7 @@ type alias ErrorWithoutFixes =
     { range : Range
     , message : String
     , details : List String
-    , target : ErrorTarget
+    , target : FileTarget
     }
 
 
@@ -454,12 +454,12 @@ type alias Error =
     { range : Range
     , message : String
     , details : List String
-    , target : ErrorTarget
+    , target : FileTarget
     , fixes : List Fix
     }
 
 
-type ErrorTarget
+type FileTarget
     = ErrorTargetProjectModule ModuleKey
     | ErrorTargetProjectElmJson ElmJsonKey
     | ErrorTargetReadme ReadmeKey
@@ -851,7 +851,7 @@ type alias Cache =
     }
 
 
-errorTargetFilePath : ErrorTarget -> String
+errorTargetFilePath : FileTarget -> String
 errorTargetFilePath =
     \errorTarget ->
         case errorTarget of
@@ -1753,7 +1753,7 @@ comparePosition a b =
 
 {-| Apply the changes on the source code.
 -}
-fix : ErrorTarget -> List Fix -> String -> String
+fix : FileTarget -> List Fix -> String -> String
 fix target fixes sourceCode =
     case target of
         ErrorTargetReadme _ ->

@@ -765,7 +765,7 @@ describeError error =
     }"""
 
 
-reviewErrorTargetFilePath : Review.ErrorTarget -> String
+reviewErrorTargetFilePath : Review.FileTarget -> String
 reviewErrorTargetFilePath =
     \errorTarget ->
         case errorTarget of

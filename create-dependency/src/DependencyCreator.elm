@@ -99,13 +99,13 @@ import Elm.Package
 import Elm.Project
 import Elm.Type exposing (Type(..))
 import Elm.Version
-import Review.Project.Dependency as Dependency exposing (Dependency)
 
-dependency : Dependency
+dependency : { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
 dependency =
-    Dependency.create """ ++ stringify (Elm.Package.toString elmJson.name) ++ """
-        elmJson
-        dependencyModules
+    { name = """ ++ stringify (Elm.Package.toString elmJson.name) ++ """
+    , elmJson = elmJson
+    , modules = dependencyModules
+    }
 
 
 elmJson : Elm.Project.Project

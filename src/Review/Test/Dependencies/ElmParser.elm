@@ -5,15 +5,15 @@ import Elm.License
 import Elm.Project
 import Elm.Type exposing (Type(..))
 import Elm.Version
-import Review.Project.Dependency as Dependency exposing ({ name : String         , elmJson : Elm.Project.Project         , modules : List Elm.Docs.Module         })
 import Review.Test.Dependencies.Unsafe as Unsafe
 
 
-dependency : { name : String         , elmJson : Elm.Project.Project         , modules : List Elm.Docs.Module         }
+dependency : { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
 dependency =
-    Dependency.create "elm/parser"
-        elmJson
-        dependencyModules
+    { name = "elm/parser"
+    , elmJson = elmJson
+    , modules = dependencyModules
+    }
 
 
 elmJson : Elm.Project.Project
