@@ -4,13 +4,11 @@ import Dict exposing (Dict)
 import Elm.Docs
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Review.Cache.ContentHash exposing (ContentHash)
-import Review.ModuleNameLookup exposing (ModuleNameLookup)
 
 
 type alias ProjectCache =
     { dependenciesModules : Maybe { elmJsonContentHash : Maybe ContentHash, deps : Dict ModuleName Elm.Docs.Module }
     , modules : Dict ModuleName Elm.Docs.Module
-    , lookupTables : Dict ModuleName { key : ModuleCacheKey, lookupTable : ModuleNameLookup }
     }
 
 
@@ -24,7 +22,6 @@ empty : ProjectCache
 empty =
     { dependenciesModules = Nothing
     , modules = Dict.empty
-    , lookupTables = Dict.empty
     }
 
 

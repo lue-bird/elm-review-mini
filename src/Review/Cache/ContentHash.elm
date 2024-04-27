@@ -1,6 +1,6 @@
 module Review.Cache.ContentHash exposing (ContentHash, areEqual, areEqualForMaybe, hash)
 
-import Vendor.Murmur3 as Murmur3
+import FNV1a
 
 
 type ContentHash
@@ -9,7 +9,7 @@ type ContentHash
 
 hash : String -> ContentHash
 hash source =
-    ContentHash (Murmur3.hashString 0 source)
+    ContentHash (FNV1a.hashWithSeed source 0)
 
 
 areEqual : ContentHash -> ContentHash -> Bool
@@ -26,5 +26,8 @@ areEqualForMaybe a b =
         ( Nothing, Nothing ) ->
             True
 
-        _ ->
+        ( Nothing, Just _ ) ->
+            False
+
+        ( Just _, Nothing ) ->
             False

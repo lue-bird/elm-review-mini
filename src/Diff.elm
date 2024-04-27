@@ -1,9 +1,9 @@
-module Vendor.Diff exposing
+module Diff exposing
     ( Change(..)
     , diff, diffLines
     )
 
-{-| Copied from <https://github.com/jinjor/elm-diff/>
+{-| Copied from <https://github.com/jinjor/elm-diff/> with only typos changed
 
 The following is the original license
 
@@ -123,7 +123,7 @@ diff a b =
             []
 
 
-{-| Test the algolithm itself.
+{-| Test the algorithm itself.
 If it returns Err, it should be a bug.
 -}
 testDiff : List a -> List a -> Result BugReport (List (Change a))

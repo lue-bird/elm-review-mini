@@ -1,41 +1,34 @@
 module Review.Test.FailureMessage exposing
     ( ExpectedErrorData
-    , parsingFailure, globalErrorInTest, messageMismatch, emptyDetails, unexpectedDetails, wrongLocation, didNotExpectErrors
+    , parsingFailure, messageMismatch, emptyDetails, unexpectedDetails, wrongLocation, didNotExpectErrors
     , underMismatch, expectedMoreErrors, tooManyErrors, locationNotFound, underMayNotBeEmpty, locationIsAmbiguousInSourceCode
     , needToUsedExpectErrorsForModules, missingSources, duplicateModuleName, unknownModulesInExpectedErrors
     , missingFixes, unexpectedFixes, fixedCodeMismatch, unchangedSourceAfterFix, invalidSourceAfterFix, hasCollisionsInFixRanges, ruleNotMarkedAsFixableError
-    , didNotExpectGlobalErrors, expectedMoreGlobalErrors, fixedCodeWhitespaceMismatch, messageMismatchForConfigurationError
-    , messageMismatchForGlobalError, missingConfigurationError, tooManyGlobalErrors
-    , unexpectedConfigurationError, unexpectedConfigurationErrorDetails, unexpectedGlobalErrorDetails
-    , unexpectedExtract, missingExtract, invalidJsonForExpectedDataExtract, extractMismatch, specifiedMultipleExtracts
-    , resultsAreDifferentWhenFilesAreIgnored
+    , fixedCodeWhitespaceMismatch, messageMismatchForConfigurationError
     )
 
 {-| Failure messages for the `Review.Test` module.
 
 
-# ReviewError messages
+# Review.Error messages
 
 @docs ExpectedErrorData
-@docs parsingFailure, globalErrorInTest, messageMismatch, emptyDetails, unexpectedDetails, wrongLocation, didNotExpectErrors
+@docs parsingFailure, messageMismatch, emptyDetails, unexpectedDetails, wrongLocation, didNotExpectErrors
 @docs underMismatch, expectedMoreErrors, tooManyErrors, locationNotFound, underMayNotBeEmpty, locationIsAmbiguousInSourceCode
 @docs needToUsedExpectErrorsForModules, missingSources, duplicateModuleName, unknownModulesInExpectedErrors
 @docs missingFixes, unexpectedFixes, fixedCodeMismatch, unchangedSourceAfterFix, invalidSourceAfterFix, hasCollisionsInFixRanges, ruleNotMarkedAsFixableError
 @docs didNotExpectGlobalErrors, expectedMoreGlobalErrors, fixedCodeWhitespaceMismatch, messageMismatchForConfigurationError
-@docs messageMismatchForGlobalError, missingConfigurationError, tooManyGlobalErrors
-@docs unexpectedConfigurationError, unexpectedConfigurationErrorDetails, unexpectedGlobalErrorDetails
 @docs unexpectedExtract, missingExtract, invalidJsonForExpectedDataExtract, extractMismatch, specifiedMultipleExtracts
-@docs resultsAreDifferentWhenFilesAreIgnored
 
 -}
 
 import Ansi
+import Diff
 import Elm.Syntax.Range exposing (Range)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Review.Rule as Rule exposing (ReviewError)
-import Vendor.Diff as Diff
-import Vendor.ListExtra as ListExtra
+import ListExtra
+import Review
 
 
 {-| An expectation for an error. Use [`error`](Review-Test#error) to create one.
@@ -55,20 +48,12 @@ type alias SourceCode =
 -- ERROR MESSAGES
 
 
-didNotExpectErrors : String -> List ReviewError -> String
+didNotExpectErrors : String -> List Review.Error -> String
 didNotExpectErrors moduleName errors =
     failureMessage "DID NOT EXPECT ERRORS"
         ("""I expected no errors for module `""" ++ moduleName ++ """` but found:
 
 """ ++ listErrorMessagesAndPositions errors)
-
-
-didNotExpectGlobalErrors : List { a | message : String } -> String
-didNotExpectGlobalErrors errors =
-    failureMessage "DID NOT EXPECT GLOBAL ERRORS"
-        ("""I expected no global errors but found:
-
-""" ++ listErrorMessages errors)
 
 
 listErrorMessages : List { a | message : String } -> String
@@ -107,21 +92,21 @@ The source code in question is the one at index """
     failureMessage "TEST SOURCE CODE PARSING ERROR" (details ++ "\n\n" ++ hint)
 
 
-globalErrorInTest : ReviewError -> String
+globalErrorInTest : Review.Error -> String
 globalErrorInTest error =
     failureMessage "GLOBAL ERROR IN SOURCE CODE"
         ("""I found a global error in the project you provided for this test:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
-  """ ++ formatDetails (Rule.errorDetails error) ++ """
+  """ ++ formatDetails error.details ++ """
 
 `elm-review` would fail with this error if the project to be reviewed had
 the same issue. Please fix this issue in your test.
 """)
 
 
-messageMismatch : ExpectedErrorData -> ReviewError -> String
+messageMismatch : ExpectedErrorData -> Review.Error -> String
 messageMismatch expectedError error =
     failureMessage "UNEXPECTED ERROR MESSAGE"
         ("""I was looking for the error with the following message:
@@ -130,7 +115,7 @@ messageMismatch expectedError error =
 
 but I found the following error message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error))
+  """ ++ wrapInQuotes error.message)
 
 
 messageMismatchForGlobalError : { a | message : String } -> { b | message : String } -> String
@@ -157,12 +142,12 @@ but I found the following error message:
   """ ++ wrapInQuotes error.message)
 
 
-underMismatch : ReviewError -> { under : String, codeAtLocation : String } -> String
+underMismatch : Review.Error -> { under : String, codeAtLocation : String } -> String
 underMismatch error { under, codeAtLocation } =
     failureMessage "UNEXPECTED ERROR LOCATION"
         ("""I found an error with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 and I was expecting it to be under:
 
@@ -176,12 +161,12 @@ Hint: Maybe you're passing the `Range` of a wrong node when
 calling `Rule.error`.""")
 
 
-unexpectedDetails : List String -> ReviewError -> String
+unexpectedDetails : List String -> Review.Error -> String
 unexpectedDetails expectedDetails error =
     failureMessage "UNEXPECTED ERROR DETAILS"
         ("""I found an error for a file with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 and I was expecting its details to be:
 
@@ -189,7 +174,7 @@ and I was expecting its details to be:
 
 but I found these details:
 
-  """ ++ formatDetails (Rule.errorDetails error))
+  """ ++ formatDetails error.details)
 
 
 unexpectedGlobalErrorDetails : List String -> { message : String, details : List String } -> String
@@ -253,12 +238,12 @@ formatDetails details =
                 |> (\str -> "```\n" ++ str ++ "\n  ```")
 
 
-wrongLocation : ReviewError -> Range -> String -> String
+wrongLocation : Review.Error -> Range -> String -> String
 wrongLocation error range under =
     failureMessage "UNEXPECTED ERROR LOCATION"
         ("""I was looking for the error with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 under the following code:
 
@@ -272,7 +257,7 @@ I was expecting the error at:
 
 but I found it at:
 
-  """ ++ rangeAsString (Rule.errorRange error))
+  """ ++ rangeAsString error.range)
 
 
 expectedMoreErrors : String -> Int -> List ExpectedErrorData -> String
@@ -311,7 +296,7 @@ Here are the """ ++ String.fromInt numberOfErrors ++ """ I could not find:
            )
 
 
-tooManyErrors : String -> List ReviewError -> String
+tooManyErrors : String -> List Review.Error -> String
 tooManyErrors moduleName extraErrors =
     let
         numberOfErrors : Int
@@ -339,16 +324,16 @@ tooManyGlobalErrors extraErrors =
         )
 
 
-locationNotFound : ReviewError -> String
+locationNotFound : Review.Error -> String
 locationNotFound error =
     failureMessage "COULD NOT FIND LOCATION FOR ERROR"
         ("""I was looking for the error with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 and I found it, but the code it points to does not lead to anything:
 
-  """ ++ rangeAsString (Rule.errorRange error) ++ """
+  """ ++ rangeAsString error.range ++ """
 
 Please try to have the error under the smallest region that makes sense.
 This will be the most helpful for the person who reads the error message.""")
@@ -370,14 +355,14 @@ If this helps, this is where I found the error:
   """ ++ formatSourceCode codeAtLocation)
 
 
-locationIsAmbiguousInSourceCode : SourceCode -> ReviewError -> String -> List Int -> String
+locationIsAmbiguousInSourceCode : SourceCode -> Review.Error -> String -> List Int -> String
 locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
     failureMessage "AMBIGUOUS ERROR LOCATION"
         ("""Your test passes, but where the message appears is ambiguous.
 
 You are looking for the following error message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 and expecting to see it under:
 
@@ -460,12 +445,12 @@ Hint: Maybe you forgot to call a function like `Rule.errorWithFix` or maybe
 the list of provided fixes was empty.""")
 
 
-unexpectedFixes : ReviewError -> String
+unexpectedFixes : Review.Error -> String
 unexpectedFixes error =
     failureMessage "UNEXPECTED FIXES"
         ("""I expected that the error with the following message
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 would not have any fixes, but it provided some.
 
@@ -483,13 +468,13 @@ To fix this, you can call `Review.Test.whenFixed` on your error:
       |> Review.Test.whenFixed "<source code>\"""")
 
 
-fixedCodeMismatch : SourceCode -> SourceCode -> ReviewError -> String
+fixedCodeMismatch : SourceCode -> SourceCode -> Review.Error -> String
 fixedCodeMismatch resultingSourceCode expectedSourceCode error =
     failureMessage "FIXED CODE MISMATCH"
         ("""I found a different fixed source code than expected for the error with the
 following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 I expected the following result after the fixes have been applied:
 
@@ -500,7 +485,7 @@ but I found:
   """ ++ formatSourceCode resultingSourceCode)
 
 
-fixedCodeWhitespaceMismatch : SourceCode -> SourceCode -> ReviewError -> String
+fixedCodeWhitespaceMismatch : SourceCode -> SourceCode -> Review.Error -> String
 fixedCodeWhitespaceMismatch resultingSourceCode expectedSourceCode error =
     let
         ( expected, resulting ) =
@@ -510,7 +495,7 @@ fixedCodeWhitespaceMismatch resultingSourceCode expectedSourceCode error =
         ("""I found a different fixed source code than expected for the error with the
 following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 The problem is related to """ ++ (Ansi.bold >> Ansi.yellow) "WHITESPACE!" ++ """
 I expected the following result after the fixes have been applied:
@@ -563,13 +548,13 @@ replaceWhitespace lines =
         |> String.split "\n"
 
 
-unchangedSourceAfterFix : ReviewError -> String
+unchangedSourceAfterFix : Review.Error -> String
 unchangedSourceAfterFix error =
     failureMessage "UNCHANGED SOURCE AFTER FIX"
         ("""I got something unexpected when applying the fixes provided by the error
 with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 I expected the fix to make some changes to the source code, but it resulted
 in the same source code as before the fixes.
@@ -581,13 +566,13 @@ doesn't do anything.
 Hint: Maybe you inserted an empty string into the source code.""")
 
 
-invalidSourceAfterFix : ReviewError -> SourceCode -> String
+invalidSourceAfterFix : Review.Error -> SourceCode -> String
 invalidSourceAfterFix error resultingSourceCode =
     failureMessage "INVALID SOURCE AFTER FIX"
         ("""I got something unexpected when applying the fixes provided by the error
 with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 I was unable to parse the source code after applying the fixes. Here is
 the result of the automatic fixing:
@@ -601,13 +586,13 @@ anymore. If a fix can not be applied fully, it should not be applied at
 all.""")
 
 
-hasCollisionsInFixRanges : ReviewError -> String
+hasCollisionsInFixRanges : Review.Error -> String
 hasCollisionsInFixRanges error =
     failureMessage "FOUND COLLISIONS IN FIX RANGES"
         ("""I got something unexpected when applying the fixes provided by the error
 with the following message:
 
-  """ ++ wrapInQuotes (Rule.errorMessage error) ++ """
+  """ ++ wrapInQuotes error.message ++ """
 
 I found that some fixes were targeting (partially or completely) the same
 section of code. The problem with that is that I can't determine which fix
@@ -723,7 +708,7 @@ formatJsonDiff differences =
         |> String.join "\n"
 
 
-resultsAreDifferentWhenFilesAreIgnored : { ignoredFiles : List String, missing : List ReviewError, unexpected : List ReviewError } -> String
+resultsAreDifferentWhenFilesAreIgnored : { ignoredFiles : List String, missing : List Review.Error, unexpected : List Review.Error } -> String
 resultsAreDifferentWhenFilesAreIgnored { ignoredFiles, missing, unexpected } =
     let
         files : String
@@ -764,37 +749,48 @@ When I ignore these files:
 then """ ++ String.trim difference)
 
 
-summarizeErrors : List ReviewError -> String
+summarizeErrors : List Review.Error -> String
 summarizeErrors errors =
     "\n" ++ (String.join "\n\n" <| List.map describeError errors)
 
 
-describeError : ReviewError -> String
+describeError : Review.Error -> String
 describeError error =
     """
-    { message = """ ++ wrapInDoubleQuotes (Rule.errorMessage error) ++ """
-    , filePath = """ ++ wrapInDoubleQuotes (Rule.errorFilePath error) ++ """
+    { message = """ ++ wrapInDoubleQuotes error.message ++ """
+    , filePath = """ ++ wrapInDoubleQuotes (error.target |> reviewErrorTargetFilePath) ++ """
     , details = """ ++ formatDetailsForDescription error ++ """
-    , range = """ ++ rangeAsStringOnMultipleLines (Rule.errorRange error) ++ """
+    , range = """ ++ rangeAsStringOnMultipleLines error.range ++ """
     , fixes = """ ++ hasFixes error ++ """
     }"""
 
 
-formatDetailsForDescription : ReviewError -> String
+reviewErrorTargetFilePath : Review.ErrorTarget -> String
+reviewErrorTargetFilePath =
+    \errorTarget ->
+        case errorTarget of
+            Review.ErrorTargetProjectModule (Review.ModuleKey moduleInfo) ->
+                moduleInfo.path
+
+            Review.ErrorTargetProjectElmJson (Review.ElmJsonKey elmJsonInfo) ->
+                elmJsonInfo.path
+
+            Review.ErrorTargetReadme (Review.ReadmeKey readmeInfo) ->
+                readmeInfo.path
+
+
+formatDetailsForDescription : Review.Error -> String
 formatDetailsForDescription error =
-    "[" ++ (Rule.errorDetails error |> List.map wrapInDoubleQuotes |> String.join ", ") ++ "]"
+    "[" ++ (error.details |> List.map wrapInDoubleQuotes |> String.join ", ") ++ "]"
 
 
-hasFixes : ReviewError -> String
+hasFixes : Review.Error -> String
 hasFixes error =
-    case Rule.errorFixes error of
-        Just [] ->
+    case error.fixes of
+        [] ->
             "false"
 
-        Nothing ->
-            "false"
-
-        Just _ ->
+        _ :: _ ->
             "true"
 
 
@@ -898,16 +894,16 @@ positionAsRange sourceCode under position =
     }
 
 
-listErrorMessagesAndPositions : List ReviewError -> String
+listErrorMessagesAndPositions : List Review.Error -> String
 listErrorMessagesAndPositions errors =
     errors
         |> List.map errorMessageAndPosition
         |> String.join "\n"
 
 
-errorMessageAndPosition : ReviewError -> String
+errorMessageAndPosition : Review.Error -> String
 errorMessageAndPosition error =
-    "  - " ++ wrapInQuotes (Rule.errorMessage error) ++ "\n    at " ++ rangeAsString (Rule.errorRange error)
+    "  - " ++ wrapInQuotes error.message ++ "\n    at " ++ rangeAsString error.range
 
 
 expectedErrorToString : { a | message : String } -> String

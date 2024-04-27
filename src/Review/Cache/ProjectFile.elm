@@ -1,7 +1,6 @@
 module Review.Cache.ProjectFile exposing
     ( Entry, create
     , match
-    , errors, errorsForMaybe, setErrors
     , outputContext, outputContextHash
     )
 
@@ -9,7 +8,6 @@ module Review.Cache.ProjectFile exposing
 
 @docs Entry, create
 @docs match
-@docs errors, errorsForMaybe, setErrors
 @docs outputContext, outputContextHash
 
 -}
@@ -18,11 +16,11 @@ import Review.Cache.ContentHash as ContentHash exposing (ContentHash)
 import Review.Cache.ContextHash as ContextHash exposing (ComparableContextHash, ContextHash)
 
 
-type Entry error context
+type Entry context
     = Entry
         { contentHash : Maybe ContentHash
         , inputContextHash : ComparableContextHash context
-        , errors : List error
+        , isFileIgnored : Bool
         , outputContext : context
         , outputContextHash : ContextHash context
         }
@@ -31,56 +29,32 @@ type Entry error context
 create :
     { contentHash : Maybe ContentHash
     , inputContextHash : ComparableContextHash context
-    , errors : List error
+    , isFileIgnored : Bool
     , outputContext : context
     }
-    -> Entry error context
+    -> Entry context
 create entry =
     Entry
         { contentHash = entry.contentHash
         , inputContextHash = entry.inputContextHash
-        , errors = entry.errors
+        , isFileIgnored = entry.isFileIgnored
         , outputContext = entry.outputContext
         , outputContextHash = ContextHash.create entry.outputContext
         }
 
 
-match : Maybe ContentHash -> ComparableContextHash context -> Entry error context -> Bool
-match contentHash contexts (Entry entry) =
+match : Maybe ContentHash -> ComparableContextHash context -> Entry context -> { isFileIgnored : Bool } -> Bool
+match contentHash contexts (Entry entry) isFileIgnored =
     ContentHash.areEqualForMaybe contentHash entry.contentHash
         && (contexts == entry.inputContextHash)
+        && (isFileIgnored.isFileIgnored == entry.isFileIgnored)
 
 
-errors : Entry error context -> List error
-errors (Entry entry) =
-    entry.errors
-
-
-errorsForMaybe : Maybe (Entry error context) -> List error
-errorsForMaybe maybeEntry =
-    case maybeEntry of
-        Just (Entry entry) ->
-            entry.errors
-
-        Nothing ->
-            []
-
-
-setErrors : List error -> Maybe (Entry error context) -> Maybe (Entry error context)
-setErrors newErrors maybeEntry =
-    case maybeEntry of
-        Just (Entry entry) ->
-            Just (Entry { entry | errors = newErrors })
-
-        Nothing ->
-            Nothing
-
-
-outputContext : Entry error context -> context
+outputContext : Entry context -> context
 outputContext (Entry entry) =
     entry.outputContext
 
 
-outputContextHash : Entry error context -> ContextHash context
+outputContextHash : Entry context -> ContextHash context
 outputContextHash (Entry entry) =
     entry.outputContextHash
