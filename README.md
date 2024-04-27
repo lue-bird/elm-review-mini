@@ -1,12 +1,30 @@
-# What is the point of this fork?
+## What is the point of this fork? goals
 
-It's my personal playground for testing ideas. Goals:
+  - much simpler API and internals 
+      - enabling docs that cover the basics in a very concise manner,
+        then guiding through tons of examples if you feel like it.
+  - composable inspections so that multiple reviews can feed off the same bunch of collected contexts, published as packages by users. Examples: "data to determine all bindings in scope", "data to determine a given reference's full origin", "data to determine the reference's minimum qualification", "type information"
+  - all the nice helpers: `Type/Pattern/Expression.map/subs/fold` etc
 
-  - Making the `elm-review` API much simpler
-  - Getting familiar with the code so that my suggestions are more than brain farts
+Directly back-porting these changes to `elm-review` is not an explicit goal
+and breaking changes etc are explicitly not avoided.
 
-Note that directly back-porting these changes to `elm-review` is not a goal.
-Breaking changes etc are not avoided.
+## What is the point of this fork? feelings
+
+I'm _scared_ of big projects, especially those with a lot of underlying covered area/complexity
+because code structures become static:
+  - You start to almost work around your code when you add new features – which again makes code harder to understand and harder to get into
+  - Trying to make all those changes backwards-compatible introduces even more layers and wires everywhere
+  - Keeping all the examples and tests up to date becomes daunting and somewhat draining, unexciting work
+
+I know I could neither maintain them well nor would I be happy doing so.
+And neither do I have hopes that anyone could.
+For big projects run by a single person, the bus factor becomes increasingly scary as well
+and I'd be horribly sad for a great tool such as `elm-review` to become stale/abandoned.
+
+I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things a bit more rough for users (performance, convenience).
+
+
 
 > Below the original readme
 
