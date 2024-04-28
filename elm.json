@@ -1,6 +1,6 @@
 {
     "type": "package",
-    "name": "lue-bird/elm-review-simple",
+    "name": "lue-bird/elm-review-mini",
     "summary": "scan your project to find bugs and enforce conventions",
     "license": "BSD-3-Clause",
     "version": "1.0.0",
@@ -17,7 +17,6 @@
         "elm-explorations/test": "2.0.1 <= v < 3.0.0",
         "miniBill/elm-fast-dict": "1.1.0 <= v < 2.0.0",
         "miniBill/elm-rope": "1.0.0 <= v < 2.0.0",
-        "robinheghan/fnv1a": "1.0.0 <= v < 2.0.0",
         "stil4m/elm-syntax": "7.2.7 <= v < 8.0.0"
     },
     "test-dependencies": {

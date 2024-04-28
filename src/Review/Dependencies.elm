@@ -9,10 +9,10 @@ Elm files. The dependencies here are simplified and **only** contain information
 
 import Dict
 import Elm.Dependency
-import Elm.Interface as Interface
-import Elm.Syntax.Infix as Infix
-import Elm.Syntax.Node as Node
-import Elm.Syntax.Range as Range
+import Elm.Interface
+import Elm.Syntax.Infix
+import Elm.Syntax.Node
+import Elm.Syntax.Range
 
 
 elmCore : Elm.Dependency.Dependency
@@ -23,147 +23,147 @@ elmCore =
         Dict.fromList
             [ ( [ "Basics" ]
               , [ -- infix right 0 (<|) = apL
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 0
-                    , operator = Node.Node Range.emptyRange "<|"
-                    , function = Node.Node Range.emptyRange "apL"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 0
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "<|"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "apL"
                     }
                 , -- infix left  0 (|>) = apR
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 0
-                    , operator = Node.Node Range.emptyRange "|>"
-                    , function = Node.Node Range.emptyRange "apR"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 0
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "|>"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "apR"
                     }
                 , -- infix right 2 (||) = or
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 2
-                    , operator = Node.Node Range.emptyRange "||"
-                    , function = Node.Node Range.emptyRange "or"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 2
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "||"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "or"
                     }
                 , -- infix right 3 (&&) = and
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 3
-                    , operator = Node.Node Range.emptyRange "&&"
-                    , function = Node.Node Range.emptyRange "and"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 3
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "&&"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "and"
                     }
                 , -- infix non   4 (==) = eq
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Non
-                    , precedence = Node.Node Range.emptyRange 4
-                    , operator = Node.Node Range.emptyRange "=="
-                    , function = Node.Node Range.emptyRange "eq"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Non
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 4
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "=="
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "eq"
                     }
                 , -- infix non   4 (/=) = neq
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Non
-                    , precedence = Node.Node Range.emptyRange 4
-                    , operator = Node.Node Range.emptyRange "/="
-                    , function = Node.Node Range.emptyRange "neq"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Non
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 4
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "/="
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "neq"
                     }
                 , -- infix non   4 (<)  = lt
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Non
-                    , precedence = Node.Node Range.emptyRange 4
-                    , operator = Node.Node Range.emptyRange "<"
-                    , function = Node.Node Range.emptyRange "lt"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Non
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 4
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "<"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "lt"
                     }
                 , -- infix non   4 (>)  = gt
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Non
-                    , precedence = Node.Node Range.emptyRange 4
-                    , operator = Node.Node Range.emptyRange ">"
-                    , function = Node.Node Range.emptyRange "gt"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Non
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 4
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange ">"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "gt"
                     }
                 , -- infix non   4 (<=) = le
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Non
-                    , precedence = Node.Node Range.emptyRange 4
-                    , operator = Node.Node Range.emptyRange "<="
-                    , function = Node.Node Range.emptyRange "le"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Non
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 4
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "<="
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "le"
                     }
                 , -- infix non   4 (>=) = ge
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Non
-                    , precedence = Node.Node Range.emptyRange 4
-                    , operator = Node.Node Range.emptyRange ">="
-                    , function = Node.Node Range.emptyRange "ge"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Non
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 4
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange ">="
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "ge"
                     }
                 , -- infix right 5 (++) = append
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 5
-                    , operator = Node.Node Range.emptyRange "++"
-                    , function = Node.Node Range.emptyRange "append"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 5
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "++"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "append"
                     }
                 , -- infix left  6 (+)  = add
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 6
-                    , operator = Node.Node Range.emptyRange "+"
-                    , function = Node.Node Range.emptyRange "add"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 6
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "+"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "add"
                     }
                 , -- infix left  6 (-)  = sub
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 6
-                    , operator = Node.Node Range.emptyRange "-"
-                    , function = Node.Node Range.emptyRange "sub"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 6
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "-"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "sub"
                     }
                 , -- infix left  7 (*)  = mul
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 7
-                    , operator = Node.Node Range.emptyRange "*"
-                    , function = Node.Node Range.emptyRange "mul"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 7
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "*"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "mul"
                     }
                 , -- infix left  7 (/)  = fdiv
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 7
-                    , operator = Node.Node Range.emptyRange "/"
-                    , function = Node.Node Range.emptyRange "fdiv"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 7
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "/"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "fdiv"
                     }
                 , -- infix left  7 (//) = idiv
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 7
-                    , operator = Node.Node Range.emptyRange "//"
-                    , function = Node.Node Range.emptyRange "idiv"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 7
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "//"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "idiv"
                     }
                 , -- infix right 8 (^)  = pow
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 8
-                    , operator = Node.Node Range.emptyRange "^"
-                    , function = Node.Node Range.emptyRange "pow"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 8
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "^"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "pow"
                     }
                 , -- infix left  9 (<<) = composeL
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 9
-                    , operator = Node.Node Range.emptyRange "<<"
-                    , function = Node.Node Range.emptyRange "composeL"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 9
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "<<"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "composeL"
                     }
                 , -- infix right 9 (>>) = composeR
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 9
-                    , operator = Node.Node Range.emptyRange ">>"
-                    , function = Node.Node Range.emptyRange "composeR"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 9
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange ">>"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "composeR"
                     }
                 ]
               )
             , ( [ "List" ]
               , [ -- infix right 5 (::) = cons
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 5
-                    , operator = Node.Node Range.emptyRange "::"
-                    , function = Node.Node Range.emptyRange "cons"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 5
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "::"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "cons"
                     }
                 ]
               )
@@ -179,18 +179,18 @@ elmUrl =
         Dict.fromList
             [ ( [ "Url", "Parser" ]
               , [ -- infix right 7 (</>) = slash
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Right
-                    , precedence = Node.Node Range.emptyRange 7
-                    , operator = Node.Node Range.emptyRange "</>"
-                    , function = Node.Node Range.emptyRange "slash"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Right
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 7
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "</>"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "slash"
                     }
                 , -- infix left  8 (<?>) = questionMark
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 8
-                    , operator = Node.Node Range.emptyRange "<?>"
-                    , function = Node.Node Range.emptyRange "questionMark"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 8
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "<?>"
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "questionMark"
                     }
                 ]
               )
@@ -206,37 +206,37 @@ elmParser =
         Dict.fromList
             [ ( [ "Parser" ]
               , [ -- infix left 5 (|=) = keeper
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 5
-                    , operator = Node.Node Range.emptyRange "|="
-                    , function = Node.Node Range.emptyRange "keeper"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 5
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "|="
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "keeper"
                     }
 
                 -- infix left 6 (|.) = ignorer
-                , Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 6
-                    , operator = Node.Node Range.emptyRange "|."
-                    , function = Node.Node Range.emptyRange "ignorer"
+                , Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 6
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "|."
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "ignorer"
                     }
                 ]
               )
             , ( [ "Parser", "Advanced" ]
               , [ -- infix left 5 (|=) = keeper
-                  Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 5
-                    , operator = Node.Node Range.emptyRange "|="
-                    , function = Node.Node Range.emptyRange "keeper"
+                  Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 5
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "|="
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "keeper"
                     }
 
                 -- infix left 6 (|.) = ignorer
-                , Interface.Operator
-                    { direction = Node.Node Range.emptyRange Infix.Left
-                    , precedence = Node.Node Range.emptyRange 6
-                    , operator = Node.Node Range.emptyRange "|."
-                    , function = Node.Node Range.emptyRange "ignorer"
+                , Elm.Interface.Operator
+                    { direction = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange Elm.Syntax.Infix.Left
+                    , precedence = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange 6
+                    , operator = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "|."
+                    , function = Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange "ignorer"
                     }
                 ]
               )

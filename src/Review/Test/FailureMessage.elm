@@ -63,8 +63,8 @@ listErrorMessages errors =
         |> String.join "\n"
 
 
-parsingFailure : Bool -> { index : Int, source : String } -> String
-parsingFailure isOnlyFile { index, source } =
+parsingFailure : { isOnlyFile : Bool, index : Int, source : String } -> String
+parsingFailure { isOnlyFile, index, source } =
     let
         hint : String
         hint =
@@ -769,13 +769,13 @@ reviewErrorTargetFilePath : Review.FileTarget -> String
 reviewErrorTargetFilePath =
     \errorTarget ->
         case errorTarget of
-            Review.ErrorTargetProjectModule (Review.ModuleKey moduleInfo) ->
+            Review.ErrorTargetModule moduleInfo ->
                 moduleInfo.path
 
-            Review.ErrorTargetProjectElmJson (Review.ElmJsonKey elmJsonInfo) ->
-                elmJsonInfo.path
+            Review.FileTargetElmJson ->
+                "elm.json"
 
-            Review.ErrorTargetReadme (Review.ReadmeKey readmeInfo) ->
+            Review.FileTargetExtra readmeInfo ->
                 readmeInfo.path
 
 
