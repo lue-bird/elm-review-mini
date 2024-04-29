@@ -1,38 +1,38 @@
 module Review.Test exposing
     ( ReviewResult, run
-    , ExpectedError, error, atExactly, whenFixed, expectErrorsForModules, expectErrorsForElmJson, expectErrorsForReadme
-    , expect, ReviewExpectation
-    , moduleErrors, elmJsonErrors, readmeErrors
-    , elmCore, elmHtml, elmParser, elmUrl, moduleInSrc
+    , ExpectedError, expectErrors
+    , ExpectedErrorRange(..), elmCore, elmHtml, elmParser, elmUrl, moduleInSrc
     )
 
 {-| Module that helps you test your rules, using [`elm-test`](https://package.elm-lang.org/packages/elm-explorations/test/latest/).
 
     import Review.Test
     import Test exposing (Test, describe, test)
-    import The.Review.You.Want.To.Test exposing (rule)
+    import The.Review.You.Want.To.Test
 
     tests : Test
     tests =
-        describe "The.Review.You.Want.To.Test"
-            [ test "should not report anything when <condition>" <|
-                \() ->
+        Test.describe "The.Review.You.Want.To.Test"
+            [ Test.test "should not report anything when <condition>"
+                (\() ->
                     """module A exposing (..)
     a = foo n"""
-                        |> Review.Test.run rule
-                        |> Review.Test.expectNoErrors
-            , test "should report Debug.log use" <|
-                \() ->
-                    """module A exposing (..)
+                        |> Review.Test.run The.Review.You.Want.To.Test.review
+                        |> Review.Test.expect []
+                )
+                , test "should report Debug.log use" <|
+                    \() ->
+                        """module A exposing (..)
     a = Debug.log "some" "message" """
-                        |> Review.Test.run rule
-                        |> Review.Test.expectErrors
-                            [ Review.Test.error
-                                { message = "Remove the use of `Debug` before shipping to production"
-                                , details = [ "Details about the error" ]
-                                , under = "Debug.log"
-                                }
-                            ]
+                            |> Review.Test.run The.Review.You.Want.To.Test.review
+                            |> Review.Test.expectErrors
+                                [ Review.Test.error
+                                    { message = "Remove the use of `Debug` before shipping to production"
+                                    , details = [ "Details about the error" ]
+                                    , under = "Debug.log"
+                                    }
+                                ]
+                )
             ]
 
 
@@ -128,6 +128,7 @@ import Elm.Parser
 import Elm.Project
 import Elm.Syntax.File
 import Elm.Syntax.Module as Module
+import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range exposing (Location, Range)
 import Expect exposing (Expectation)
@@ -216,7 +217,7 @@ type alias GlobalError =
 type alias SuccessfulRunResult =
     { path : String
     , inspector : CodeInspector
-    , errors : List Review.Error
+    , errors : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
     }
 
 
@@ -224,30 +225,34 @@ type alias CodeInspector =
     { isModule : Bool
     , source : String
     , getCodeAtLocation : Range -> Maybe String
-    , checkIfLocationIsAmbiguous : Review.Error -> String -> Expectation
+    , checkIfLocationIsAmbiguous : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String -> Expectation
     }
 
 
-{-| An expectation for an error. Use [`error`](#error) to create one.
+{-| An expectation that an error with this shape will be reported.
 -}
 type alias ExpectedError =
     { message : String
     , details : List String
-    , under : Under
+    , range : ExpectedErrorRange
     , fixedSource : Maybe String
     }
 
 
-type Under
+{-| An expectation for the reported error range.
+If the section to mark is unique in the file, use `Under "your section source"`.
+If the section occurs multiple times in this file, use `UnderExactly { section = "your section source", startingAt = { row = ..., column = ... } }`
+-}
+type ExpectedErrorRange
     = Under String
-    | UnderExactly String Location
+    | UnderExactly { section : String, startingAt : Location }
 
 
 moduleInSrc : String -> { path : String, source : String }
 moduleInSrc moduleSource =
     case Elm.Parser.parseToFile moduleSource of
-        Ok ast ->
-            { path = "src/" ++ String.join "/" (Module.moduleName (Elm.Syntax.Node.value ast.moduleDefinition)) ++ ".elm"
+        Ok syntax ->
+            { path = "src/" ++ String.join "/" (Module.moduleName (Elm.Syntax.Node.value syntax.moduleDefinition)) ++ ".elm"
             , source = moduleSource
             }
 
@@ -313,12 +318,12 @@ run project review =
                                     }
                             )
 
-                        Ok ast ->
+                        Ok syntax ->
                             ( parsedModulesSoFar
                                 |> (::)
                                     { path = moduleUnparsed.path
                                     , source = moduleUnparsed.source
-                                    , ast = ast
+                                    , syntax = syntax
                                     }
                             , modulesThatFailedToParseSoFar
                             )
@@ -392,24 +397,13 @@ run project review =
                 (AttemptReRun review project)
 
 
-hasExactlyOneElement : List a -> Bool
-hasExactlyOneElement =
-    \list ->
-        case list of
-            [ _ ] ->
-                True
-
-            _ ->
-                False
-
-
 moduleToRunResult :
-    List Review.Error
-    -> { path : String, source : String, ast : Elm.Syntax.File.File }
+    List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
+    -> { path : String, source : String, syntax : Elm.Syntax.File.File }
     -> SuccessfulRunResult
 moduleToRunResult errorsForModule projectModule =
     { path =
-        projectModule.ast.moduleDefinition
+        projectModule.syntax.moduleDefinition
             |> Review.moduleHeaderNameNode
             |> Elm.Syntax.Node.value
             |> String.join "."
@@ -423,13 +417,10 @@ fileTargetFilePath : Review.FileTarget -> String
 fileTargetFilePath =
     \errorTarget ->
         case errorTarget of
-            Review.ErrorTargetModule moduleInfo ->
-                moduleInfo.path
-
             Review.FileTargetElmJson ->
                 "elm.json"
 
-            Review.FileTargetExtra readmeInfo ->
+            Review.FileTarget readmeInfo ->
                 readmeInfo.path
 
 
@@ -442,11 +433,7 @@ codeInspectorForSource isModule source =
     }
 
 
-{-| Assert that the rule reported some errors, by specifying which ones.
-
-Assert which errors are reported using [`error`](#error). The test will fail if
-a different number of errors than expected are reported, or if the message or the
-location is incorrect.
+{-| Expect multiple outputs: module errors, `elm.json` errors or extra file errors.
 
     import Review.Test
     import Test exposing (Test, describe, test)
@@ -455,48 +442,48 @@ location is incorrect.
     tests : Test
     tests =
         describe "The.Review.You.Want.To.Test"
-            [ test "should report Debug.log use" <|
+            [ test "should ..." <|
                 \() ->
-                    """module A exposing (..)
-    a = Debug.log "some" "message"
+                    [ """module A.B exposing (..)
+    import B
+    a = 1
+    b = 2
+    c = 3
     """
-                        |> Review.Test.run rule
-                        |> Review.Test.expectErrors
-                            [ Review.Test.error
-                                { message = "Remove the use of `Debug` before shipping to production"
-                                , details = [ "Details about the error" ]
-                                , under = "Debug.log"
-                                }
+                    , """module B exposing (..)
+    x = 1
+    y = 2
+    z = 3
+    """
+                    ]
+                        |> Review.Test.runOnModules rule
+                        |> Review.Test.expect
+                            [ Review.Test.globalErrors [ { message = "message", details = [ "details" ] } ]
+                            , Review.Test.moduleErrors "A.B" [ { message = "message", details = [ "details" ] } ]
+                            , Review.Test.dataExtract """
+    {
+        "foo": "bar",
+        "other": [ 1, 2, 3 ]
+    }"""
                             ]
             ]
 
 -}
-expectErrors : List ExpectedError -> ReviewResult -> Expectation
-expectErrors expectedErrors reviewResult =
+expectErrors : List { path : String, errors : List ExpectedError } -> (ReviewResult -> Expectation)
+expectErrors expectations reviewResult =
     case reviewResult of
         FailedRun errorMessage ->
             Expect.fail errorMessage
 
         SuccessfulRun runResults reRun ->
-            if expectedErrors == [] then
-                expectNoModuleErrors runResults
-
-            else
-                case runResults of
-                    runResult :: [] ->
-                        checkAllErrorsMatch runResult expectedErrors
-
-                    _ ->
-                        Expect.fail FailureMessage.needToUsedExpectErrorsForModules
-
-
-expectNoModuleErrors : List SuccessfulRunResult -> Expectation
-expectNoModuleErrors runResults =
-    Expect.all
-        (runResults
-            |> List.map (\fileRunResult () -> fileRunResult |> expectNoErrorForModuleRunResult)
-        )
-        ()
+            expectErrorsForModulesHelp
+                (List.map
+                    (\fileExpectation ->
+                        ( fileExpectation.path, fileExpectation.errors )
+                    )
+                    expectations
+                )
+                runResults
 
 
 expectNoErrorForModuleRunResult : SuccessfulRunResult -> Expectation
@@ -552,84 +539,6 @@ expectErrorsForModuleFiles expectedErrorsList runResults =
         runResults
 
 
-{-| Assert that the rule reported some errors for the `elm.json` file, by specifying which ones.
-
-If you expect the rule to report other kinds of errors or extract data, then you should use the [`Review.Test.expect`](#expect) and [`elmJsonErrors`](#elmJsonErrors) functions.
-
-    test "report an error when a module is unused" <|
-        \() ->
-            let
-                project : Project
-                project =
-                    Project.new
-                        |> Project.addElmJson elmJsonToConstructManually
-            in
-            """
-    module ModuleA exposing (a)
-    a = 1"""
-                |> Review.Test.runWithProjectData project rule
-                |> Review.Test.expectErrorsForElmJson
-                    [ Review.Test.error
-                        { message = "Unused dependency `author/package`"
-                        , details = [ "Dependency should be removed" ]
-                        , under = "author/package"
-                        }
-                    ]
-
-Assert which errors are reported using [`error`](#error). The test will fail if
-a different number of errors than expected are reported, or if the message or the
-location is incorrect.
-
--}
-expectErrorsForElmJson : List ExpectedError -> ReviewResult -> Expectation
-expectErrorsForElmJson expectedErrors reviewResult =
-    expectErrorsForFiles [ ( "elm.json", expectedErrors ) ] reviewResult
-
-
-expectErrorsForModules : List ( String, List ExpectedError ) -> ReviewResult -> Expectation
-expectErrorsForModules modules reviewResult =
-    expectErrorsForFiles modules reviewResult
-
-
-expectErrorsForFiles : List ( String, List ExpectedError ) -> ReviewResult -> Expectation
-expectErrorsForFiles files reviewResult =
-    Debug.todo ""
-
-
-{-| Assert that the rule reported some errors for the `README.md` file, by specifying which ones.
-
-If you expect the rule to report other kinds of errors or extract data, then you should use the [`Review.Test.expect`](#expect) and [`readmeErrors`](#readmeErrors) functions.
-
-    test "report an error when a module is unused" <|
-        \() ->
-            let
-                project : Project
-                project =
-                    Project.new
-                        |> Project.addReadme { path = "README.md", context = "# Project\n..." }
-            in
-            """
-    module ModuleA exposing (a)
-    a = 1"""
-                |> Review.Test.runWithProjectData project rule
-                |> Review.Test.expectErrorsForReadme
-                    [ Review.Test.error
-                        { message = "Invalid link"
-                        , details = [ "README contains an invalid link" ]
-                        , under = "htt://example.com"
-                        }
-                    ]
-
-Assert which errors are reported using [`error`](#error). The test will fail if
-a different number of errors than expected are reported, or if the message or the
-location is incorrect.
-
--}
-expectErrorsForReadme : List ExpectedError -> ReviewResult -> Expectation
-expectErrorsForReadme expectedErrors reviewResult =
-    expectErrorsForFiles [ ( "README.md", expectedErrors ) ] reviewResult
-
-
 {-| Create an expectation for an error.
 
 `message` should be the message you're expecting to be shown to the user.
@@ -664,96 +573,20 @@ error : { message : String, details : List String, under : String } -> ExpectedE
 error input =
     { message = input.message
     , details = input.details
-    , under = Under input.under
+    , range = Under input.under
     , fixedSource = Nothing
     }
 
 
-{-| Precise the exact position where the error should be shown to the user. This
-is only necessary when the `under` field is ambiguous.
+expectedErrorRangeSection : ExpectedErrorRange -> String
+expectedErrorRangeSection =
+    \expectedErrorRange ->
+        case expectedErrorRange of
+            Under str ->
+                str
 
-`atExactly` takes a record with start and end positions.
-
-    tests : Test
-    tests =
-        describe "The.Review.You.Want.To.Test"
-            [ test "should report multiple Debug.log calls" <|
-                \() ->
-                    """module A exposing (..)
-    a = Debug.log "foo" z
-    b = Debug.log "foo" z
-    """
-                        |> Review.Test.run rule
-                        |> Review.Test.expectErrors
-                            [ Review.Test.error
-                                { message = "Remove the use of `Debug` before shipping to production"
-                                , details = [ "Details about the error" ]
-                                , under = "Debug.log"
-                                }
-                                |> Review.Test.atExactly { start = { row = 4, column = 5 }, end = { row = 4, column = 14 } }
-                            , Review.Test.error
-                                { message = "Remove the use of `Debug` before shipping to production"
-                                , details = [ "Details about the error" ]
-                                , under = "Debug.log"
-                                }
-                                |> Review.Test.atExactly { start = { row = 5, column = 5 }, end = { row = 5, column = 14 } }
-                            ]
-            ]
-
-Tip: By default, do not use this function. If the test fails because there is some
-ambiguity, the test error will give you a recommendation of what to use as a parameter
-of `atExactly`, so you do not have to bother writing this hard-to-write argument yourself.
-
--}
-atExactly : { row : Int, column : Int } -> ExpectedError -> ExpectedError
-atExactly location expectedError =
-    { expectedError | under = UnderExactly (getUnder expectedError) location }
-
-
-{-| Create an expectation that the error provides an automatic fix, meaning that it used
-functions like [`errorWithFix`](./Review-Rule#errorWithFix), and an expectation of what the source
-code should be after the error's fix have been applied.
-
-In the absence of `whenFixed`, the test will fail if the error provides a fix.
-In other words, you only need to use this function if the error provides a fix.
-
-    tests : Test
-    tests =
-        describe "The.Review.You.Want.To.Test"
-            [ test "should report multiple Debug.log calls" <|
-                \() ->
-                    """module A exposing (..)
-    a = 1
-    b = Debug.log "foo" 2
-    """
-                        |> Review.Test.run rule
-                        |> Review.Test.expectErrors
-                            [ Review.Test.error
-                                { message = "Remove the use of `Debug` before shipping to production"
-                                , details = [ "Details about the error" ]
-                                , under = "Debug.log"
-                                }
-                                |> Review.Test.whenFixed """module SomeModule exposing (b)
-    a = 1
-    b = 2
-    """
-                            ]
-            ]
-
--}
-whenFixed : String -> ExpectedError -> ExpectedError
-whenFixed fixedSource expectedError =
-    { expectedError | fixedSource = Just fixedSource }
-
-
-getUnder : ExpectedError -> String
-getUnder expectedError =
-    case expectedError.under of
-        Under str ->
-            str
-
-        UnderExactly str _ ->
-            str
+            UnderExactly underExactly ->
+                underExactly.section
 
 
 getCodeAtLocationInSourceCode : String -> Range -> Maybe String
@@ -809,32 +642,30 @@ getCodeAtLocationInSourceCode sourceCode =
                 |> Just
 
 
-checkIfLocationIsAmbiguousInSourceCode : String -> Review.Error -> String -> Expectation
-checkIfLocationIsAmbiguousInSourceCode sourceCode =
-    \error_ under ->
-        let
-            occurrencesInSourceCode : List Int
-            occurrencesInSourceCode =
-                String.indexes under sourceCode
-        in
-        hasExactlyOneElement occurrencesInSourceCode
-            |> Expect.equal True
-            |> Expect.onFail (FailureMessage.locationIsAmbiguousInSourceCode sourceCode error_ under occurrencesInSourceCode)
+checkIfLocationIsAmbiguousInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String -> Expectation
+checkIfLocationIsAmbiguousInSourceCode sourceCode error_ under =
+    let
+        occurrencesInSourceCode : List Int
+        occurrencesInSourceCode =
+            String.indexes under sourceCode
+    in
+    case occurrencesInSourceCode of
+        [ _ ] ->
+            Expect.pass
 
-
-
--- RUNNING THE CHECKS
+        _ ->
+            Expect.fail (FailureMessage.locationIsAmbiguousInSourceCode sourceCode error_ under occurrencesInSourceCode)
 
 
 type alias ReorderState =
     { expectedErrors : List ExpectedError
-    , reviewErrors : List Review.Error
-    , pairs : List ( ExpectedError, Review.Error )
+    , reviewErrors : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
+    , pairs : List ( ExpectedError, { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } )
     , expectedErrorsWithNoMatch : List ExpectedError
     }
 
 
-reorderErrors : CodeInspector -> ReorderState -> ( List ExpectedError, List Review.Error )
+reorderErrors : CodeInspector -> ReorderState -> ( List ExpectedError, List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } )
 reorderErrors codeInspector reorderState =
     case reorderState.expectedErrors of
         [] ->
@@ -874,7 +705,7 @@ removeFirstOccurrence elementToRemove list =
                 x :: removeFirstOccurrence elementToRemove xs
 
 
-findBestMatchingReviewError : CodeInspector -> ExpectedError -> List Review.Error -> { error : Maybe Review.Error, confidenceLevel : Int } -> Maybe Review.Error
+findBestMatchingReviewError : CodeInspector -> ExpectedError -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> { error : Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }, confidenceLevel : Int } -> Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
 findBestMatchingReviewError codeInspector expectedErrorDetails reviewErrors bestMatch =
     case reviewErrors of
         [] ->
@@ -901,25 +732,25 @@ findBestMatchingReviewError codeInspector expectedErrorDetails reviewErrors best
                     bestMatch
 
 
-matchingConfidenceLevel : CodeInspector -> ExpectedError -> Review.Error -> Int
+matchingConfidenceLevel : CodeInspector -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> Int
 matchingConfidenceLevel codeInspector expectedErrorDetails reviewError =
     if expectedErrorDetails.message /= .message reviewError then
         0
 
     else
-        case expectedErrorDetails.under of
+        case expectedErrorDetails.range of
             Under under ->
-                if codeInspector.getCodeAtLocation (.range reviewError) /= Just under then
+                if codeInspector.getCodeAtLocation reviewError.range /= Just under then
                     1
 
                 else
                     2
 
-            UnderExactly under start ->
-                if codeInspector.getCodeAtLocation (.range reviewError) /= Just under then
+            UnderExactly underExactly ->
+                if codeInspector.getCodeAtLocation reviewError.range /= Just underExactly.section then
                     1
 
-                else if start /= reviewError.range.start then
+                else if underExactly.startingAt /= reviewError.range.start then
                     2
 
                 else
@@ -968,7 +799,7 @@ findAndRemoveHelp element previous list =
                 findAndRemoveHelp element (head :: previous) rest
 
 
-checkErrorsMatch : SuccessfulRunResult -> List ExpectedError -> Int -> List Review.Error -> List (() -> Expectation)
+checkErrorsMatch : SuccessfulRunResult -> List ExpectedError -> Int -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> List (() -> Expectation)
 checkErrorsMatch runResult expectedErrors expectedNumberOfErrors errors =
     case ( expectedErrors, errors ) of
         ( [], [] ) ->
@@ -994,14 +825,15 @@ checkErrorsMatch runResult expectedErrors expectedNumberOfErrors errors =
 
 
 extractExpectedErrorData : ExpectedError -> FailureMessage.ExpectedErrorData
-extractExpectedErrorData expectedError =
-    { message = expectedError.message
-    , details = expectedError.details
-    , under = getUnder expectedError
-    }
+extractExpectedErrorData =
+    \expectedError ->
+        { message = expectedError.message
+        , details = expectedError.details
+        , under = expectedError.range |> expectedErrorRangeSection
+        }
 
 
-checkErrorMatch : CodeInspector -> ExpectedError -> Review.Error -> (() -> Expectation)
+checkErrorMatch : CodeInspector -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> (() -> Expectation)
 checkErrorMatch codeInspector expectedError error_ =
     Expect.all
         [ \() ->
@@ -1018,11 +850,11 @@ checkErrorMatch codeInspector expectedError error_ =
         ]
 
 
-checkMessageAppearsUnder : CodeInspector -> Review.Error -> ExpectedError -> (() -> Expectation)
+checkMessageAppearsUnder : CodeInspector -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> ExpectedError -> (() -> Expectation)
 checkMessageAppearsUnder codeInspector error_ expectedError =
     case codeInspector.getCodeAtLocation (.range error_) of
         Just codeAtLocation ->
-            case expectedError.under of
+            case expectedError.range of
                 Under under ->
                     Expect.all
                         [ \() ->
@@ -1044,19 +876,24 @@ checkMessageAppearsUnder codeInspector error_ expectedError =
                             codeInspector.checkIfLocationIsAmbiguous error_ under
                         ]
 
-                UnderExactly under start ->
+                UnderExactly underExactly ->
                     Expect.all
                         [ \() ->
                             codeAtLocation
-                                |> Expect.equal under
-                                |> Expect.onFail (FailureMessage.underMismatch error_ { under = under, codeAtLocation = codeAtLocation })
+                                |> Expect.equal underExactly.section
+                                |> Expect.onFail (FailureMessage.underMismatch error_ { under = underExactly.section, codeAtLocation = codeAtLocation })
                         , \() ->
                             error_.range.start
-                                |> Expect.equal start
+                                |> Expect.equal underExactly.startingAt
                                 |> Expect.onFail
                                     (FailureMessage.wrongLocation error_
-                                        { start = start, end = { row = start.row, column = start.column + (under |> String.length) } }
-                                        under
+                                        { start = underExactly.startingAt
+                                        , end =
+                                            { row = underExactly.startingAt.row
+                                            , column = underExactly.startingAt.column + (underExactly.section |> String.length)
+                                            }
+                                        }
+                                        underExactly.section
                                     )
                         ]
 
@@ -1066,7 +903,7 @@ checkMessageAppearsUnder codeInspector error_ expectedError =
                     |> Expect.fail
 
 
-checkDetailsAreCorrect : Review.Error -> ExpectedError -> (() -> Expectation)
+checkDetailsAreCorrect : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> ExpectedError -> (() -> Expectation)
 checkDetailsAreCorrect error_ expectedError =
     Expect.all
         [ \() ->
@@ -1080,9 +917,9 @@ checkDetailsAreCorrect error_ expectedError =
         ]
 
 
-checkFixesAreCorrect : CodeInspector -> Review.Error -> ExpectedError -> Expectation
-checkFixesAreCorrect codeInspector err expectedError =
-    case ( expectedError.fixedSource, err.fixes ) of
+checkFixesAreCorrect : CodeInspector -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> ExpectedError -> Expectation
+checkFixesAreCorrect codeInspector reviewError expectedError =
+    case ( expectedError.fixedSource, reviewError.fixes ) of
         ( Nothing, [] ) ->
             Expect.pass
 
@@ -1091,29 +928,26 @@ checkFixesAreCorrect codeInspector err expectedError =
                 |> Expect.fail
 
         ( Nothing, _ :: _ ) ->
-            FailureMessage.unexpectedFixes err
+            FailureMessage.unexpectedFixes reviewError
                 |> Expect.fail
 
         ( Just expectedFixedSource, fix0 :: fix1Up ) ->
-            case Review.fix err.target (fix0 :: fix1Up) codeInspector.source of
+            case Review.fixFile (fix0 :: fix1Up) codeInspector.source of
                 Ok fixedSource ->
                     if fixedSource == expectedFixedSource then
                         Expect.pass
 
                     else if removeWhitespace fixedSource == removeWhitespace expectedFixedSource then
-                        Expect.fail <| FailureMessage.fixedCodeWhitespaceMismatch fixedSource expectedFixedSource err
+                        Expect.fail <| FailureMessage.fixedCodeWhitespaceMismatch fixedSource expectedFixedSource reviewError
 
                     else
-                        Expect.fail <| FailureMessage.fixedCodeMismatch fixedSource expectedFixedSource err
+                        Expect.fail <| FailureMessage.fixedCodeMismatch fixedSource expectedFixedSource reviewError
 
                 Err Review.AfterFixIsUnchanged ->
-                    Expect.fail <| FailureMessage.unchangedSourceAfterFix err
-
-                Err (Review.AfterFixSourceParsingFailed sourceCode) ->
-                    Expect.fail <| FailureMessage.invalidSourceAfterFix err sourceCode
+                    Expect.fail <| FailureMessage.unchangedSourceAfterFix reviewError
 
                 Err Review.FixHasCollisionsInRanges ->
-                    Expect.fail <| FailureMessage.hasCollisionsInFixRanges err
+                    Expect.fail <| FailureMessage.hasCollisionsInFixRanges reviewError
 
 
 removeWhitespace : String -> String
@@ -1121,224 +955,10 @@ removeWhitespace =
     \string -> string |> String.replace " " "" |> String.replace "\n" ""
 
 
-{-| Expectation of something that the rule will report or do.
-
-Check out the functions below to create these, and then pass them to [`Review.Test.expect`](#expect).
-
--}
-type ReviewExpectation
-    = FileErrorExpectation { path : String, errors : List ExpectedError }
-
-
 type CompiledDataExtract
     = NoDataExtractExpected
     | DataExtractExpected String
     | MultipleDataExtractExpected
-
-
-{-| Expect multiple outputs for tests.
-
-Functions such as [`expectErrors`](#expectErrors) and [`expectGlobalErrors`](#expectGlobalErrors) work well, but
-in some situations a rule will report multiple things: module errors, global errors, errors for `elm.json` or the
-README, or even extract data.
-
-When you have multiple expectations to make for a module, use this function.
-
-    import Review.Test
-    import Test exposing (Test, describe, test)
-    import The.Review.You.Want.To.Test exposing (rule)
-
-    tests : Test
-    tests =
-        describe "The.Review.You.Want.To.Test"
-            [ test "should ..." <|
-                \() ->
-                    [ """module A.B exposing (..)
-    import B
-    a = 1
-    b = 2
-    c = 3
-    """
-                    , """module B exposing (..)
-    x = 1
-    y = 2
-    z = 3
-    """
-                    ]
-                        |> Review.Test.runOnModules rule
-                        |> Review.Test.expect
-                            [ Review.Test.globalErrors [ { message = "message", details = [ "details" ] } ]
-                            , Review.Test.moduleErrors "A.B" [ { message = "message", details = [ "details" ] } ]
-                            , Review.Test.dataExtract """
-    {
-        "foo": "bar",
-        "other": [ 1, 2, 3 ]
-    }"""
-                            ]
-            ]
-
--}
-expect : List ReviewExpectation -> ReviewResult -> Expectation
-expect expectations reviewResult =
-    case reviewResult of
-        FailedRun errorMessage ->
-            Expect.fail errorMessage
-
-        SuccessfulRun runResults reRun ->
-            expectErrorsForModulesHelp
-                (List.map
-                    (\expectation ->
-                        case expectation of
-                            FileErrorExpectation fileExpectation ->
-                                ( fileExpectation.path, fileExpectation.errors )
-                    )
-                    expectations
-                )
-                runResults
-
-
-{-| Assert that the rule reported some errors for modules, by specifying which ones. To be used along with [`Review.Test.expect`](#expect).
-
-If you expect only module errors, then you may want to use [`expectErrorsForModules`](#expectErrorsForModules) which is simpler.
-
-    test "report an error when a module is unused" <|
-        \() ->
-            [ """
-    module ModuleA exposing (a)
-    a = 1""", """
-    module ModuleB exposing (a)
-    a = Debug.log "log" 1""" ]
-                |> Review.Test.runOnModules rule
-                |> Review.Test.expect
-                    [ Review.Test.moduleErrors "ModuleB"
-                        [ Review.Test.error
-                            { message = "Remove the use of `Debug` before shipping to production"
-                            , details = [ "Details about the error" ]
-                            , under = "Debug.log"
-                            }
-                        ]
-                    ]
-
-Assert which errors are reported using [`error`](#error). The test will fail if
-a different number of errors than expected are reported, or if the message or the
-location is incorrect.
-
--}
-moduleErrors : String -> List ExpectedError -> ReviewExpectation
-moduleErrors filePath expected =
-    FileErrorExpectation { path = filePath, errors = expected }
-
-
-{-| Assert that the rule reported some errors for the `elm.json` file, by specifying which ones. To be used along with [`Review.Test.expect`](#expect).
-
-If you expect only errors for `elm.json`, then you may want to use [`expectErrorsForElmJson`](#expectErrorsForElmJson) which is simpler.
-
-    test "report an error when a module is unused" <|
-        \() ->
-            let
-                project : Project
-                project =
-                    Project.new
-                        |> Project.addElmJson elmJsonToConstructManually
-            in
-            """
-    module ModuleA exposing (a)
-    a = 1"""
-                |> Review.Test.runWithProjectData project rule
-                |> Review.Test.expect
-                    [ Review.Test.elmJson
-                        [ Review.Test.error
-                            { message = "Unused dependency `author/package`"
-                            , details = [ "Dependency should be removed" ]
-                            , under = "author/package"
-                            }
-                        ]
-                    ]
-
-Assert which errors are reported using [`error`](#error). The test will fail if
-a different number of errors than expected are reported, or if the message or the
-location is incorrect.
-
--}
-elmJsonErrors : List ExpectedError -> ReviewExpectation
-elmJsonErrors expected =
-    FileErrorExpectation { path = "elm.json", errors = expected }
-
-
-{-| Assert that the rule reported some errors for the `README.md` file. To be used along with [`Review.Test.expect`](#expect).
-
-If you expect only errors for `README.md`, then you may want to use [`expectErrorsForReadme`](#expectErrorsForReadme) which is simpler.
-
-    import Review.Test
-    import Test exposing (Test, describe, test)
-    import The.Review.You.Want.To.Test exposing (rule)
-
-    tests : Test
-    tests =
-        describe "The.Review.You.Want.To.Test"
-            [ test "should extract even if there are errors" <|
-                \() ->
-                    let
-                        project : Project
-                        project =
-                            Project.new
-                                |> Project.addReadme { path = "README.md", context = "# Project\n..." }
-                    in
-                    """module ModuleA exposing (a)
-    a = 1"""
-                        |> Review.Test.runWithProjectData project rule
-                        |> Review.Test.expect
-                            [ Review.Test.readme
-                                [ Review.Test.error
-                                    { message = "Invalid link"
-                                    , details = [ "README contains an invalid link" ]
-                                    , under = "htt://example.com"
-                                    }
-                                ]
-                            ]
-            ]
-
--}
-readmeErrors : List ExpectedError -> ReviewExpectation
-readmeErrors expected =
-    FileErrorExpectation { path = "README.md", errors = expected }
-
-
-{-| Indicates to the test that the knowledge of ignored files (through [`Review.withIsFileIgnored`](Review-Rule#withIsFileIgnored))
-can impact results, and that that is done on purpose.
-
-By default, `elm-review` assumes that the knowledge of which files are ignored will only be used to improve performance,
-and not to impact the results of the rule.
-
-Testing that your rule behaves as expected in all your scenarios and with or without some files being ignored can be
-very hard. As such, the testing framework will automatically — if you've used `withIsFileIgnored` — run the rule again
-but with some of the files being ignored (it will in practice test out all the combinations) and ensure that the results
-stat the same with or without ignored files.
-
-If your rule uses this information to change the results (report less or more errors, give different details in the error
-message, ...), then you can use this function to tell the test not to attempt re-running and expecting the same results.
-In this case, you should write tests where some of the files are ignored yourself.
-
-    test "report an error when..." <|
-        \() ->
-            [ """
-    module ModuleA exposing (a)
-    a = 1""", """
-    module ModuleB exposing (a)
-    a = Debug.log "log" 1""" ]
-                |> Review.Test.runOnModules rule
-                |> Review.Test.ignoredFilesImpactResults
-                |> Review.Test.expect whatYouExpect
-
--}
-ignoredFilesImpactResults : ReviewResult -> ReviewResult
-ignoredFilesImpactResults reviewResult =
-    case reviewResult of
-        SuccessfulRun data _ ->
-            SuccessfulRun data DontAttemptReRun
-
-        _ ->
-            reviewResult
 
 
 containsDifferences : List (Diff.Change a) -> Bool

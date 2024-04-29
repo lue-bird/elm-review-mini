@@ -48,7 +48,7 @@ type alias SourceCode =
 -- ERROR MESSAGES
 
 
-didNotExpectErrors : String -> List Review.Error -> String
+didNotExpectErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 didNotExpectErrors moduleName errors =
     failureMessage "DID NOT EXPECT ERRORS"
         ("""I expected no errors for module `""" ++ moduleName ++ """` but found:
@@ -92,7 +92,7 @@ The source code in question is the one at index """
     failureMessage "TEST SOURCE CODE PARSING ERROR" (details ++ "\n\n" ++ hint)
 
 
-globalErrorInTest : Review.Error -> String
+globalErrorInTest : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 globalErrorInTest error =
     failureMessage "GLOBAL ERROR IN SOURCE CODE"
         ("""I found a global error in the project you provided for this test:
@@ -106,7 +106,7 @@ the same issue. Please fix this issue in your test.
 """)
 
 
-messageMismatch : ExpectedErrorData -> Review.Error -> String
+messageMismatch : ExpectedErrorData -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 messageMismatch expectedError error =
     failureMessage "UNEXPECTED ERROR MESSAGE"
         ("""I was looking for the error with the following message:
@@ -142,7 +142,7 @@ but I found the following error message:
   """ ++ wrapInQuotes error.message)
 
 
-underMismatch : Review.Error -> { under : String, codeAtLocation : String } -> String
+underMismatch : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> { under : String, codeAtLocation : String } -> String
 underMismatch error { under, codeAtLocation } =
     failureMessage "UNEXPECTED ERROR LOCATION"
         ("""I found an error with the following message:
@@ -161,7 +161,7 @@ Hint: Maybe you're passing the `Range` of a wrong node when
 calling `Rule.error`.""")
 
 
-unexpectedDetails : List String -> Review.Error -> String
+unexpectedDetails : List String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 unexpectedDetails expectedDetails error =
     failureMessage "UNEXPECTED ERROR DETAILS"
         ("""I found an error for a file with the following message:
@@ -238,7 +238,7 @@ formatDetails details =
                 |> (\str -> "```\n" ++ str ++ "\n  ```")
 
 
-wrongLocation : Review.Error -> Range -> String -> String
+wrongLocation : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> Range -> String -> String
 wrongLocation error range under =
     failureMessage "UNEXPECTED ERROR LOCATION"
         ("""I was looking for the error with the following message:
@@ -296,7 +296,7 @@ Here are the """ ++ String.fromInt numberOfErrors ++ """ I could not find:
            )
 
 
-tooManyErrors : String -> List Review.Error -> String
+tooManyErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 tooManyErrors moduleName extraErrors =
     let
         numberOfErrors : Int
@@ -324,7 +324,7 @@ tooManyGlobalErrors extraErrors =
         )
 
 
-locationNotFound : Review.Error -> String
+locationNotFound : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 locationNotFound error =
     failureMessage "COULD NOT FIND LOCATION FOR ERROR"
         ("""I was looking for the error with the following message:
@@ -355,7 +355,7 @@ If this helps, this is where I found the error:
   """ ++ formatSourceCode codeAtLocation)
 
 
-locationIsAmbiguousInSourceCode : SourceCode -> Review.Error -> String -> List Int -> String
+locationIsAmbiguousInSourceCode : SourceCode -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String -> List Int -> String
 locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
     failureMessage "AMBIGUOUS ERROR LOCATION"
         ("""Your test passes, but where the message appears is ambiguous.
@@ -445,7 +445,7 @@ Hint: Maybe you forgot to call a function like `Rule.errorWithFix` or maybe
 the list of provided fixes was empty.""")
 
 
-unexpectedFixes : Review.Error -> String
+unexpectedFixes : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 unexpectedFixes error =
     failureMessage "UNEXPECTED FIXES"
         ("""I expected that the error with the following message
@@ -468,7 +468,7 @@ To fix this, you can call `Review.Test.whenFixed` on your error:
       |> Review.Test.whenFixed "<source code>\"""")
 
 
-fixedCodeMismatch : SourceCode -> SourceCode -> Review.Error -> String
+fixedCodeMismatch : SourceCode -> SourceCode -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 fixedCodeMismatch resultingSourceCode expectedSourceCode error =
     failureMessage "FIXED CODE MISMATCH"
         ("""I found a different fixed source code than expected for the error with the
@@ -485,7 +485,7 @@ but I found:
   """ ++ formatSourceCode resultingSourceCode)
 
 
-fixedCodeWhitespaceMismatch : SourceCode -> SourceCode -> Review.Error -> String
+fixedCodeWhitespaceMismatch : SourceCode -> SourceCode -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 fixedCodeWhitespaceMismatch resultingSourceCode expectedSourceCode error =
     let
         ( expected, resulting ) =
@@ -548,7 +548,7 @@ replaceWhitespace lines =
         |> String.split "\n"
 
 
-unchangedSourceAfterFix : Review.Error -> String
+unchangedSourceAfterFix : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 unchangedSourceAfterFix error =
     failureMessage "UNCHANGED SOURCE AFTER FIX"
         ("""I got something unexpected when applying the fixes provided by the error
@@ -566,7 +566,7 @@ doesn't do anything.
 Hint: Maybe you inserted an empty string into the source code.""")
 
 
-invalidSourceAfterFix : Review.Error -> SourceCode -> String
+invalidSourceAfterFix : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> SourceCode -> String
 invalidSourceAfterFix error resultingSourceCode =
     failureMessage "INVALID SOURCE AFTER FIX"
         ("""I got something unexpected when applying the fixes provided by the error
@@ -586,7 +586,7 @@ anymore. If a fix can not be applied fully, it should not be applied at
 all.""")
 
 
-hasCollisionsInFixRanges : Review.Error -> String
+hasCollisionsInFixRanges : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 hasCollisionsInFixRanges error =
     failureMessage "FOUND COLLISIONS IN FIX RANGES"
         ("""I got something unexpected when applying the fixes provided by the error
@@ -708,83 +708,23 @@ formatJsonDiff differences =
         |> String.join "\n"
 
 
-resultsAreDifferentWhenFilesAreIgnored : { ignoredFiles : List String, missing : List Review.Error, unexpected : List Review.Error } -> String
-resultsAreDifferentWhenFilesAreIgnored { ignoredFiles, missing, unexpected } =
-    let
-        files : String
-        files =
-            List.map (\file -> "  - " ++ file) ignoredFiles |> String.join "\n"
-
-        difference : String
-        difference =
-            List.filterMap identity
-                [ if List.isEmpty missing then
-                    Nothing
-
-                  else
-                    Just ("the following errors could not be found anymore:" ++ summarizeErrors missing)
-                , if List.isEmpty unexpected then
-                    Nothing
-
-                  else
-                    Just ("the following errors start appearing:" ++ summarizeErrors unexpected)
-                ]
-                |> String.join "\n\nand "
-    in
-    failureMessage "GOT DIFFERENT RESULTS WHEN IGNORING FILES"
-        ("""This rule is using `Review.Rule.withIsFileIgnored`, which gives it the
-information of which files are ignored.
-
-Without further information, I assume that this information is used solely
-to improve performance of the rule, not to change the behavior in any way.
-If this is not the case for your rule, then please indicate so in your test
-using the `Review.Test.ignoredFilesImpactResults` function.
-
-With that in mind, I tried re-running the test while ignoring some files
-and I got different results than before.
-
-When I ignore these files:
-""" ++ files ++ """
-
-then """ ++ String.trim difference)
-
-
-summarizeErrors : List Review.Error -> String
-summarizeErrors errors =
-    "\n" ++ (String.join "\n\n" <| List.map describeError errors)
-
-
-describeError : Review.Error -> String
-describeError error =
-    """
-    { message = """ ++ wrapInDoubleQuotes error.message ++ """
-    , filePath = """ ++ wrapInDoubleQuotes (error.target |> reviewErrorTargetFilePath) ++ """
-    , details = """ ++ formatDetailsForDescription error ++ """
-    , range = """ ++ rangeAsStringOnMultipleLines error.range ++ """
-    , fixes = """ ++ hasFixes error ++ """
-    }"""
-
-
 reviewErrorTargetFilePath : Review.FileTarget -> String
 reviewErrorTargetFilePath =
     \errorTarget ->
         case errorTarget of
-            Review.ErrorTargetModule moduleInfo ->
-                moduleInfo.path
-
             Review.FileTargetElmJson ->
                 "elm.json"
 
-            Review.FileTargetExtra readmeInfo ->
-                readmeInfo.path
+            Review.FileTarget fileInfo ->
+                fileInfo.path
 
 
-formatDetailsForDescription : Review.Error -> String
+formatDetailsForDescription : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 formatDetailsForDescription error =
     "[" ++ (error.details |> List.map wrapInDoubleQuotes |> String.join ", ") ++ "]"
 
 
-hasFixes : Review.Error -> String
+hasFixes : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 hasFixes error =
     case error.fixes of
         [] ->
@@ -894,14 +834,14 @@ positionAsRange sourceCode under position =
     }
 
 
-listErrorMessagesAndPositions : List Review.Error -> String
+listErrorMessagesAndPositions : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 listErrorMessagesAndPositions errors =
     errors
         |> List.map errorMessageAndPosition
         |> String.join "\n"
 
 
-errorMessageAndPosition : Review.Error -> String
+errorMessageAndPosition : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
 errorMessageAndPosition error =
     "  - " ++ wrapInQuotes error.message ++ "\n    at " ++ rangeAsString error.range
 

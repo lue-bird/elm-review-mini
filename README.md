@@ -74,9 +74,19 @@ review =
         , inspect =
             [ Review.inspectModule
                 (\module ->
-                    module.ast.declarations
-                        |> List.filterMap Review.declarationToValueOrFunction
-                        |> List.concatMap Review.expressionAllSubs
+                    module.syntax.declarations
+                        |> List.concatMap
+                            (\(Elm.Syntax.Node.Node _ declaration) ->
+                                case Elm.Syntax.Node.value declaration of
+                                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                        functionDeclaration.declaration
+                                            |> Elm.Syntax.Node.value
+                                            |> .expression
+                                            |> List.concatMap Review.expressionAllSubs
+
+                                    _ ->
+                                        []
+                            )
                         |> List.filterMap
                             (\expressionNode ->
                                 case expressionNode of
