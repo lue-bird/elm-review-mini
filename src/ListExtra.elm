@@ -11,7 +11,7 @@ last =
             [ onlyElement ] ->
                 onlyElement |> Just
 
-            el0 :: el1 :: el2Up ->
+            _ :: el1 :: el2Up ->
                 (el1 :: el2Up) |> last
 
 

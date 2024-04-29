@@ -4,12 +4,13 @@ module Review exposing
     , inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
     , ModuleData
     , inspectComposable, inspectMap
-    , ContextToErrors(..), FileTarget(..), Error, ErrorWithoutFixes
+    , FileTarget(..), Error
     , Fix(..), fixInsertAt, fixRemoveRange, fixReplaceRangeBy
     , declarationToFunction, expressionSubs, functionDeclarationExpression, moduleHeaderDocumentation, moduleHeaderNameNode
     , sourceExtractInRange
+    , program, ProgramEvent(..), ProgramState
     , run, Cache, cacheEmpty, fix
-    , FixError(..), elmJsonToElmProjectFiles
+    , ContextSerialized(..), FixError(..), Inspect, InspectName, InspectSingleTargetToContext, elmJsonToElmProjectFiles
     )
 
 {-| `elm-review-mini` scans the modules, `elm.json`, dependencies and `README.md` from your project.
@@ -90,6 +91,7 @@ Look at the global picture of an Elm project to collect context.
 
 # running
 
+@docs program, ProgramEvent, ProgramState
 @docs run, FixMode, Cache, cacheEmpty, fix
 
 -}
@@ -101,103 +103,24 @@ import Elm.Docs
 import Elm.Package
 import Elm.Parser
 import Elm.Project
-import Elm.Syntax.Declaration as Declaration exposing (Declaration)
-import Elm.Syntax.Exposing as Exposing
-import Elm.Syntax.Expression as Expression exposing (Expression, Function)
-import Elm.Syntax.File exposing (File)
+import Elm.Syntax.Declaration
+import Elm.Syntax.Exposing
+import Elm.Syntax.Expression
+import Elm.Syntax.File
 import Elm.Syntax.Import
-import Elm.Syntax.Infix as Infix
-import Elm.Syntax.Module as Module exposing (Module)
-import Elm.Syntax.ModuleName exposing (ModuleName)
-import Elm.Syntax.Node as Node exposing (Node(..))
-import Elm.Syntax.Range as Range exposing (Location, Range)
+import Elm.Syntax.Infix
+import Elm.Syntax.Module
+import Elm.Syntax.ModuleName
+import Elm.Syntax.Node
+import Elm.Syntax.Range
 import Elm.Version
 import Json.Decode
 import Json.Encode
 import ListExtra
-import Review.FilePath
 import Rope exposing (Rope)
 import Serialize
-import Set exposing (Set)
+import Set
 import Unicode
-
-
-type alias ValidProject =
-    { modules :
-        List
-            { path : String
-            , source : String
-            , ast : Elm.Syntax.File.File
-            }
-    , elmJson : { path : String, source : String, project : Elm.Project.Project }
-    , extraFiles : List { path : String, content : String }
-    , indirectDependencies : List { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
-    , directDependencies : List { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
-    }
-
-
-projectToValid :
-    { modules : List { path : String, source : String }
-    , elmJson : { path : String, source : String }
-    , extraFiles : List { path : String, content : String }
-    , indirectDependencies : List { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
-    , directDependencies : List { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
-    }
-    -> Result { filesAtPathFailedToParse : Set String } ValidProject
-projectToValid p =
-    let
-        modulesParsed =
-            p.modules
-                |> List.foldl
-                    (\moduleInfo soFar ->
-                        case moduleInfo.source |> Elm.Parser.parseToFile of
-                            Ok ast ->
-                                case soFar of
-                                    Err soFarErrors ->
-                                        soFarErrors |> Err
-
-                                    Ok soFarModules ->
-                                        soFarModules
-                                            |> (::)
-                                                { path = moduleInfo.path
-                                                , ast = ast
-                                                , source = moduleInfo.source
-                                                }
-                                            |> Ok
-
-                            Err _ ->
-                                Err
-                                    (case soFar of
-                                        Ok _ ->
-                                            moduleInfo.path |> Set.singleton
-
-                                        Err soFarErrors ->
-                                            soFarErrors |> Set.insert moduleInfo.path
-                                    )
-                    )
-                    (Ok [])
-    in
-    case modulesParsed of
-        Err moduleNamesWithParseErrors ->
-            Err { filesAtPathFailedToParse = moduleNamesWithParseErrors }
-
-        Ok modules ->
-            case p.elmJson |> .source |> Json.Decode.decodeString Elm.Project.decoder of
-                Err _ ->
-                    Err { filesAtPathFailedToParse = p.elmJson.path |> Set.singleton }
-
-                Ok project ->
-                    { modules = modules
-                    , elmJson =
-                        { path = p.elmJson.path
-                        , source = p.elmJson.source
-                        , project = project
-                        }
-                    , extraFiles = p.extraFiles
-                    , indirectDependencies = p.indirectDependencies
-                    , directDependencies = p.directDependencies
-                    }
-                        |> Ok
 
 
 syntaxFileSanitize : Elm.Syntax.File.File -> Elm.Syntax.File.File
@@ -206,71 +129,7 @@ syntaxFileSanitize =
         { syntaxFile
             | comments =
                 syntaxFile.comments
-                    |> List.sortBy (\(Node range _) -> ( range.start.row, range.start.column ))
-        }
-
-
-toReview :
-    { name : String
-    , contextMerge : context -> context -> context
-    , contextSerialize : Serialize.Codec String context
-    , directDependenciesToContext : Dict String (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> context)
-    , elmJsonToContext : Dict String (Elm.Project.Project -> context)
-    , extraFilesToContext : Dict String ({ path : String, content : String } -> context)
-    , projectModuleToContext : Dict String (ModuleData -> context)
-    , toErrors : ContextToErrors context
-    }
-    -> Review
-toReview =
-    \review ->
-        let
-            serialize : context -> ContextSerialized
-            serialize =
-                \context ->
-                    context
-                        |> Serialize.encodeToString review.contextSerialize
-                        |> ContextSerializedBase64
-
-            deserialize : ContextSerialized -> Result (Serialize.Error String) context
-            deserialize =
-                \(ContextSerializedBase64 serializedBase64) ->
-                    serializedBase64 |> Serialize.decodeFromString review.contextSerialize
-        in
-        { name = review.name
-        , contextMerge =
-            \a b ->
-                Result.map2
-                    (\aContext bContext ->
-                        review.contextMerge aContext bContext |> serialize
-                    )
-                    (a |> deserialize)
-                    (b |> deserialize)
-        , directDependenciesToContext =
-            review.directDependenciesToContext
-                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
-        , elmJsonToContext =
-            review.elmJsonToContext
-                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
-        , extraFilesToContext =
-            review.extraFilesToContext
-                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
-        , projectModuleToContext =
-            review.projectModuleToContext
-                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
-        , toErrors =
-            case review.toErrors of
-                ErrorsWithoutFixes toErrors ->
-                    (\context ->
-                        context |> deserialize |> Result.map toErrors
-                    )
-                        |> SerializedErrorsWithoutFixes
-
-                ErrorsWithFixes toErrors ->
-                    (\context ->
-                        context |> deserialize |> Result.map toErrors
-                    )
-                        |> SerializedErrorsWithFixes
-        , ignoreErrorsForFiles = \_ -> False
+                    |> List.sortBy (\(Elm.Syntax.Node.Node range _) -> ( range.start.row, range.start.column ))
         }
 
 
@@ -278,12 +137,12 @@ toReview =
 -}
 type alias Review =
     { name : String
-    , contextMerge : ContextSerialized -> ContextSerialized -> Result (Serialize.Error String) ContextSerialized
+    , contextFold : ( ContextSerialized, List ContextSerialized ) -> Result (Serialize.Error String) ContextSerialized
     , directDependenciesToContext : Dict String (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> ContextSerialized)
     , elmJsonToContext : Dict String (Elm.Project.Project -> ContextSerialized)
     , extraFilesToContext : Dict String ({ path : String, content : String } -> ContextSerialized)
     , projectModuleToContext : Dict String (ModuleData -> ContextSerialized)
-    , toErrors : SerializedContextToErrors
+    , toErrors : ContextSerialized -> Result (Serialize.Error String) (List Error)
     , ignoreErrorsForFiles : String -> Bool
     }
 
@@ -346,26 +205,8 @@ type InspectSingleTargetToContext context
     | InspectProjectModuleToContext (ModuleData -> context)
 
 
-type ContextToErrors context
-    = ErrorsWithFixes (context -> Rope Error)
-    | ErrorsWithoutFixes (context -> Rope ErrorWithoutFixes)
-
-
-type SerializedContextToErrors
-    = SerializedErrorsWithFixes (ContextSerialized -> Result (Serialize.Error String) (Rope Error))
-    | SerializedErrorsWithoutFixes (ContextSerialized -> Result (Serialize.Error String) (Rope ErrorWithoutFixes))
-
-
-type alias ErrorWithoutFixes =
-    { range : Range
-    , message : String
-    , details : List String
-    , target : FileTarget
-    }
-
-
 type alias Error =
-    { range : Range
+    { range : Elm.Syntax.Range.Range
     , message : String
     , details : List String
     , target : FileTarget
@@ -440,39 +281,22 @@ inspectDirectDependencies moduleDataToContext =
         |> Rope.singleton
 
 
-{-| Creates a schema for a project rule. Will require adding project visitors and calling
-[`finish`](#finish) to create a usable [`Rule`](#Rule).
+{-| A new [`Review`](#Review) with
 
-The first argument is the rule name. I _highly_ recommend naming it just like the
-module name (including all the `.` there may be).
-
-The second argument is the initial `context`, i.e. the data that the rule will
-accumulate as the project will be traversed, and allows the rule to know/remember
-what happens in other parts of the project.
-
-**NOTE**: Do not store functions, JSON values or regular expressions in your project context, as they will be
-compared internally, which [may cause Elm to crash](https://package.elm-lang.org/packages/elm/core/latest/Basics#==).
-
-Project rules traverse the project in the following order:
-
-  - Read and/or report errors in project files [`ProjectGlobalData`](#ProjectGlobalData)
-  - The Elm modules one by one, visited by [`withModuleVisitor`](#withModuleVisitor),
-    following the same traversal order as for module rules but without reading the project files (`elm.json`, ...).
-  - A final evaluation when all modules have been visited, using [`withFinalProjectEvaluation`](#withFinalProjectEvaluation)
-
-Evaluating/visiting a node means two things:
-
-  - Detecting patterns and reporting errors
-  - Collecting data in a "context", which will be either a `context` or a `moduleContext` depending on the part of the project being visited, to have more information available in a later
-    part of the traversal evaluation.
+  - `name`: the name of the module this review is defined in including all the `.`s
+  - `inspect`: the parts you want to analyze and collect context from. See [`Inspect`](#Inspect)
+  - `contextMerge`: assemble contexts from multiple you've collected into one
+  - `report`: the final evaluation, turning your collected and merged context into a list of [`Error`](#Error)s
+  - `contextSerialize`: For big files especially, re-running all the parsing and inspection every time we change a different file
+    is costly, so we serialize it for caching using [MartinSStewart/elm-serialize](https://dark.elm.dmy.fr/packages/MartinSStewart/elm-serialize/latest/)
 
 -}
 create :
     { name : String
-    , contextMerge : context -> context -> context
-    , contextSerialize : Serialize.Codec String context
     , inspect : List (Inspect context)
-    , report : ContextToErrors context
+    , contextMerge : context -> context -> context
+    , report : context -> List Error
+    , contextSerialize : Serialize.Codec String context
     }
     -> Review
 create definition =
@@ -528,6 +352,64 @@ create definition =
         |> toReview
 
 
+toReview :
+    { name : String
+    , contextMerge : context -> context -> context
+    , contextSerialize : Serialize.Codec String context
+    , directDependenciesToContext : Dict String (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> context)
+    , elmJsonToContext : Dict String (Elm.Project.Project -> context)
+    , extraFilesToContext : Dict String ({ path : String, content : String } -> context)
+    , projectModuleToContext : Dict String (ModuleData -> context)
+    , toErrors : context -> List Error
+    }
+    -> Review
+toReview =
+    \review ->
+        let
+            serialize : context -> ContextSerialized
+            serialize =
+                \context ->
+                    context
+                        |> Serialize.encodeToString review.contextSerialize
+                        |> ContextSerializedBase64
+
+            deserialize : ContextSerialized -> Result (Serialize.Error String) context
+            deserialize =
+                \(ContextSerializedBase64 serializedBase64) ->
+                    serializedBase64 |> Serialize.decodeFromString review.contextSerialize
+        in
+        { name = review.name
+        , contextFold =
+            \( contextOne, contextOthers ) ->
+                contextOthers
+                    |> List.foldl
+                        (\context soFar ->
+                            Result.map2
+                                (\aContext bContext -> review.contextMerge aContext bContext)
+                                soFar
+                                (context |> deserialize)
+                        )
+                        (contextOne |> deserialize)
+                    |> Result.map serialize
+        , directDependenciesToContext =
+            review.directDependenciesToContext
+                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
+        , elmJsonToContext =
+            review.elmJsonToContext
+                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
+        , extraFilesToContext =
+            review.extraFilesToContext
+                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
+        , projectModuleToContext =
+            review.projectModuleToContext
+                |> Dict.map (\_ toContext data -> data |> toContext |> serialize)
+        , toErrors =
+            \context ->
+                context |> deserialize |> Result.map review.toErrors
+        , ignoreErrorsForFiles = \_ -> False
+        }
+
+
 cacheEmpty : Cache
 cacheEmpty =
     { elmJsonContext = Nothing
@@ -564,6 +446,17 @@ ignoreErrorsForFilesWhere filterOut =
         }
 
 
+elmJsonToElmProjectFiles : Elm.Project.Project -> { sourceDirectories : List String, directDependenciesFromElmHome : List String }
+elmJsonToElmProjectFiles =
+    \elmJson ->
+        { sourceDirectories = elmJson |> elmJsonSourceDirectories
+        , directDependenciesFromElmHome =
+            elmJson
+                |> elmJsonDirectDependencyNameVersionStrings
+                |> List.concatMap (\packagePath -> [ packagePath ++ "/elm.json", packagePath ++ "/docs.json" ])
+        }
+
+
 elmJsonDirectDependencyNameVersionStrings : Elm.Project.Project -> List String
 elmJsonDirectDependencyNameVersionStrings elmJson =
     case elmJson of
@@ -586,11 +479,11 @@ versionConstraintLowerBound : Elm.Constraint.Constraint -> String
 versionConstraintLowerBound =
     \constraint ->
         case constraint |> Elm.Constraint.toString |> String.split " " of
-            lowerBoundAsString :: _ ->
-                lowerBoundAsString
-
             [] ->
                 "1.0.0"
+
+            lowerBoundAsString :: _ ->
+                lowerBoundAsString
 
 
 elmJsonSourceDirectories : Elm.Project.Project -> List String
@@ -624,17 +517,6 @@ endWithSlash dir =
 
     else
         dir ++ "/"
-
-
-elmJsonToElmProjectFiles : Elm.Project.Project -> { sourceDirectories : List String, directDependenciesFromElmHome : List String }
-elmJsonToElmProjectFiles =
-    \elmJson ->
-        { sourceDirectories = elmJson |> elmJsonSourceDirectories
-        , directDependenciesFromElmHome =
-            elmJson
-                |> elmJsonDirectDependencyNameVersionStrings
-                |> List.concatMap (\packagePath -> [ packagePath ++ "/elm.json", packagePath ++ "/docs.json" ])
-        }
 
 
 {-| Review a project and return the errors raised by the given rules.
@@ -699,62 +581,48 @@ run reviewOptions review =
             extraFilesContextAndCache =
                 review.extraFilesToContext |> Debug.todo ""
 
-            allContexts =
-                moduleContextsAndCache.contexts ++ extraFilesContextAndCache.contexts
+            all =
+                Result.map2 (\a b -> ( a.contexts ++ b.contexts, a.cache ))
+                    moduleContextsAndCache
+                    extraFilesContextAndCache
         in
-        case allContexts of
-            [] ->
+        case all of
+            Err error ->
+                { errorsByPath =
+                    Dict.singleton error.fileAtPathFailedToParse
+                        [ Debug.todo "failed to parse error" ]
+                , cache = reviewOptions.cache
+                }
+
+            Ok ( [], _ ) ->
                 { errorsByPath = Dict.empty, cache = reviewOptions.cache }
 
-            contextOne :: contextOthers ->
+            Ok ( contextOne :: contextOthers, moduleCache ) ->
                 let
                     overallContext : ContextSerialized
                     overallContext =
-                        contextOthers
-                            |> List.foldl
-                                (\context soFar ->
-                                    case review.contextMerge context soFar of
-                                        Err _ ->
-                                            Debug.todo "corrupt cache"
+                        case ( contextOne, contextOthers ) |> review.contextFold of
+                            Err _ ->
+                                Debug.todo "corrupt cache"
 
-                                        Ok newContext ->
-                                            newContext
-                                )
-                                contextOne
+                            Ok context ->
+                                context
                 in
                 { errorsByPath =
-                    (case review.toErrors of
-                        SerializedErrorsWithFixes toErrorsWithFixes ->
-                            overallContext |> toErrorsWithFixes
-
-                        SerializedErrorsWithoutFixes toErrorsWithoutFixes ->
-                            overallContext
-                                |> toErrorsWithoutFixes
-                                |> Result.map
-                                    (Rope.map
-                                        (\err ->
-                                            { target = err.target
-                                            , message = err.message
-                                            , details = err.details
-                                            , range = err.range
-                                            , fixes = []
-                                            }
-                                        )
-                                    )
-                    )
+                    (overallContext |> review.toErrors)
                         |> Debug.todo ""
                         |> Dict.map
                             (\_ errors ->
                                 errors |> List.sortWith (\a b -> rangeCompare a.range b.range)
                             )
                 , cache =
-                    { modules = moduleContextsAndCache.cache
+                    { modules = moduleCache
                     }
                         |> Debug.todo ""
                 }
 
 
-rangeCompare : Range -> Range -> Order
+rangeCompare : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range -> Order
 rangeCompare a b =
     if a.start.row < b.start.row then
         LT
@@ -800,19 +668,64 @@ runOnProjectModules :
     { projectModules : List { path : String, source : String }
     , cache : Dict String ContextSerialized
     }
-    -> { contexts : List ContextSerialized, cache : Dict String ContextSerialized }
+    ->
+        Result
+            { fileAtPathFailedToParse : String }
+            { contexts : List ContextSerialized, cache : Dict String ContextSerialized }
 runOnProjectModules projectModuleInfo =
     projectModuleInfo.projectModules
         |> List.foldl
-            (\projectModule soFar ->
-                case projectModuleInfo.cache |> Dict.get projectModule.path of
-                    Nothing ->
-                        Debug.todo ""
+            (\moduleInfo soFar ->
+                case soFar of
+                    Err error ->
+                        Err error
 
-                    Just moduleCache ->
-                        Debug.todo ""
+                    Ok modulesSoFar ->
+                        case projectModuleInfo.cache |> Dict.get moduleInfo.path of
+                            Just moduleCache ->
+                                { modulesSoFar
+                                    | contexts =
+                                        modulesSoFar.contexts |> (::) (moduleCache |> Debug.todo "")
+                                }
+                                    |> Ok
+
+                            Nothing ->
+                                case moduleInfo.source |> Elm.Parser.parseToFile of
+                                    Ok ast ->
+                                        let
+                                            moduleData =
+                                                { path = moduleInfo.path
+                                                , ast = ast
+                                                , source = moduleInfo.source
+                                                }
+                                        in
+                                        { contexts = modulesSoFar.contexts |> (::) (moduleData |> Debug.todo "to context")
+                                        , cache =
+                                            modulesSoFar.cache
+                                                |> Dict.insert moduleInfo.path
+                                                    (moduleData |> Debug.todo "to context and serialize")
+                                        }
+                                            |> Ok
+
+                                    Err _ ->
+                                        Err { fileAtPathFailedToParse = moduleInfo.path }
             )
-            { contexts = [], cache = Dict.empty }
+            ({ contexts = [], cache = projectModuleInfo.cache } |> Ok)
+
+
+runOnElmJson =
+    \elmJson ->
+        case elmJson |> .source |> Json.Decode.decodeString Elm.Project.decoder of
+            Err _ ->
+                Err { fileAtPathFailedToParse = elmJson.path |> Set.singleton }
+
+            Ok project ->
+                { path = elmJson.path
+                , source = elmJson.source
+                , project = project
+                }
+                    |> Debug.todo ""
+                    |> Ok
 
 
 {-| Cache for the result of the analysis of an inspected project part (modules, elm.json, extra files, direct and indirect dependencies).
@@ -829,24 +742,10 @@ type alias Cache =
 -- VISIT PROJECT
 
 
-fileTargetFilePath : FileTarget -> String
-fileTargetFilePath =
-    \errorTarget ->
-        case errorTarget of
-            ErrorTargetModule moduleInfo ->
-                moduleInfo.path
-
-            FileTargetElmJson ->
-                "elm.json"
-
-            FileTargetExtra readmeInfo ->
-                readmeInfo.path
-
-
-declarationToFunction : Node Declaration -> Maybe Function
+declarationToFunction : Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration -> Maybe Elm.Syntax.Expression.Function
 declarationToFunction declaration =
-    case Node.value declaration of
-        Declaration.FunctionDeclaration functionDeclaration ->
+    case Elm.Syntax.Node.value declaration of
+        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
             functionDeclaration |> Just
 
         _ ->
@@ -932,20 +831,20 @@ The following example forbids the use of `Debug.log` even when it is imported li
                         ( [], context )
 
 -}
-functionDeclarationExpression : Function -> Node Expression
+functionDeclarationExpression : Elm.Syntax.Expression.Function -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
 functionDeclarationExpression functionDeclaration =
-    Node.value functionDeclaration.declaration |> .expression
+    Elm.Syntax.Node.value functionDeclaration.declaration |> .expression
 
 
 {-| Feels simple enough to implement on the fly. TODO remove?
 -}
-expressionFold : (Node Expression -> (folded -> folded)) -> folded -> Node Expression -> folded
+expressionFold : (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> (folded -> folded)) -> folded -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> folded
 expressionFold reduce initialFolded node =
     (node :: expressionSubs node)
         |> List.foldl reduce initialFolded
 
 
-sourceExtractInRange : Range -> (String -> String)
+sourceExtractInRange : Elm.Syntax.Range.Range -> (String -> String)
 sourceExtractInRange range =
     -- TODO implement more performantly using String.foldl
     \string ->
@@ -958,81 +857,81 @@ sourceExtractInRange range =
             |> String.dropLeft (range.start.column - 1)
 
 
-expressionSubs : Node Expression -> List (Node Expression)
+expressionSubs : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression)
 expressionSubs node =
-    case Node.value node of
-        Expression.Application expressions ->
+    case Elm.Syntax.Node.value node of
+        Elm.Syntax.Expression.Application expressions ->
             expressions
 
-        Expression.ListExpr elements ->
+        Elm.Syntax.Expression.ListExpr elements ->
             elements
 
-        Expression.RecordExpr fields ->
-            List.map (\(Node _ ( _, expr )) -> expr) fields
+        Elm.Syntax.Expression.RecordExpr fields ->
+            List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) fields
 
-        Expression.RecordUpdateExpression _ setters ->
-            List.map (\(Node _ ( _, expr )) -> expr) setters
+        Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
+            List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) setters
 
-        Expression.ParenthesizedExpression expr ->
+        Elm.Syntax.Expression.ParenthesizedExpression expr ->
             [ expr ]
 
-        Expression.OperatorApplication _ direction left right ->
+        Elm.Syntax.Expression.OperatorApplication _ direction left right ->
             case direction of
-                Infix.Left ->
+                Elm.Syntax.Infix.Left ->
                     [ left, right ]
 
-                Infix.Right ->
+                Elm.Syntax.Infix.Right ->
                     [ right, left ]
 
-                Infix.Non ->
+                Elm.Syntax.Infix.Non ->
                     [ left, right ]
 
-        Expression.IfBlock cond then_ else_ ->
+        Elm.Syntax.Expression.IfBlock cond then_ else_ ->
             [ cond, then_, else_ ]
 
-        Expression.LetExpression { expression, declarations } ->
+        Elm.Syntax.Expression.LetExpression { expression, declarations } ->
             List.foldr
                 (\declaration acc ->
-                    case Node.value declaration of
-                        Expression.LetFunction function ->
+                    case Elm.Syntax.Node.value declaration of
+                        Elm.Syntax.Expression.LetFunction function ->
                             functionDeclarationExpression function :: acc
 
-                        Expression.LetDestructuring _ expr ->
+                        Elm.Syntax.Expression.LetDestructuring _ expr ->
                             expr :: acc
                 )
                 [ expression ]
                 declarations
 
-        Expression.CaseExpression { expression, cases } ->
+        Elm.Syntax.Expression.CaseExpression { expression, cases } ->
             expression
                 :: List.map (\( _, caseExpression ) -> caseExpression) cases
 
-        Expression.LambdaExpression { expression } ->
+        Elm.Syntax.Expression.LambdaExpression { expression } ->
             [ expression ]
 
-        Expression.TupledExpression expressions ->
+        Elm.Syntax.Expression.TupledExpression expressions ->
             expressions
 
-        Expression.Negation expr ->
+        Elm.Syntax.Expression.Negation expr ->
             [ expr ]
 
-        Expression.RecordAccess expr _ ->
+        Elm.Syntax.Expression.RecordAccess expr _ ->
             [ expr ]
 
         _ ->
             []
 
 
-moduleHeaderNameNode : Node Module -> Node ModuleName
+moduleHeaderNameNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.ModuleName.ModuleName
 moduleHeaderNameNode node =
-    case Node.value node of
-        Module.NormalModule data ->
+    case Elm.Syntax.Node.value node of
+        Elm.Syntax.Module.NormalModule data ->
             data.moduleName
 
-        Module.PortModule data ->
+        Elm.Syntax.Module.PortModule data ->
             data.moduleName
 
-        Module.EffectModule data ->
+        Elm.Syntax.Module.EffectModule data ->
             data.moduleName
 
 
@@ -1043,28 +942,28 @@ This visitor will give you access to the module documentation comment. Modules d
 When that is the case, the visitor will be called with the `Nothing` as the module documentation.
 
 -}
-moduleHeaderDocumentation : Elm.Syntax.File.File -> Maybe (Node String)
+moduleHeaderDocumentation : Elm.Syntax.File.File -> Maybe (Elm.Syntax.Node.Node String)
 moduleHeaderDocumentation ast =
     let
         cutOffLine : Int
         cutOffLine =
             case ast.imports of
-                firstImport :: _ ->
-                    (Node.range firstImport).start.row
-
                 [] ->
                     case ast.declarations of
-                        firstDeclaration :: _ ->
-                            (Node.range firstDeclaration).start.row
-
                         [] ->
                             -- Should not happen, as every module should have at least one declaration
                             0
+
+                        firstDeclaration :: _ ->
+                            (Elm.Syntax.Node.range firstDeclaration).start.row
+
+                firstImport :: _ ->
+                    (Elm.Syntax.Node.range firstImport).start.row
     in
     findModuleDocumentationBeforeCutOffLine cutOffLine ast.comments
 
 
-findModuleDocumentationBeforeCutOffLine : Int -> List (Node String) -> Maybe (Node String)
+findModuleDocumentationBeforeCutOffLine : Int -> List (Elm.Syntax.Node.Node String) -> Maybe (Elm.Syntax.Node.Node String)
 findModuleDocumentationBeforeCutOffLine cutOffLine comments =
     case comments of
         [] ->
@@ -1072,7 +971,7 @@ findModuleDocumentationBeforeCutOffLine cutOffLine comments =
 
         comment :: restOfComments ->
             let
-                (Node range content) =
+                (Elm.Syntax.Node.Node range content) =
                     comment
             in
             if range.start.row > cutOffLine then
@@ -1515,32 +1414,102 @@ type alias ModuleData =
 automatically fix a review error.
 -}
 type Fix
-    = FixRangeReplacement { range : Range, replacement : String }
+    = FixRangeReplacement { range : Elm.Syntax.Range.Range, replacement : String }
 
 
 {-| Remove the code in between a range.
 -}
-fixRemoveRange : Range -> Fix
+fixRemoveRange : Elm.Syntax.Range.Range -> Fix
 fixRemoveRange rangeToRemove =
     fixReplaceRangeBy rangeToRemove ""
 
 
 {-| Replace the code in between a range by some other code.
 -}
-fixReplaceRangeBy : Range -> String -> Fix
+fixReplaceRangeBy : Elm.Syntax.Range.Range -> String -> Fix
 fixReplaceRangeBy range replacement =
     FixRangeReplacement { range = range, replacement = replacement }
 
 
 {-| Insert some code at the given position.
 -}
-fixInsertAt : Location -> String -> Fix
+fixInsertAt : Elm.Syntax.Range.Location -> String -> Fix
 fixInsertAt location toInsert =
     fixReplaceRangeBy { start = location, end = location } toInsert
 
 
 
 -- APPLY FIX
+
+
+type FixError
+    = AfterFixIsUnchanged
+    | AfterFixSourceParsingFailed String
+    | FixHasCollisionsInRanges
+
+
+{-| Apply the changes on the source code.
+-}
+fix : FileTarget -> List Fix -> String -> Result FixError String
+fix target fixes sourceCode =
+    case target of
+        FileTargetExtra _ ->
+            fixExtraFile fixes sourceCode
+
+        ErrorTargetModule _ ->
+            fixModule fixes sourceCode |> Result.map .source
+
+        FileTargetElmJson ->
+            fixElmJson fixes sourceCode |> Result.map .source
+
+
+
+-- FIX ELM MODULE
+
+
+fixRange : Fix -> Elm.Syntax.Range.Range
+fixRange fix_ =
+    case fix_ of
+        FixRangeReplacement replace ->
+            replace.range
+
+
+comparePosition : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location -> Order
+comparePosition a b =
+    case compare a.row b.row of
+        EQ ->
+            compare a.column b.column
+
+        LT ->
+            LT
+
+        GT ->
+            GT
+
+
+tryToApplyFix : List Fix -> String -> Result FixError String
+tryToApplyFix fixes sourceCode =
+    if containRangeCollisions fixes then
+        Err FixHasCollisionsInRanges
+
+    else
+        let
+            resultAfterFix : String
+            resultAfterFix =
+                fixes
+                    |> List.sortWith
+                        (\a b ->
+                            -- flipped order
+                            comparePosition (b |> fixRange |> .start) (a |> fixRange |> .start)
+                        )
+                    |> List.foldl applyFix (String.lines sourceCode)
+                    |> String.join "\n"
+        in
+        if sourceCode == resultAfterFix then
+            Err AfterFixIsUnchanged
+
+        else
+            Ok resultAfterFix
 
 
 applyFix : Fix -> (List String -> List String)
@@ -1578,90 +1547,15 @@ getRowAtLine : List String -> Int -> String
 getRowAtLine lines rowIndex =
     case lines |> List.drop rowIndex |> List.head of
         Just line ->
-            if String.trim line /= "" then
-                line
+            case String.trim line of
+                "" ->
+                    ""
 
-            else
-                ""
+                _ ->
+                    line
 
         Nothing ->
             ""
-
-
-
--- FIX ELM MODULE
-
-
-{-| Apply the changes on the source code.
--}
-fixModule : List Fix -> String -> Result FixError { source : String, ast : File }
-fixModule fixes originalSourceCode =
-    case tryToApplyFix fixes originalSourceCode of
-        Ok fixedSourceCode ->
-            case Elm.Parser.parseToFile fixedSourceCode of
-                Ok ast ->
-                    Ok { source = fixedSourceCode, ast = ast }
-
-                Err _ ->
-                    Err (AfterFixSourceParsingFailed fixedSourceCode)
-
-        Err err ->
-            Err err
-
-
-{-| Apply the changes on the elm.json file.
--}
-fixElmJson : List Fix -> String -> Result FixError { source : String, project : Elm.Project.Project }
-fixElmJson fixes originalSourceCode =
-    case tryToApplyFix fixes originalSourceCode of
-        Ok resultAfterFix ->
-            case Json.Decode.decodeString Elm.Project.decoder resultAfterFix of
-                Ok project ->
-                    Ok { source = resultAfterFix, project = project }
-
-                Err _ ->
-                    Err (AfterFixSourceParsingFailed resultAfterFix)
-
-        Err err ->
-            Err err
-
-
-{-| Apply the changes on the README.md file.
--}
-fixReadme : List Fix -> String -> Result FixError String
-fixReadme fixes originalSourceCode =
-    tryToApplyFix fixes originalSourceCode
-
-
-type FixError
-    = AfterFixIsUnchanged
-    | AfterFixSourceParsingFailed String
-    | FixHasCollisionsInRanges
-
-
-tryToApplyFix : List Fix -> String -> Result FixError String
-tryToApplyFix fixes sourceCode =
-    if containRangeCollisions fixes then
-        Err FixHasCollisionsInRanges
-
-    else
-        let
-            resultAfterFix : String
-            resultAfterFix =
-                fixes
-                    |> List.sortWith
-                        (\a b ->
-                            -- flipped order
-                            comparePosition (b |> fixRange |> .start) (a |> fixRange |> .start)
-                        )
-                    |> List.foldl applyFix (String.lines sourceCode)
-                    |> String.join "\n"
-        in
-        if sourceCode == resultAfterFix then
-            Err AfterFixIsUnchanged
-
-        else
-            Ok resultAfterFix
 
 
 containRangeCollisions : List Fix -> Bool
@@ -1684,14 +1578,7 @@ listAnyPair isFound =
                     listAnyPair isFound tail
 
 
-fixRange : Fix -> Range
-fixRange fix_ =
-    case fix_ of
-        FixRangeReplacement replace ->
-            replace.range
-
-
-rangesCollide : Range -> Range -> Bool
+rangesCollide : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range -> Bool
 rangesCollide a b =
     case comparePosition a.end b.start of
         LT ->
@@ -1712,40 +1599,94 @@ rangesCollide a b =
                     True
 
 
-comparePosition : Location -> Location -> Order
-comparePosition a b =
-    case compare a.row b.row of
-        EQ ->
-            compare a.column b.column
+fixModule : List Fix -> String -> Result FixError { source : String, ast : Elm.Syntax.File.File }
+fixModule fixes originalSourceCode =
+    case tryToApplyFix fixes originalSourceCode of
+        Ok fixedSourceCode ->
+            case Elm.Parser.parseToFile fixedSourceCode of
+                Ok ast ->
+                    Ok { source = fixedSourceCode, ast = ast }
 
-        LT ->
-            LT
+                Err _ ->
+                    Err (AfterFixSourceParsingFailed fixedSourceCode)
 
-        GT ->
-            GT
-
-
-{-| Apply the changes on the source code.
--}
-fix : FileTarget -> List Fix -> String -> Result FixError String
-fix target fixes sourceCode =
-    case target of
-        FileTargetExtra _ ->
-            fixReadme fixes sourceCode
-
-        ErrorTargetModule _ ->
-            fixModule fixes sourceCode |> Result.map .source
-
-        FileTargetElmJson ->
-            fixElmJson fixes sourceCode |> Result.map .source
+        Err err ->
+            Err err
 
 
-resultValueOrOnError : (error -> value) -> (Result error value -> value)
-resultValueOrOnError errorToValue =
-    \result ->
-        case result of
-            Ok value ->
-                value
+fixElmJson : List Fix -> String -> Result FixError { source : String, project : Elm.Project.Project }
+fixElmJson fixes originalSourceCode =
+    case tryToApplyFix fixes originalSourceCode of
+        Ok resultAfterFix ->
+            case Json.Decode.decodeString Elm.Project.decoder resultAfterFix of
+                Ok project ->
+                    Ok { source = resultAfterFix, project = project }
 
-            Err error ->
-                error |> errorToValue
+                Err _ ->
+                    Err (AfterFixSourceParsingFailed resultAfterFix)
+
+        Err err ->
+            Err err
+
+
+fixExtraFile : List Fix -> String -> Result FixError String
+fixExtraFile fixes originalSourceCode =
+    tryToApplyFix fixes originalSourceCode
+
+
+type alias ProgramState =
+    {}
+
+
+type ProgramEvent
+    = ModuleAddedOrChanged { path : String, source : String }
+    | ModuleRemoved { path : String }
+
+
+eventJsonDecoder : Json.Decode.Decoder ProgramEvent
+eventJsonDecoder =
+    Json.Decode.field "tag"
+        (Json.Decode.string
+            |> Json.Decode.andThen
+                (\tag ->
+                    Json.Decode.field "value"
+                        (case tag of
+                            "ModuleAddedOrChanged" ->
+                                Json.Decode.map2
+                                    (\path source -> ModuleAddedOrChanged { path = path, source = source })
+                                    (Json.Decode.field "path" Json.Decode.string)
+                                    (Json.Decode.field "source" Json.Decode.string)
+
+                            "ModuleRemoved" ->
+                                Json.Decode.map
+                                    (\path -> ModuleRemoved { path = path })
+                                    (Json.Decode.field "path" Json.Decode.string)
+
+                            unknownTag ->
+                                Json.Decode.fail ("unknown js message tag " ++ unknownTag)
+                        )
+                )
+        )
+
+
+program :
+    { toJs : Json.Encode.Value -> Cmd Never
+    , fromJson : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
+    , reviews : List Review
+    }
+    -> Platform.Program () ProgramState ProgramEvent
+program config =
+    -- TODO
+    Platform.worker
+        { init = \() -> ( {}, Cmd.none )
+        , update =
+            \event state ->
+                ( state, Cmd.none )
+
+        -- toJs
+        , subscriptions =
+            \_ ->
+                Sub.none
+
+        -- fromJs
+        }
