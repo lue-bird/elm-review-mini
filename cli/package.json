@@ -1,0 +1,27 @@
+{
+  "name": "elm-review-mini-cli",
+  "version": "1.0.0",
+  "description": "run review-mini from the command line",
+  "main": "src-compiled/index.js",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "github.com/lue-bird/elm-review-mini/cli"
+  },
+  "scripts": {
+    "compile": "tsc"
+  },
+  "keywords": [
+    "elm",
+    "elm-review",
+    "static-analysis",
+    "lint",
+    "simplicity"
+  ],
+  "author": "lue-bird",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "tsc": "^2.0.4"
+  }
+}

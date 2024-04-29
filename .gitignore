@@ -8,3 +8,5 @@ demo/index.html
 ElmjutsuDumMyM0DuL3.elm
 artifacts.dat
 zombie/
+src-compiled/
+package-lock.json
