@@ -32,7 +32,7 @@ I'll try hard to find any simplification or anything that reduces the covered ar
 # elm-review-mini
 
 `elm-review-mini` scans your [elm](https://elm-lang.org/) project to find bugs and enforce conventions.
-Each review is written in elm and is [published as a package](https://dark.elm.dmy.fr/?q=elm-review-mini-). There are no built-in rules.
+Each review is written in elm and is [published as a package](https://dark.elm.dmy.fr/?q=elm-review-mini-). There are no built-in reviews.
 
 You can run `elm-review-mini` from the command line (requires `node.js` and `npm` to be installed).
 
@@ -41,7 +41,7 @@ Clone a starter config:
 curl -L https://github.com/lue-bird/elm-review-mini-cli-starter/tarball/master review-mini | tar xz
 ```
 The created `review-mini/` is a self-contained elm application which means you can add new reviews with `elm install` (e.g. [search for packages elm-review-mini-...](https://dark.elm.dmy.fr/?q=elm-review-mini-)), just like any other elm project dependency.
-And don't forget to actually put it in the list in `src/Main.elm` and configure it :)
+And don't forget to actually put it in the list in `src/Reviews.elm` and configure it :)
 
 Beware how and why you introduce reviews in your project though.
 If a review seems like the best solution, remember to discuss it with your team.
@@ -131,18 +131,17 @@ serializeLocation =
 Then add the review in your runner:
 
 ```elm
-module Main exposing (main)
+module Reviews exposing (reviews)
 
 import NoStringWithMisspelledCompanyName
 import Review
 
 
-main : Review.Program
-main =
-    Review.program
-        [ NoStringWithMisspelledCompanyName.review
-        -- , ...
-        ]
+reviews : List Review.Review
+reviews =
+    [ NoStringWithMisspelledCompanyName.review
+    -- , ...
+    ]
 ```
 
 ## when to write or enable a review
