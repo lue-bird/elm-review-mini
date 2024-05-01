@@ -1,9 +1,9 @@
 module Diff exposing
     ( Change(..)
-    , diff, diffLines
+    , diff
     )
 
-{-| Copied from <https://github.com/jinjor/elm-diff/> with only typos changed
+{-| Copied from <https://github.com/jinjor/elm-diff/> with only typos changed and elm-review fixes applied in the code
 
 The following is the original license
 
@@ -50,7 +50,7 @@ Each function internally uses Wu's [O(NP) algorithm](http://myerslab.mpi-cbg.de/
 
 # Diffing
 
-@docs diff, diffLines
+@docs diff
 
 -}
 
@@ -74,38 +74,6 @@ type BugReport
     = CannotGetA Int
     | CannotGetB Int
     | UnexpectedPath ( Int, Int ) (List ( Int, Int ))
-
-
-{-| Compares two text.
-
-Giving the following text
-
-    a =
-        """aaa
-    bbb
-    ddd"""
-
-    b =
-        """zzz
-    aaa
-    ccc
-    ddd"""
-
-results in
-
-    [ Added "zzz"
-    , NoChange "aaa"
-    , Removed "bbb"
-    , Added "ccc"
-    , NoChange "ddd"
-    ]
-
-.
-
--}
-diffLines : String -> String -> List (Change String)
-diffLines a b =
-    diff (String.lines a) (String.lines b)
 
 
 {-| Compares general lists.
@@ -132,11 +100,11 @@ testDiff a b =
         arrA =
             Array.fromList a
 
-        arrB =
-            Array.fromList b
-
         m =
             Array.length arrA
+
+        arrB =
+            Array.fromList b
 
         n =
             Array.length arrB
@@ -225,49 +193,49 @@ makeChangesHelp changes getA getB ( x, y ) path =
 -- Myers's O(ND) algorithm (http://www.xmailserver.org/diff2.pdf)
 
 
-ond : (Int -> Maybe a) -> (Int -> Maybe a) -> Int -> Int -> List ( Int, Int )
-ond getA getB m n =
-    let
-        v =
-            Array.initialize (m + n + 1) (always [])
-    in
-    ondLoopDK (snake getA getB) m 0 0 v
-
-
-ondLoopDK :
-    (Int -> Int -> List ( Int, Int ) -> ( List ( Int, Int ), Bool ))
-    -> Int
-    -> Int
-    -> Int
-    -> Array (List ( Int, Int ))
-    -> List ( Int, Int )
-ondLoopDK snake_ offset d k v =
-    if k > d then
-        ondLoopDK snake_ offset (d + 1) (-d - 1) v
-
-    else
-        case step snake_ offset k v of
-            Found path ->
-                path
-
-            Continue v_ ->
-                ondLoopDK snake_ offset d (k + 2) v_
-
-
-
--- Wu's O(NP) algorithm (http://myerslab.mpi-cbg.de/wp-content/uploads/2014/06/np_diff.pdf)
-
-
 onp : (Int -> Maybe a) -> (Int -> Maybe a) -> Int -> Int -> List ( Int, Int )
 onp getA getB m n =
     let
         v =
-            Array.initialize (m + n + 1) (always [])
+            Array.initialize (m + n + 1) (\_ -> [])
 
         delta =
             n - m
     in
     onpLoopP (snake getA getB) delta m 0 v
+
+
+snake :
+    (Int -> Maybe a)
+    -> (Int -> Maybe a)
+    -> Int
+    -> Int
+    -> List ( Int, Int )
+    -> ( List ( Int, Int ), Bool )
+snake getA getB nextX nextY path =
+    case ( getA nextX, getB nextY ) of
+        ( Just a, Just b ) ->
+            if a == b then
+                snake
+                    getA
+                    getB
+                    (nextX + 1)
+                    (nextY + 1)
+                    (( nextX, nextY ) :: path)
+
+            else
+                ( path, False )
+
+        -- reached bottom-right corner
+        ( Nothing, Nothing ) ->
+            ( path, True )
+
+        _ ->
+            ( path, False )
+
+
+
+-- Wu's O(NP) algorithm (http://myerslab.mpi-cbg.de/wp-content/uploads/2014/06/np_diff.pdf)
 
 
 onpLoopP :
@@ -357,32 +325,3 @@ step snake_ offset k v =
 
     else
         Continue (Array.set (k + offset) newPath v)
-
-
-snake :
-    (Int -> Maybe a)
-    -> (Int -> Maybe a)
-    -> Int
-    -> Int
-    -> List ( Int, Int )
-    -> ( List ( Int, Int ), Bool )
-snake getA getB nextX nextY path =
-    case ( getA nextX, getB nextY ) of
-        ( Just a, Just b ) ->
-            if a == b then
-                snake
-                    getA
-                    getB
-                    (nextX + 1)
-                    (nextY + 1)
-                    (( nextX, nextY ) :: path)
-
-            else
-                ( path, False )
-
-        -- reached bottom-right corner
-        ( Nothing, Nothing ) ->
-            ( path, True )
-
-        _ ->
-            ( path, False )

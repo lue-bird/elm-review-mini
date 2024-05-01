@@ -1,13 +1,15 @@
-# Why a fork?
+# elm-review-mini
+Why create a fork of [`elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/)?
+
 ## goals and ideas
 
   - much simpler API and internals 
       - enabling docs that cover the basics in a very concise manner,
         then guiding through tons of examples if you feel like it.
-  - composable inspections
-      - much of the complexity and perf choke points in `elm-review` come from the dependency between inspections, see e.g. https://github.com/jfmengels/elm-review/issues/168
-      - multiple reviews can feed off the same bunch of collected contexts, published as packages by users. Examples: "data to determine all bindings in scope", "data to determine a given reference's full origin", "data to determine the reference's minimum qualification", "type information"
-  - all the nice helpers: `Type/Pattern/Expression.map/subs/fold` etc
+  - errors are always evaluated once all inspections are done and merged
+      - much of the complexity and perf choke points in `elm-review` come from the dependency between inspections (implemented through "Jeremy's interfaces"), see e.g. https://github.com/jfmengels/elm-review/issues/168
+      - multiple reviews can feed off the same bunch of collected contexts, published as packages by users. Examples: "data to determine all bindings in scope", "data to determine a given reference's full origin", "data to determine the reference's minimum qualification", "type information" (TODO experiment: currently I don't think caching these across reviews is worth it performance-wise but worth investigating)
+  - TODO all the nice helpers: `Type/Pattern/Expression.map/subs/fold` etc
 
 > Status: Basic API is promising, implementation is still brewing (CLI especially will take a while)
 
@@ -29,7 +31,8 @@ and I'd be horribly sad for a great tool such as `elm-review` to become stale/ab
 
 I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things a bit more rough for users (performance, convenience).
 
-# elm-review-mini
+
+------
 
 `elm-review-mini` scans your [elm](https://elm-lang.org/) project to find bugs and enforce conventions.
 Each review is written in elm and is [published as a package](https://dark.elm.dmy.fr/?q=elm-review-mini-). There are no built-in reviews.

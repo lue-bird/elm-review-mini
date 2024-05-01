@@ -100,10 +100,9 @@ import Elm.Project
 import Elm.Type exposing (Type(..))
 import Elm.Version
 
-dependency : { name : String, elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
+dependency : { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
 dependency =
-    { name = """ ++ stringify (Elm.Package.toString elmJson.name) ++ """
-    , elmJson = elmJson
+    { elmJson = elmJson
     , modules = dependencyModules
     }
 
