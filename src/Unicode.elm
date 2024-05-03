@@ -1,19 +1,10 @@
-module Unicode exposing (slice, dropLeft, left)
+module Unicode exposing (dropLeft, left)
 
 {-| String functions that consider Unicode characters as a single characters, unlike `elm/core`'s `String` type.
 
-@docs slice, dropLeft, left
+@docs dropLeft, left
 
 -}
-
-
-slice : Int -> Int -> String -> String
-slice start end string =
-    string
-        |> String.toList
-        |> List.drop start
-        |> List.take (end - start)
-        |> String.fromList
 
 
 dropLeft : Int -> String -> String

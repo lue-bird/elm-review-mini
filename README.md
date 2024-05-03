@@ -11,6 +11,7 @@ Why create a fork of [`elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/e
       - multiple reviews can feed off the same bunch of collected contexts, published as packages by users. Examples: "data to determine all bindings in scope", "data to determine a given reference's full origin", "data to determine the reference's minimum qualification", "type information" (TODO experiment: currently I don't think caching these across reviews is worth it performance-wise but worth investigating)
   - TODO all the nice helpers: `Type/Pattern/Expression.map/subs/fold` etc
 
+
 > Status: Basic API is promising, implementation is still brewing (CLI especially will take a while)
 
 Directly back-porting these changes to `elm-review` is not an explicit goal for me
@@ -37,18 +38,16 @@ I'll try hard to find any simplification or anything that reduces the covered ar
 `elm-review-mini` scans your [elm](https://elm-lang.org/) project to find bugs and enforce conventions.
 Each review is written in elm and is [published as a package](https://dark.elm.dmy.fr/?q=elm-review-mini-). There are no built-in reviews.
 
-You can run `elm-review-mini` from the command line (requires `node.js` and `npm` to be installed).
-
-Clone a starter config:
+To use it for your project, clone this starter config with the CLI set up (requires `node.js` and `npm` to be installed)
 ```bash
 curl -L https://github.com/lue-bird/elm-review-mini-cli-starter/tarball/master review-mini | tar xz
 ```
-The created `review-mini/` is a self-contained elm application which means you can add new reviews with `elm install` (e.g. [search for packages elm-review-mini-...](https://dark.elm.dmy.fr/?q=elm-review-mini-)), just like any other elm project dependency.
+The created `review-mini/` is a self-contained elm application which means you can add new reviews with `elm install` just like any other elm project dependency (to find reviews, [search for packages elm-review-mini-...](https://dark.elm.dmy.fr/?q=elm-review-mini-) for example).
 And don't forget to actually put it in the list in `src/Reviews.elm` and configure it :)
 
-Beware how and why you introduce reviews in your project though.
+Beware how and why you introduce reviews in your project.
 If a review seems like the best solution, remember to discuss it with your team.
-It's easy to mix up patterns that are objectively bad, with patterns that you personally find problematic, and forbidding patterns that other people find useful can be very disruptive.
+It's easy to mix up patterns that are objectively bad with patterns that you personally find problematic, and forbidding patterns that other people find useful can be very disruptive.
 Read also: [when to enable a review](#when-to-write-or-enable-a-review).
 
 ## bring your own reviews
@@ -68,7 +67,7 @@ module StringWithMisspelledCompanyNameForbid exposing (review)
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
 import Review
-import Serialize
+import Codec
 
 review : Review.Review
 review =
@@ -109,36 +108,23 @@ review =
             \stringsWithTypos ->
                 stringsWithTypos
                     |> List.map
-                        (\error ->
-                            { target = Review.FileTargetModule error.modulePath
+                        (\misspelledName ->
+                            { target = Review.FileTargetModule misspelledName.modulePath
                             , message = "Replace `frits.com` by `fruits.com`"
                             , details = [ "This typo has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                            , range = error.range
+                            , range = misspelledName.range
+                            , fixes = []
                             }
                         )
         , contextMerge = \a b -> a ++ b
         , contextSerialize =
-            Serialize.list
-                (Serialize.record (\modulePath range -> { modulePath = modulePath, range = range })
-                    |> Serialize.field .modulePath Serialize.string
-                    |> Serialize.field .range Serialize.string
-                    |> Serialize.finishRecord
+            Codec.list
+                (Codec.object (\modulePath range -> { modulePath = modulePath, range = range })
+                    |> Codec.field "modulePath" .modulePath Codec.string
+                    |> Codec.field "range" .range Review.rangeCodec
+                    |> Codec.finishRecord
                 )
         }
-
-serializeRange : Serialize.Codec Elm.Syntax.Range.Range
-serializeRange =
-    Serialize.record (\start end -> { start = start, end = end })
-        |> Serialize.field .start serializeLocation
-        |> Serialize.field .end serializeLocation
-        |> Serialize.finishRecord
-
-serializeLocation : Serialize.Codec Elm.Syntax.Location.Location
-serializeLocation =
-    Serialize.record (\row column -> { row = row, column = column })
-        |> Serialize.field .row Serialize.int
-        |> Serialize.field .column Serialize.int
-        |> Serialize.finishRecord
 ```
 
 Then add the review in your runner:

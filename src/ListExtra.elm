@@ -1,4 +1,4 @@
-module ListExtra exposing (firstElementWhere, last, lastMap)
+module ListExtra exposing (anyPair, consJust, elementAtIndex, headMap, last, lastMap)
 
 
 last : List a -> Maybe a
@@ -25,16 +25,43 @@ lastMap mapper lines =
             List.reverse (mapper first :: rest)
 
 
-firstElementWhere : (a -> Bool) -> (List a -> Maybe a)
-firstElementWhere isFound =
+headMap : (a -> a) -> (List a -> List a)
+headMap headChange =
     \list ->
         case list of
             [] ->
-                Nothing
+                []
 
             head :: tail ->
-                if isFound head then
-                    Just head
+                (head |> headChange) :: tail
 
-                else
-                    firstElementWhere isFound tail
+
+consJust : Maybe a -> (List a -> List a)
+consJust maybeNewHead =
+    \list ->
+        case maybeNewHead of
+            Nothing ->
+                list
+
+            Just newHead ->
+                list |> (::) newHead
+
+
+anyPair : (element -> element -> Bool) -> (List element -> Bool)
+anyPair isFound list =
+    case list of
+        [] ->
+            False
+
+        head :: tail ->
+            if List.any (\tailElement -> isFound head tailElement) tail then
+                True
+
+            else
+                anyPair isFound tail
+
+
+elementAtIndex : Int -> (List a -> Maybe a)
+elementAtIndex index =
+    \list ->
+        list |> List.drop index |> List.head

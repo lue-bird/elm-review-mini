@@ -1,4 +1,4 @@
-module Review.Cli exposing (program, Program, ProgramEvent, ProgramState)
+module Review.Cli exposing (program, Program, ProgramEvent(..), ProgramState)
 
 {-| Run a review in the terminal
 
