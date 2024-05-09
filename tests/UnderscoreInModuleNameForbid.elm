@@ -10,7 +10,7 @@ import Review exposing (Review)
 review : Review
 review =
     Review.create
-        { name = "NoUnderscoreInModuleName"
+        { name = "UnderscoreInModuleNameForbid"
         , inspect =
             [ Review.inspectModule
                 (\moduleData ->
