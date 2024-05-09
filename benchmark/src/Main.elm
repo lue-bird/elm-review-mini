@@ -6,5 +6,4 @@ import Benchmarks
 
 main : Benchmark.Runner.Alternative.Program
 main =
-    Benchmark.Runner.Alternative.program
-        Benchmarks.benchmarks
+    Benchmark.Runner.Alternative.program Benchmarks.benchmarks
