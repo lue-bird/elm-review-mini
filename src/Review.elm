@@ -1,106 +1,65 @@
 module Review exposing
-    ( Review, ignoreErrorsForFilesWhere
+    ( ignoreErrorsForFilesWhere
     , create
-    , Inspect, InspectSingleTargetToContext(..), inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
+    , Inspect, inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
     , inspectBatch, inspectMap
-    , FileTarget(..)
-    , Fix(..), FixError(..), fixInsertAt, fixRemoveRange, fixReplaceRangeBy
-    , expressionSubs, expressionFold, moduleHeaderDocumentation, moduleHeaderNameNode
+    , Error, FileTarget(..)
+    , Fix(..), fixInsertAt, fixRemoveRange, fixReplaceRangeBy
+    , expressionSubs, expressionFold
+    , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
     , sourceExtractInRange
-    , locationCodec, rangeCodec
-    , elmJsonToElmProjectFiles, run, Cache, cacheEmpty, fixFile
-    , ContextGeneric(..)
+    , packageElmJsonExposedModules
+    , locationCodec, rangeCodec, moduleNameCodec
+    , run, Cache, cacheEmpty, fixFile, FixError(..)
+    , KnowledgeGeneric(..)
+    , Review, InspectSingleTargetToKnowledge(..)
     )
 
 {-| `elm-review-mini` scans the modules, `elm.json`, dependencies and extra files like `README.md` from your project.
 All this data is then fed into your reviews, which in turn inspect it to report problems.
 
-@docs Review, ignoreErrorsForFilesWhere
-
-
-# write
-
-
-## what makes a good rule
-
-  - check [whether a rule should be written](./#when-to-write-or-enable-a-rule),
-  - name: (`OnlyUsedVariables`, `DebugForbid`, ...) should try to convey
-    really quickly what kind of pattern we're dealing with. Ideally, a user who
-    encounters this pattern for the first time could guess the problem just from the
-    name. And a user who encountered it several times should know how to fix the
-    problem just from the name too
-  - documentation: explain when (not) to
-    enable the rule in the user's review configuration. For instance, for a rule that
-    makes sure that a package is publishable by ensuring that all docs are valid,
-    the rule might say something along the lines of "If you are writing an
-    application, then you should not use this rule". Additionally, it could give a few examples of patterns that will be reported and
-    of patterns that will not be reported, so that users can have a better grasp of
-    what to expect
-  - error `message`: half-sentence on what _is_ undesired here. A user
-    that has encountered this error multiple times should know exactly what to do.
-    Example: "`foo` is never used" → a user who
-    knows the rule knows that a function can be removed and which one
-  - error `details`: additional information such as the rationale and suggestions
-    for a solution or alternative.
-  - error report range: where the squiggly lines appear under. Make this section as small as
-    possible. For instance, in a rule that would forbid
-    `Debug.log`, you would the error to appear under `Debug.log`, not on the whole
-    function call
-
-Take the elm compiler errors as inspiration in terms of helpfulness.
-
-
-## use Test-Driven Development!
-
-[`Review.Test`](./Review-Test) works with [`elm-test`](https://github.com/elm-explorations/test).
-I recommend reading through [`the strategies for effective testing`](./Review-Test#strategies-for-effective-testing) before
-starting writing a rule.
-
-
-# writing
-
-Each module is provided as a tree-like structure which represents your source code, using the
-[`elm-syntax` package](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/).
-All the unknown imports you'll see will be coming from there. You are likely to
-need to have the documentation for that package open when writing a rule.
+@docs ignoreErrorsForFilesWhere
 
 @docs create
 
 
 ## inspecting
 
-Look at the global picture of an Elm project to collect context.
+Look at the global picture of an Elm project to collect knowledge.
 
-@docs Inspect, InspectSingleTargetToContext, inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
+@docs Inspect, inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
 @docs inspectBatch, inspectMap
 
 
 ## reporting
 
-@docs FileTarget
-@docs Fix, FixError, fixInsertAt, fixRemoveRange, fixReplaceRangeBy
+@docs Error, FileTarget
+@docs Fix, fixInsertAt, fixRemoveRange, fixReplaceRangeBy
 
 
-## helpers
+## convenience helpers
 
-@docs expressionSubs, expressionFold, moduleHeaderDocumentation, moduleHeaderNameNode
+@docs expressionSubs, expressionFold
+@docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
 @docs sourceExtractInRange
-@docs locationCodec, rangeCodec
+@docs packageElmJsonExposedModules
+@docs locationCodec, rangeCodec, moduleNameCodec
 
 
 # safe internals
 
-@docs elmJsonToElmProjectFiles, run, Cache, cacheEmpty, fixFile
-@docs ContextGeneric
+@docs run, Cache, cacheEmpty, fixFile, FixError
+@docs KnowledgeGeneric
+@docs Review, InspectSingleTargetToKnowledge
 
 -}
 
 import Codec
-import Elm.Constraint
 import Elm.Docs
-import Elm.Package
+import Elm.Module
 import Elm.Parser
 import Elm.Project
+import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Infix
@@ -108,13 +67,15 @@ import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
-import Elm.Version
 import ElmCoreDependency
+import ElmJson.LocalExtra
 import FastDict
 import FastDictExtra
 import Json.Decode
+import Json.Encode
 import ListExtra
 import Rope exposing (Rope)
+import Set exposing (Set)
 import Unicode
 
 
@@ -129,14 +90,12 @@ type alias Review =
     , run :
         { elmJson : { source : String, project : Elm.Project.Project }
         , directDependencies : List { elmJson : String, docsJson : String }
-        , addedOrChangedModules : List { path : String, source : String }
-        , removedModulePaths : List String
-        , addedOrChangedExtraFiles : List { path : String, source : String }
-        , removedExtraFilePaths : List String
+        , addedOrChangedFiles : List { path : String, source : String }
+        , removedFilePaths : List String
         , cache : Cache
         }
         ->
-            { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Fix })
+            { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Fix })
             , cache : Cache
             }
     }
@@ -145,17 +104,17 @@ type alias Review =
 {-| The collected info from scanning a project in a generic format that can be used for caching.
 See [`Inspect`](#Inspect)
 -}
-type ContextGeneric
-    = ContextJsonString String
+type KnowledgeGeneric
+    = KnowledgeJson Json.Encode.Value
 
 
 {-| How to collect info from scanning a project.
 -}
-type alias Inspect context =
-    Rope (InspectSingleTargetToContext context)
+type alias Inspect knowledge =
+    Rope (InspectSingleTargetToKnowledge knowledge)
 
 
-{-| Allow multiple reviews to feed off the same collected context,
+{-| Allow multiple reviews to feed off the same collected knowledge,
 for example published in a package.
 
 Examples:
@@ -165,22 +124,22 @@ Examples:
   - "data to determine the reference's minimum qualification"
   - "type information"
 
-The given name should describe what's in the context,
+The given name should describe what's in the knowledge,
 like "module exposes including variants from project, direct and indirect dependencies"
 
 -}
-inspectBatch : List (Inspect context) -> Inspect context
+inspectBatch : List (Inspect knowledge) -> Inspect knowledge
 inspectBatch inspects =
     inspects |> Rope.fromList |> Rope.concat
 
 
-{-| The smallest possible thing you can inspect and create context from
+{-| The smallest possible thing you can inspect and create knowledge from
 -}
-type InspectSingleTargetToContext context
-    = InspectDirectDependenciesToContext (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> context)
-    | InspectElmJsonToContext (Elm.Project.Project -> context)
-    | InspectExtraFileToContext ({ path : String, source : String } -> context)
-    | InspectProjectModuleToContext ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> context)
+type InspectSingleTargetToKnowledge knowledge
+    = InspectDirectDependenciesToKnowledge (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
+    | InspectElmJsonToKnowledge (Elm.Project.Project -> knowledge)
+    | InspectExtraFileToKnowledge ({ path : String, source : String } -> knowledge)
+    | InspectProjectModuleToKnowledge ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
 
 
 {-| Reference to a project file.
@@ -192,113 +151,54 @@ type FileTarget
     | FileTarget { path : String }
 
 
-{-| Usually, when using an existing [`inspectComposable`](#inspectComposable)
-your context type and its context type don't match up.
+{-| Usually, when using an external [`inspectBatch`](#inspectBatch)
+your knowledge type and its knowledge type don't match up.
 
-Use [`inspectMap`](#inspectMap) to use all that information to create your own context from it
+Use [`inspectMap`](#inspectMap) to use all that information to create your own knowledge from it
 
 -}
-inspectMap : (context -> contextMapped) -> (Inspect context -> Inspect contextMapped)
-inspectMap contextChange =
+inspectMap : (knowledge -> knowledgeMapped) -> (Inspect knowledge -> Inspect knowledgeMapped)
+inspectMap knowledgeChange =
     \inspect ->
         inspect
             |> Rope.map
                 (\inspectSingle ->
-                    inspectSingle |> inspectSingleTargetToContextMap contextChange
+                    inspectSingle |> inspectSingleTargetToKnowledgeMap knowledgeChange
                 )
 
 
-inspectSingleTargetToContextMap : (context -> contextMapped) -> (InspectSingleTargetToContext context -> InspectSingleTargetToContext contextMapped)
-inspectSingleTargetToContextMap contextChange =
+inspectSingleTargetToKnowledgeMap : (knowledge -> knowledgeMapped) -> (InspectSingleTargetToKnowledge knowledge -> InspectSingleTargetToKnowledge knowledgeMapped)
+inspectSingleTargetToKnowledgeMap knowledgeChange =
     \inspectSingle ->
         case inspectSingle of
-            InspectDirectDependenciesToContext toContext ->
-                (\data -> data |> toContext |> contextChange) |> InspectDirectDependenciesToContext
+            InspectDirectDependenciesToKnowledge toKnowledge ->
+                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectDirectDependenciesToKnowledge
 
-            InspectElmJsonToContext toContext ->
-                (\data -> data |> toContext |> contextChange) |> InspectElmJsonToContext
+            InspectElmJsonToKnowledge toKnowledge ->
+                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectElmJsonToKnowledge
 
-            InspectExtraFileToContext toContext ->
-                (\data -> data |> toContext |> contextChange) |> InspectExtraFileToContext
+            InspectExtraFileToKnowledge toKnowledge ->
+                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectExtraFileToKnowledge
 
-            InspectProjectModuleToContext toContext ->
-                (\data -> data |> toContext |> contextChange) |> InspectProjectModuleToContext
-
-
-{-| All the info you can get from a module in a review context.
+            InspectProjectModuleToKnowledge toKnowledge ->
+                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectProjectModuleToKnowledge
 
 
-### ast
-
-Request the full [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree) for the current module.
-
-This can be useful if you wish to avoid initializing the module context with dummy data future node visits can replace them.
-
-For instance, if you wish to know what is exposed from a module, you may need to visit the module definition and then
-the list of declarations. If you need this information earlier on, you will have to provide dummy data at context
-initialization and store some intermediary data.
-
-Using the full AST, you can simplify the implementation by computing the data in the context creator, without the use of visitors.
+{-| All the info you can get from a module.
 
 
-### module definition
+## syntax
 
-Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
-[module definition](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`), collect data in the `context` and/or report patterns.
+A tree-like structure which represents your source code, using the
+[`elm-syntax` package](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/).
+All the unknown imports you'll see will be coming from there. You are likely to
+need to have the documentation for that package open when writing a review.
 
-The following example forbids the use of `Html.button` except in the "Button" module.
-The example is simplified to only forbid the use of the `Html.button` expression.
 
-    import Elm.Syntax.Expression as Expression exposing (Expression)
-    import Elm.Syntax.Module as Module exposing (Module)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
+### module header
 
-    type Context
-        = HtmlButtonIsAllowed
-        | HtmlButtonIsForbidden
-
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoHtmlButton" HtmlButtonIsForbidden
-            |> Rule.withModuleDefinitionVisitor moduleDefinitionVisitor
-            |> Rule.withExpressionEnterVisitor expressionVisitor
-            |> Rule.fromModuleRuleSchema
-
-    moduleDefinitionVisitor : Node Module -> Context -> ( List Rule.Error, Context )
-    moduleDefinitionVisitor node context =
-        if (Node.value node |> Module.moduleName) == [ "Button" ] then
-            ( [], HtmlButtonIsAllowed )
-
-        else
-            ( [], HtmlButtonIsForbidden )
-
-    expressionVisitor : Node Expression -> Context -> ( List Rule.Error, Context )
-    expressionVisitor node context =
-        case context of
-            HtmlButtonIsAllowed ->
-                ( [], context )
-
-            HtmlButtonIsForbidden ->
-                case Node.value node of
-                    Expression.FunctionOrValue [ "Html" ] "button" ->
-                        ( [ Rule.error
-                                { message = "Do not use `Html.button` directly"
-                                , details = [ "At fruits.com, we've built a nice `Button` module that suits our needs better. Using this module instead of `Html.button` ensures we have a consistent button experience across the website." ]
-                                }
-                                (Node.range node)
-                          ]
-                        , context
-                        )
-
-                    _ ->
-                        ( [], context )
-
-            _ ->
-                ( [], context )
-
-Tip: The rule above is very brittle. What if `button` was imported using `import Html exposing (button)` or `import Html exposing (..)`, or if `Html` was aliased (`import Html as H`)? Then the rule above would
-not catch and report the use `Html.button`. To handle this, check out [`withModuleNameLookupTable`](#withModuleNameLookupTable).
+the module's
+[module definition](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`).
 
 Through a couple of helpers, you can get to the specific information you need faster:
 
@@ -308,10 +208,9 @@ Through a couple of helpers, you can get to the specific information you need fa
 
 ### imports
 
-Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
+the module's
 [import statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Import)
-(`import Html as H exposing (div)`) in order of their definition, collect data
-in the `context` and/or report patterns.
+(`import Html as H exposing (div)`) in order of their definition
 
 The following example forbids importing both `Element` (`elm-ui`) and
 `Html.Styled` (`elm-css`).
@@ -320,19 +219,19 @@ The following example forbids importing both `Element` (`elm-ui`) and
     import Elm.Syntax.Node as Node exposing (Node)
     import Review.Rule as Rule exposing (Rule)
 
-    type alias Context =
+    type alias Knowledge =
         { elmUiWasImported : Bool
         , elmCssWasImported : Bool
         }
 
     rule : Rule
     rule =
-        Rule.newModuleRuleSchema "NoUsingBothHtmlAndHtmlStyled" initialContext
+        Rule.newModuleRuleSchema "NoUsingBothHtmlAndHtmlStyled" initialKnowledge
             |> Rule.withImportVisitor importVisitor
             |> Rule.fromModuleRuleSchema
 
-    initialContext : Context
-    initialContext =
+    initialKnowledge : Knowledge
+    initialKnowledge =
         { elmUiWasImported = False
         , elmCssWasImported = False
         }
@@ -345,48 +244,40 @@ The following example forbids importing both `Element` (`elm-ui`) and
             }
             (Node.range node)
 
-    importVisitor : Node Import -> Context -> ( List Rule.Error, Context )
-    importVisitor node context =
+    importVisitor : Node Import -> Knowledge -> ( List Rule.Error, Knowledge )
+    importVisitor node knowledge =
         case Node.value node |> .moduleName |> Node.value of
             [ "Element" ] ->
-                if context.elmCssWasImported then
+                if knowledge.elmCssWasImported then
                     ( [ error node ]
-                    , { context | elmUiWasImported = True }
+                    , { knowledge | elmUiWasImported = True }
                     )
 
                 else
                     ( [ error node ]
-                    , { context | elmUiWasImported = True }
+                    , { knowledge | elmUiWasImported = True }
                     )
 
             [ "Html", "Styled" ] ->
-                if context.elmUiWasImported then
+                if knowledge.elmUiWasImported then
                     ( [ error node ]
-                    , { context | elmCssWasImported = True }
+                    , { knowledge | elmCssWasImported = True }
                     )
 
                 else
                     ( [ error node ]
-                    , { context | elmCssWasImported = True }
+                    , { knowledge | elmCssWasImported = True }
                     )
 
             _ ->
-                ( [], context )
-
-This example was written in a different way in the example for [`withFinalModuleEvaluation`](#withFinalModuleEvaluation).
+                ( [], knowledge )
 
 
 ### comments
 
-Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's comments, collect data in
-the `context` and/or report patterns.
-
-This visitor will give you access to the list of comments (in source order) in
-the module all at once. Note that comments that are parsed as documentation comments by
-[`elm-syntax`](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/)
-are not included in this list.
-
-As such, the following comments are included (✅) / excluded (❌):
+the module's comments in source order not parsed as attached documentation by
+[`elm-syntax`](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/):
+included (✅) / excluded (❌)
 
   - ✅ Module documentation (`{-| -}`)
   - ✅ Port documentation comments (`{-| -}`)
@@ -400,10 +291,9 @@ If you only need to access the module documentation, you can use
 
 ### declarations
 
-Add a visitor to the [`ModuleRuleSchema`](#ModuleRuleSchema) which will visit the module's
-[declaration statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Declaration)
+the module's
+[declaration statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/Elm-Syntax-Declaration)
 (`someVar = add 1 2`, `type Bool = True | False`, `port output : Json.Encode.Value -> Cmd msg`),
-collect data and/or report patterns. The declarations will be visited in the order of their definition.
 
 The following example forbids exposing a function or a value without it having a
 type annotation.
@@ -426,7 +316,7 @@ type annotation.
             |> Rule.fromModuleRuleSchema
 
     moduleDefinitionVisitor : Node Module -> ExposedFunctions -> ( List Rule.Error, ExposedFunctions )
-    moduleDefinitionVisitor node context =
+    moduleDefinitionVisitor node knowledge =
         case Node.value node |> Module.exposingList of
             Exposing.All _ ->
                 ( [], All )
@@ -444,7 +334,7 @@ type annotation.
                 Nothing
 
     declarationVisitor : Node Declaration -> ExposedFunctions -> ( List Rule.Error, ExposedFunctions )
-    declarationVisitor node direction context =
+    declarationVisitor node direction knowledge =
         case Node.value node of
             Declaration.FunctionDeclaration { documentation, declaration } ->
                 let
@@ -452,7 +342,7 @@ type annotation.
                     functionName =
                         Node.value declaration |> .name |> Node.value
                 in
-                if documentation == Nothing && isExposed context functionName then
+                if documentation == Nothing && isExposed knowledge functionName then
                     ( [ Rule.error
                             { message = "Exposed function " ++ functionName ++ " is missing a type annotation"
                             , details =
@@ -462,14 +352,14 @@ type annotation.
                             }
                             (Node.range node)
                       ]
-                    , context
+                    , knowledge
                     )
 
                 else
-                    ( [], context )
+                    ( [], knowledge )
 
             _ ->
-                ( [], context )
+                ( [], knowledge )
 
     isExposed : ExposedFunctions -> String -> Bool
     isExposed exposedFunctions name =
@@ -486,132 +376,156 @@ type annotation.
 The file path, relative to the project's `elm.json`
 
 -}
-inspectModule : ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> context) -> Inspect context
-inspectModule moduleDataToContext =
-    InspectProjectModuleToContext moduleDataToContext |> Rope.singleton
+inspectModule : ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge) -> Inspect knowledge
+inspectModule moduleDataToKnowledge =
+    InspectProjectModuleToKnowledge moduleDataToKnowledge |> Rope.singleton
 
 
-{-| Collect context from the [elm.json project config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project)
+{-| Collect knowledge from the [elm.json project config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project)
+
+A commonly useful helper is [`packageElmJsonExposedModules`](#packageElmJsonExposedModules)
+
 -}
-inspectElmJson : (Elm.Project.Project -> context) -> Inspect context
-inspectElmJson moduleDataToContext =
-    InspectElmJsonToContext moduleDataToContext |> Rope.singleton
+inspectElmJson : (Elm.Project.Project -> knowledge) -> Inspect knowledge
+inspectElmJson moduleDataToKnowledge =
+    InspectElmJsonToKnowledge moduleDataToKnowledge |> Rope.singleton
 
 
-{-| Collect context from a provided non-elm or elm.json file like README.md or CHANGELOG.md.
+{-| Collect knowledge from a provided non-elm or elm.json file like README.md or CHANGELOG.md.
 
 The provided file path is relative to the project's `elm.json`
 
 -}
-inspectExtraFile : ({ path : String, source : String } -> context) -> Inspect context
-inspectExtraFile moduleDataToContext =
-    InspectExtraFileToContext moduleDataToContext |> Rope.singleton
+inspectExtraFile : ({ path : String, source : String } -> knowledge) -> Inspect knowledge
+inspectExtraFile moduleDataToKnowledge =
+    InspectExtraFileToKnowledge moduleDataToKnowledge |> Rope.singleton
 
 
-{-| Collect context from all [project config and docs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/) you directly depend upon
+{-| Collect knowledge from all [project config and docs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/) you directly depend upon
 -}
-inspectDirectDependencies : (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> context) -> Inspect context
-inspectDirectDependencies moduleDataToContext =
-    InspectDirectDependenciesToContext moduleDataToContext |> Rope.singleton
+inspectDirectDependencies : (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge) -> Inspect knowledge
+inspectDirectDependencies moduleDataToKnowledge =
+    InspectDirectDependenciesToKnowledge moduleDataToKnowledge |> Rope.singleton
 
 
-{-| A new [`Review`](#Review) with
+{-| Write a new [`Review`](#Review)
 
-  - `name`: the name of the module this review is defined in including all the `.`s
-  - `inspect`: the parts you want to analyze and collect context from. See [`Inspect`](#Inspect)
-  - `contextMerge`: assemble contexts from multiple you've collected into one
-  - `report`: the final evaluation, turning your collected and merged context into a list of [`Error`](#Error)s
-  - `contextCodec`: For big files especially, re-running all the parsing and inspection every time we change a different file
-    is costly, so we serialize it for caching using [MartinSStewart/elm-serialize](https://dark.elm.dmy.fr/packages/MartinSStewart/elm-serialize/latest/)
+  - read ["when to write or enable a review"](./#when-to-write-or-enable-a-review)
+  - `name`: (`VariablesAreUsed`, `DebugForbid`, ...)
+    the name of the module this review is defined in including all the `.`s.
+    It should really quickly convey what kind of pattern we're dealing with. A user who
+    encounters this pattern for the first time could guess the problem just from the
+    name. And a user who encountered it several times should know how to fix the
+    problem just from the name, too
+  - `inspect`: the parts you want to analyze and collect knowledge from. See [`Inspect`](#Inspect)
+  - `knowledgeMerge`: assemble knowledge from multiple you've collected into one
+  - `report`: the final evaluation, turning your collected and merged knowledge into a list of errors.
+    Take the elm compiler errors as inspiration in terms of helpfulness:
+  - error `message`: half-sentence on what _is_ undesired here. A user
+    that has encountered this error multiple times should know exactly what to do.
+    Example: "`foo` is never used" → a user who
+    knows the rule knows that a function can be removed and which one
+  - error `details`: additional information such as the rationale and suggestions
+    for a solution or alternative
+  - error report `range`: where the squiggly lines appear under. Make this section as small as
+    possible. For instance, in a rule that would forbid
+    `Debug.log`, you would the error to appear under `Debug.log`, not on the whole
+    function call
+  - `knowledgeCodec`: For big files especially, re-running all the parsing and inspection every time we change a different file
+    is costly, so we serialize it for caching using [miniBill/elm-codec](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
+  - documentation: explain when (not) to enable the review. For instance, for a review that
+    makes sure that a package is publishable by ensuring that all docs are valid,
+    it should say something like "If you are writing an application, you shouldn't enable it".
+    Add a few examples of patterns that will (not) be reported
+
+
+### use Test-Driven Development!
+
+[`Review.Test`](Review-Test) works with [`elm-test`](https://github.com/elm-explorations/test).
+Read ["strategies for effective testing"](Review-Test) before
+starting writing a review.
+If you like putting `Debug.log`s in your code, you'll have a pleasant time
+running your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
 -}
 create :
     { name : String
-    , inspect : List (Inspect context)
-    , contextMerge : context -> context -> context
-    , report :
-        context
-        ->
-            List
-                { target : FileTarget
-                , range : Elm.Syntax.Range.Range
-                , message : String
-                , details : List String
-                , fixes : List Fix
-                }
-    , contextCodec : Codec.Codec context
+    , inspect : List (Inspect knowledge)
+    , knowledgeMerge : knowledge -> knowledge -> knowledge
+    , report : knowledge -> List Error
+    , knowledgeCodec : Codec.Codec knowledge
     }
     -> Review
 create review =
     let
-        contextToCache : context -> ContextGeneric
-        contextToCache =
-            \context ->
-                context
-                    |> Codec.encodeToString 0 review.contextCodec
-                    |> ContextJsonString
+        knowledgeToCache : knowledge -> KnowledgeGeneric
+        knowledgeToCache =
+            \knowledge ->
+                knowledge
+                    |> Codec.encodeToValue review.knowledgeCodec
+                    |> KnowledgeJson
 
-        contextFromCache : ContextGeneric -> Result Json.Decode.Error context
-        contextFromCache =
-            \(ContextJsonString serializedBase64) ->
-                serializedBase64 |> Codec.decodeString review.contextCodec
+        knowledgeFromCache : KnowledgeGeneric -> Result Json.Decode.Error knowledge
+        knowledgeFromCache =
+            \(KnowledgeJson serializedBase64) ->
+                serializedBase64 |> Codec.decodeValue review.knowledgeCodec
 
-        toContexts :
-            { directDependenciesToContext : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> context)
-            , elmJsonToContext : List (Elm.Project.Project -> context)
-            , extraFileToContext : List ({ path : String, source : String } -> context)
-            , moduleToContext : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> context)
+        toKnowledges :
+            { directDependenciesToKnowledge : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
+            , elmJsonToKnowledge : List (Elm.Project.Project -> knowledge)
+            , extraFileToKnowledge : List ({ path : String, source : String } -> knowledge)
+            , moduleToKnowledge : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
             }
-        toContexts =
+        toKnowledges =
             review.inspect
                 |> Rope.fromList
                 |> Rope.concat
-                |> inspectToToContexts
+                |> inspectToToKnowledges
     in
     { name = review.name
     , ignoreErrorsForFiles = \_ -> False
     , run =
         \project ->
             let
-                contextsFoldToMaybe : List context -> Maybe context
-                contextsFoldToMaybe =
-                    \contexts ->
-                        case contexts of
+                knowledgesFoldToMaybe : List knowledge -> Maybe knowledge
+                knowledgesFoldToMaybe =
+                    \knowledges ->
+                        case knowledges of
                             [] ->
                                 Nothing
 
                             one :: others ->
-                                others |> List.foldl review.contextMerge one |> Just
+                                others |> List.foldl review.knowledgeMerge one |> Just
 
-                elmJsonContextAndCache : Maybe { context : context, cache : ContextGeneric }
-                elmJsonContextAndCache =
-                    case project.cache.elmJsonContext of
+                elmJsonKnowledgeAndCache : Maybe { knowledge : knowledge, cache : KnowledgeGeneric }
+                elmJsonKnowledgeAndCache =
+                    case project.cache.elmJsonKnowledge of
                         Just cache ->
-                            case cache |> contextFromCache of
+                            case cache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
                                     Nothing
 
-                                Ok context ->
-                                    { context = context, cache = cache } |> Just
+                                Ok knowledge ->
+                                    { knowledge = knowledge, cache = cache } |> Just
 
                         Nothing ->
-                            toContexts.elmJsonToContext
+                            toKnowledges.elmJsonToKnowledge
                                 |> List.map (\f -> f project.elmJson.project)
-                                |> contextsFoldToMaybe
-                                |> Maybe.map (\context -> { context = context, cache = context |> contextToCache })
+                                |> knowledgesFoldToMaybe
+                                |> Maybe.map (\knowledge -> { knowledge = knowledge, cache = knowledge |> knowledgeToCache })
 
-                directDependenciesContextAndCache : Maybe { context : context, cache : ContextGeneric }
-                directDependenciesContextAndCache =
-                    case project.cache.directDependenciesContext of
+                directDependenciesKnowledgeAndCache : Maybe { knowledge : knowledge, cache : KnowledgeGeneric }
+                directDependenciesKnowledgeAndCache =
+                    case project.cache.directDependenciesKnowledge of
                         Just cache ->
-                            case cache |> contextFromCache of
+                            case cache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
                                     Nothing
 
-                                Ok context ->
-                                    { context = context, cache = cache } |> Just
+                                Ok knowledge ->
+                                    { knowledge = knowledge, cache = cache } |> Just
 
                         Nothing ->
                             let
@@ -627,15 +541,15 @@ create review =
                                             )
                                         |> ListExtra.consJust ElmCoreDependency.parsed
                             in
-                            toContexts.directDependenciesToContext
+                            toKnowledges.directDependenciesToKnowledge
                                 |> List.map (\f -> f directDependenciesIncluding)
-                                |> contextsFoldToMaybe
-                                |> Maybe.map (\context -> { context = context, cache = context |> contextToCache })
+                                |> knowledgesFoldToMaybe
+                                |> Maybe.map (\knowledge -> { knowledge = knowledge, cache = knowledge |> knowledgeToCache })
 
-                moduleToMaybeContext :
+                moduleToMaybeKnowledge :
                     { path : String, source : String }
-                    -> Maybe { path : String, context : context, cache : ContextGeneric }
-                moduleToMaybeContext moduleFile =
+                    -> Maybe { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
+                moduleToMaybeKnowledge moduleFile =
                     case moduleFile.source |> Elm.Parser.parseToFile of
                         Err _ ->
                             Nothing
@@ -649,100 +563,121 @@ create review =
                                     , syntax = syntax |> syntaxFileSanitize
                                     }
                             in
-                            toContexts.moduleToContext
+                            toKnowledges.moduleToKnowledge
                                 |> List.map (\f -> f moduleData)
-                                |> contextsFoldToMaybe
+                                |> knowledgesFoldToMaybe
                                 |> Maybe.map
-                                    (\foldedContext ->
+                                    (\foldedKnowledge ->
                                         { path = moduleFile.path
-                                        , context = foldedContext
-                                        , cache = foldedContext |> contextToCache
+                                        , knowledge = foldedKnowledge
+                                        , cache = foldedKnowledge |> knowledgeToCache
                                         }
                                     )
 
-                moduleContexts : List { path : String, context : context, cache : ContextGeneric }
-                moduleContexts =
+                sourceDirectories : List String
+                sourceDirectories =
+                    project.elmJson.project |> ElmJson.LocalExtra.sourceDirectories
+
+                pathIsModule : String -> Bool
+                pathIsModule =
+                    \path ->
+                        (path |> String.endsWith ".elm")
+                            && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
+
+                ( addedOrChangedModuleFiles, addedOrChangedExtraFiles ) =
+                    project.addedOrChangedFiles
+                        |> List.partition
+                            (\file -> file.path |> pathIsModule)
+
+                ( removedModuleFilePaths, removedExtraFilePaths ) =
+                    project.removedFilePaths
+                        |> List.partition
+                            (\path -> path |> pathIsModule)
+
+                moduleKnowledges : List { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
+                moduleKnowledges =
                     FastDict.merge
                         (\_ new soFar -> soFar |> ListExtra.consJust new)
                         (\_ new _ soFar -> soFar |> ListExtra.consJust new)
-                        (\path contextCache soFar ->
-                            case contextCache |> contextFromCache of
+                        (\path knowledgeCache soFar ->
+                            case knowledgeCache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
                                     soFar
 
-                                Ok context ->
-                                    soFar |> (::) { path = path, context = context, cache = contextCache }
+                                Ok knowledge ->
+                                    soFar |> (::) { path = path, knowledge = knowledge, cache = knowledgeCache }
                         )
-                        (project.addedOrChangedModules
+                        (addedOrChangedModuleFiles
                             |> FastDictExtra.fromListMap
                                 (\file ->
                                     { key = file.path
-                                    , value = file |> moduleToMaybeContext
+                                    , value = file |> moduleToMaybeKnowledge
                                     }
                                 )
                         )
-                        (project.cache.moduleContextsByPath
-                            |> dictRemoveKeys project.removedModulePaths
+                        (project.cache.moduleKnowledgesByPath
+                            |> dictRemoveKeys removedModuleFilePaths
                         )
                         []
 
-                extraFileToMaybeContext :
+                extraFileToMaybeKnowledge :
                     { path : String, source : String }
-                    -> Maybe { path : String, context : context, cache : ContextGeneric }
-                extraFileToMaybeContext fileInfo =
-                    toContexts.extraFileToContext
+                    -> Maybe { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
+                extraFileToMaybeKnowledge fileInfo =
+                    toKnowledges.extraFileToKnowledge
                         |> List.map (\f -> f fileInfo)
-                        |> contextsFoldToMaybe
+                        |> knowledgesFoldToMaybe
                         |> Maybe.map
-                            (\foldedContext ->
+                            (\foldedKnowledge ->
                                 { path = fileInfo.path
-                                , context = foldedContext
-                                , cache = foldedContext |> contextToCache
+                                , knowledge = foldedKnowledge
+                                , cache = foldedKnowledge |> knowledgeToCache
                                 }
                             )
 
-                extraFilesContexts : List { path : String, context : context, cache : ContextGeneric }
-                extraFilesContexts =
+                extraFilesKnowledges : List { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
+                extraFilesKnowledges =
                     FastDict.merge
                         (\_ new soFar -> soFar |> ListExtra.consJust new)
                         (\_ new _ soFar -> soFar |> ListExtra.consJust new)
-                        (\path contextCache soFar ->
-                            case contextCache |> contextFromCache of
+                        (\path knowledgeCache soFar ->
+                            case knowledgeCache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
                                     soFar
 
-                                Ok context ->
-                                    soFar |> (::) { path = path, context = context, cache = contextCache }
+                                Ok knowledge ->
+                                    soFar |> (::) { path = path, knowledge = knowledge, cache = knowledgeCache }
                         )
-                        (project.addedOrChangedExtraFiles
+                        (addedOrChangedExtraFiles
                             |> FastDictExtra.fromListMap
                                 (\file ->
                                     { key = file.path
-                                    , value = file |> extraFileToMaybeContext
+                                    , value = file |> extraFileToMaybeKnowledge
                                     }
                                 )
                         )
-                        (project.cache.extraFileContextsByPath
-                            |> dictRemoveKeys project.removedExtraFilePaths
+                        (project.cache.extraFileKnowledgesByPath
+                            |> dictRemoveKeys removedExtraFilePaths
                         )
                         []
 
-                allContexts =
-                    ((moduleContexts |> List.map .context)
-                        ++ (extraFilesContexts |> List.map .context)
+                allKnowledges : List knowledge
+                allKnowledges =
+                    ((moduleKnowledges |> List.map .knowledge)
+                        ++ (extraFilesKnowledges |> List.map .knowledge)
                     )
-                        |> ListExtra.consJust (directDependenciesContextAndCache |> Maybe.map .context)
-                        |> ListExtra.consJust (elmJsonContextAndCache |> Maybe.map .context)
+                        |> ListExtra.consJust (directDependenciesKnowledgeAndCache |> Maybe.map .knowledge)
+                        |> ListExtra.consJust (elmJsonKnowledgeAndCache |> Maybe.map .knowledge)
             in
-            case allContexts |> contextsFoldToMaybe of
+            case allKnowledges |> knowledgesFoldToMaybe of
                 Nothing ->
                     { errorsByPath = FastDict.empty, cache = project.cache }
 
-                Just completeContext ->
+                Just completeKnowledge ->
                     { errorsByPath =
-                        completeContext
+                        completeKnowledge
                             |> review.report
                             |> List.foldl
                                 (\error soFar ->
@@ -756,7 +691,7 @@ create review =
                                                         { message = error.message
                                                         , details = error.details
                                                         , range = error.range
-                                                        , fixes = error.fixes
+                                                        , fix = error.fix
                                                         }
                                                     |> Just
                                             )
@@ -767,19 +702,19 @@ create review =
                                     errors |> List.sortWith (\a b -> rangeCompare a.range b.range)
                                 )
                     , cache =
-                        { elmJsonContext = elmJsonContextAndCache |> Maybe.map .cache
-                        , directDependenciesContext = directDependenciesContextAndCache |> Maybe.map .cache
-                        , moduleContextsByPath =
-                            moduleContexts
+                        { elmJsonKnowledge = elmJsonKnowledgeAndCache |> Maybe.map .cache
+                        , directDependenciesKnowledge = directDependenciesKnowledgeAndCache |> Maybe.map .cache
+                        , moduleKnowledgesByPath =
+                            moduleKnowledges
                                 |> FastDictExtra.fromListMap
-                                    (\moduleContext ->
-                                        { key = moduleContext.path, value = moduleContext.cache }
+                                    (\moduleKnowledge ->
+                                        { key = moduleKnowledge.path, value = moduleKnowledge.cache }
                                     )
-                        , extraFileContextsByPath =
-                            moduleContexts
+                        , extraFileKnowledgesByPath =
+                            moduleKnowledges
                                 |> FastDictExtra.fromListMap
-                                    (\extraFileContext ->
-                                        { key = extraFileContext.path, value = extraFileContext.cache }
+                                    (\extraFileKnowledge ->
+                                        { key = extraFileKnowledge.path, value = extraFileKnowledge.cache }
                                     )
                         }
                     }
@@ -797,48 +732,48 @@ fileTargetToPath =
                 filePath.path
 
 
-inspectToToContexts :
-    Inspect context
+inspectToToKnowledges :
+    Inspect knowledge
     ->
-        { directDependenciesToContext : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> context)
-        , elmJsonToContext : List (Elm.Project.Project -> context)
-        , extraFileToContext : List ({ path : String, source : String } -> context)
-        , moduleToContext : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> context)
+        { directDependenciesToKnowledge : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
+        , elmJsonToKnowledge : List (Elm.Project.Project -> knowledge)
+        , extraFileToKnowledge : List ({ path : String, source : String } -> knowledge)
+        , moduleToKnowledge : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
         }
-inspectToToContexts =
+inspectToToKnowledges =
     \inspect ->
         inspect
             |> Rope.foldl
                 (\inspectSingle soFar ->
                     case inspectSingle of
-                        InspectDirectDependenciesToContext toContext ->
+                        InspectDirectDependenciesToKnowledge toKnowledge ->
                             { soFar
-                                | directDependenciesToContext =
-                                    soFar.directDependenciesToContext |> (::) toContext
+                                | directDependenciesToKnowledge =
+                                    soFar.directDependenciesToKnowledge |> (::) toKnowledge
                             }
 
-                        InspectElmJsonToContext toContext ->
+                        InspectElmJsonToKnowledge toKnowledge ->
                             { soFar
-                                | elmJsonToContext =
-                                    soFar.elmJsonToContext |> (::) toContext
+                                | elmJsonToKnowledge =
+                                    soFar.elmJsonToKnowledge |> (::) toKnowledge
                             }
 
-                        InspectExtraFileToContext toContext ->
+                        InspectExtraFileToKnowledge toKnowledge ->
                             { soFar
-                                | extraFileToContext =
-                                    soFar.extraFileToContext |> (::) toContext
+                                | extraFileToKnowledge =
+                                    soFar.extraFileToKnowledge |> (::) toKnowledge
                             }
 
-                        InspectProjectModuleToContext toContext ->
+                        InspectProjectModuleToKnowledge toKnowledge ->
                             { soFar
-                                | moduleToContext =
-                                    soFar.moduleToContext |> (::) toContext
+                                | moduleToKnowledge =
+                                    soFar.moduleToKnowledge |> (::) toKnowledge
                             }
                 )
-                { directDependenciesToContext = []
-                , elmJsonToContext = []
-                , extraFileToContext = []
-                , moduleToContext = []
+                { directDependenciesToKnowledge = []
+                , elmJsonToKnowledge = []
+                , extraFileToKnowledge = []
+                , moduleToKnowledge = []
                 }
 
 
@@ -901,32 +836,36 @@ syntaxFileSanitize =
         }
 
 
+{-| A thing to report in a given [file](#FileTarget) and range,
+suggesting [fixes](#Fix) and giving details with hints
+-}
+type alias Error =
+    { target : FileTarget
+    , range : Elm.Syntax.Range.Range
+    , message : String
+    , details : List String
+    , fix : List Fix
+    }
+
+
 {-| A fresh [`Cache`](#Cache) for a fresh session (or single [`run`](#run))
 -}
 cacheEmpty : Cache
 cacheEmpty =
-    { elmJsonContext = Nothing
-    , directDependenciesContext = Nothing
-    , moduleContextsByPath = FastDict.empty
-    , extraFileContextsByPath = FastDict.empty
+    { elmJsonKnowledge = Nothing
+    , directDependenciesKnowledge = Nothing
+    , moduleKnowledgesByPath = FastDict.empty
+    , extraFileKnowledgesByPath = FastDict.empty
     }
 
 
 {-| There are situations where you don't want review rules to report errors:
 
-1.  You copied and updated over an external library because one of your needs wasn't met, and you don't want to modify it more than necessary.
-2.  Your project contains generated source code, over which you have no control or for which you do not care that some rules are enforced (like the reports of unused variables).
-3.  You want to introduce a rule progressively, because there are too many errors in the project for you to fix in one go. You can then ignore the parts of the project where the problem has not yet been solved, and fix them as you go.
-4.  You wrote a rule that is very specific and should only be applied to a portion of your code.
-5.  You wish to disable some rules for tests files (or enable some only for tests).
+  - You copied and updated over an external library because one of your needs wasn't met, and you don't want to modify it more than necessary
+  - Your project contains generated source code which isn't supposed to be read and or over which you have less control
+  - You wrote a review that is very specific and should only be applied for a portion of your codebase
 
-You can use the following functions to ignore errors in directories or files, or only report errors found in specific directories or files.
-
-**NOTE**: Even though they can be used to disable any errors, I **strongly recommend against**
-doing so if you are not in the situations listed above. I highly recommend you
-leave a comment explaining the reason why you use these functions, or to
-communicate with your colleagues if you see them adding exceptions without
-reason or seemingly inappropriately.
+Note that `tests/` directory is never inspected
 
 -}
 ignoreErrorsForFilesWhere : (String -> Bool) -> (Review -> Review)
@@ -937,79 +876,6 @@ ignoreErrorsForFilesWhere filterOut =
                 \path ->
                     (path |> review.ignoreErrorsForFiles) || (path |> filterOut)
         }
-
-
-{-| Given the [project's elm.json config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project),
-find the elm module source directories and direct dependency directory paths from the global elm home.
--}
-elmJsonToElmProjectFiles : Elm.Project.Project -> { sourceDirectories : List String, directDependenciesFromElmHome : List String }
-elmJsonToElmProjectFiles =
-    \elmJson ->
-        { sourceDirectories = elmJson |> elmJsonSourceDirectories
-        , directDependenciesFromElmHome = elmJson |> elmJsonDirectDependencyNameVersionStrings
-        }
-
-
-elmJsonDirectDependencyNameVersionStrings : Elm.Project.Project -> List String
-elmJsonDirectDependencyNameVersionStrings elmJson =
-    case elmJson of
-        Elm.Project.Application applicationElmJson ->
-            List.map
-                (\( name, version ) ->
-                    (name |> Elm.Package.toString) ++ (version |> Elm.Version.toString)
-                )
-                (applicationElmJson.depsDirect ++ applicationElmJson.testDepsDirect)
-
-        Elm.Project.Package packageElmJson ->
-            List.map
-                (\( name, constraint ) ->
-                    (name |> Elm.Package.toString) ++ (constraint |> versionConstraintLowerBound)
-                )
-                (packageElmJson.deps ++ packageElmJson.testDeps)
-
-
-versionConstraintLowerBound : Elm.Constraint.Constraint -> String
-versionConstraintLowerBound =
-    \constraint ->
-        case constraint |> Elm.Constraint.toString |> String.split " " of
-            [] ->
-                "1.0.0"
-
-            lowerBoundAsString :: _ ->
-                lowerBoundAsString
-
-
-elmJsonSourceDirectories : Elm.Project.Project -> List String
-elmJsonSourceDirectories elmJson =
-    case elmJson of
-        Elm.Project.Application application ->
-            application.dirs |> List.map (\dir -> dir |> removeDotSlashAtBeginning |> pathMakeOSAgnostic |> endWithSlash)
-
-        Elm.Project.Package _ ->
-            [ "src/" ]
-
-
-pathMakeOSAgnostic : String -> String
-pathMakeOSAgnostic =
-    \path -> path |> String.replace "\\" "/"
-
-
-removeDotSlashAtBeginning : String -> String
-removeDotSlashAtBeginning dir =
-    if String.startsWith "./" dir then
-        String.dropLeft 2 dir
-
-    else
-        dir
-
-
-endWithSlash : String -> String
-endWithSlash dir =
-    if String.endsWith "/" dir then
-        dir
-
-    else
-        dir ++ "/"
 
 
 {-| Review a project and return the errors reported by the given rules.
@@ -1053,14 +919,12 @@ run :
     ->
         ({ elmJson : { source : String, project : Elm.Project.Project }
          , directDependencies : List { elmJson : String, docsJson : String }
-         , addedOrChangedModules : List { path : String, source : String }
-         , removedModulePaths : List String
-         , addedOrChangedExtraFiles : List { path : String, source : String }
-         , removedExtraFilePaths : List String
+         , addedOrChangedFiles : List { path : String, source : String }
+         , removedFilePaths : List String
          , cache : Cache
          }
          ->
-            { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Fix })
+            { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Fix })
             , cache : Cache
             }
         )
@@ -1068,7 +932,7 @@ run review =
     \project ->
         let
             runResult :
-                { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Fix })
+                { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Fix })
                 , cache : Cache
                 }
             runResult =
@@ -1092,10 +956,10 @@ run review =
 {-| Cache for the result of the analysis of an inspected project part (modules, elm.json, extra files, direct and indirect dependencies).
 -}
 type alias Cache =
-    { elmJsonContext : Maybe ContextGeneric
-    , directDependenciesContext : Maybe ContextGeneric
-    , moduleContextsByPath : FastDict.Dict String ContextGeneric
-    , extraFileContextsByPath : FastDict.Dict String ContextGeneric
+    { elmJsonKnowledge : Maybe KnowledgeGeneric
+    , directDependenciesKnowledge : Maybe KnowledgeGeneric
+    , moduleKnowledgesByPath : FastDict.Dict String KnowledgeGeneric
+    , extraFileKnowledgesByPath : FastDict.Dict String KnowledgeGeneric
     }
 
 
@@ -1234,19 +1098,59 @@ expressionSubs node =
             []
 
 
+{-| The set of modules in [`Elm-Project.Exposed`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Exposed)
+(the `exposed-modules` field in a package elm.json)
+-}
+packageElmJsonExposedModules : Elm.Project.Exposed -> Set Elm.Syntax.ModuleName.ModuleName
+packageElmJsonExposedModules =
+    \exposed ->
+        case exposed of
+            Elm.Project.ExposedList list ->
+                list |> List.map elmJsonModuleNameToSyntax |> Set.fromList
+
+            Elm.Project.ExposedDict dict ->
+                dict
+                    |> List.concatMap (\( _, moduleNames ) -> moduleNames)
+                    |> List.map elmJsonModuleNameToSyntax
+                    |> Set.fromList
+
+
+elmJsonModuleNameToSyntax : Elm.Module.Name -> Elm.Syntax.ModuleName.ModuleName
+elmJsonModuleNameToSyntax =
+    \elmJsonModuleName ->
+        elmJsonModuleName |> Elm.Module.toString |> String.split "."
+
+
 {-| The module header name + range
 -}
 moduleHeaderNameNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.ModuleName.ModuleName
-moduleHeaderNameNode node =
-    case Elm.Syntax.Node.value node of
-        Elm.Syntax.Module.NormalModule data ->
-            data.moduleName
+moduleHeaderNameNode =
+    \(Elm.Syntax.Node.Node _ moduleHeader) ->
+        case moduleHeader of
+            Elm.Syntax.Module.NormalModule data ->
+                data.moduleName
 
-        Elm.Syntax.Module.PortModule data ->
-            data.moduleName
+            Elm.Syntax.Module.PortModule data ->
+                data.moduleName
 
-        Elm.Syntax.Module.EffectModule data ->
-            data.moduleName
+            Elm.Syntax.Module.EffectModule data ->
+                data.moduleName
+
+
+{-| The module header [exposing part](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Exposing#Exposing) + range
+-}
+moduleHeaderExposing : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
+moduleHeaderExposing =
+    \(Elm.Syntax.Node.Node _ moduleHeader) ->
+        case moduleHeader of
+            Elm.Syntax.Module.NormalModule moduleHeaderData ->
+                moduleHeaderData.exposingList
+
+            Elm.Syntax.Module.PortModule moduleHeaderData ->
+                moduleHeaderData.exposingList
+
+            Elm.Syntax.Module.EffectModule moduleHeaderData ->
+                moduleHeaderData.exposingList
 
 
 {-| The module's documentation comment at the top of the file, which can be `Nothing`.
@@ -1438,6 +1342,14 @@ rangesCollide a b =
 
                 GT ->
                     True
+
+
+{-| Convenience [`Codec`](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
+for an [`Elm.Syntax.ModuleName.ModuleName`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-ModuleName#ModuleName)
+-}
+moduleNameCodec : Codec.Codec Elm.Syntax.ModuleName.ModuleName
+moduleNameCodec =
+    Codec.list Codec.string
 
 
 {-| Convenience [`Codec`](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)

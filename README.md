@@ -1,66 +1,35 @@
-# elm-review-mini
-Why create a fork of [`elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/)?
+> Status: CLI isn't ready for use
 
-## goals and ideas
+elm-review-mini scans your [elm](https://elm-lang.org/) project to enforce conventions. It's a fork of [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) with much simpler API and internals (see also [the feeling section](#feelings)).
 
-  - much simpler API and internals 
-      - enabling docs that cover the basics in a very concise manner,
-        then guiding through tons of examples if you feel like it.
-  - errors are always evaluated once all inspections are done and merged
-      - much of the complexity and perf choke points in `elm-review` come from the dependency between inspections (implemented through "Jeremy's interfaces"), see e.g. https://github.com/jfmengels/elm-review/issues/168
-      - multiple reviews can feed off the same bunch of collected contexts, published as packages by users. Examples: "data to determine all bindings in scope", "data to determine a given reference's full origin", "data to determine the reference's minimum qualification", "type information" (TODO experiment: currently I don't think caching these across reviews is worth it performance-wise but worth investigating)
-  - TODO all the nice helpers: `Type/Pattern/Expression.map/subs/fold` etc
-
-
-> Status: Basic API is promising, implementation is still brewing (CLI especially will take a while)
-
-Directly back-porting these changes to `elm-review` is not an explicit goal for me
-and breaking changes etc are explicitly not avoided.
-
-## feelings
-
-I'm _scared_ of big projects, especially those with a lot of underlying covered area/complexity
-because code structures become static:
-  - You start to almost work around your code when you add new features – which again makes code harder to understand and harder to get into
-  - Trying to make all those changes backwards-compatible introduces even more layers and wires everywhere
-  - Keeping all the examples and tests up to date becomes daunting and somewhat draining, unexciting work
-
-I know I could neither maintain them well nor would I be happy doing so.
-And neither do I have hopes that anyone could.
-For big projects run by a single person, the bus factor becomes increasingly scary as well
-and I'd be horribly sad for a great tool such as `elm-review` to become stale/abandoned.
-
-I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things a bit more rough for users (performance, convenience).
-
-
-------
-
-`elm-review-mini` scans your [elm](https://elm-lang.org/) project to find bugs and enforce conventions.
-Each review is written in elm and is [published as a package](https://dark.elm.dmy.fr/?q=elm-review-mini-). There are no built-in reviews.
-
+Reviews are written in elm. Many [published as a package](https://dark.elm.dmy.fr/?q=elm-review-mini-).
 To use it for your project, clone this starter config with the CLI set up (requires `node.js` and `npm` to be installed)
 ```bash
 curl -L https://github.com/lue-bird/elm-review-mini-cli-starter/tarball/master review-mini | tar xz
 ```
-The created `review-mini/` is a self-contained elm application which means you can add new reviews with `elm install` just like any other elm project dependency (to find reviews, [search for packages elm-review-mini-...](https://dark.elm.dmy.fr/?q=elm-review-mini-) for example).
-And don't forget to actually put it in the list in `src/Reviews.elm` and configure it :)
+The created `review-mini/` is a self-contained elm application which means you can add new reviews with `elm install` just like any other elm project dependency.
+Then add the review in your `review-mini/src/ReviewConfiguration.elm`:
 
-Beware how and why you introduce reviews in your project.
-If a review seems like the best solution, remember to discuss it with your team.
-It's easy to mix up patterns that are objectively bad with patterns that you personally find problematic, and forbidding patterns that other people find useful can be very disruptive.
-Read also: [when to enable a review](#when-to-write-or-enable-a-review).
+```elm
+module ReviewConfiguration exposing (configuration)
 
-## bring your own reviews
+import SomeConvention
+import Review
 
-I encourage you to write custom reviews yourself (and if it makes sense publish them for everyone to benefit)
 
-  - enforce that e.g. image paths only live in an `Images` module, which other modules can reference
-  - make everyone use a common `Button` ui module, instead of creating their own
+configuration : { reviews : List Review.Review, extraPaths : List String }
+configuration =
+    { extraPaths = [ "README.md" ]
+    , reviews =
+        [ SomeConvention.review SomeConvention.configuration
+        -- , ...
+        ]
+    }
+```
 
-Check out the [`Review`](https://package.elm-lang.org/packages/lue-bird/elm-review-mini/1.0.0/Review/) documentation for how to get started.
+Always discuss added reviews with your team. Read [when to enable a review](#when-to-write-or-enable-a-review).
 
-Here's an example of a review that prevents a typo in a string that was made too often at your company.
-
+You can also [write custom reviews](Review#write). An example of a review that prevents a typo in a string that was made too often at your company:
 ```elm
 module StringWithMisspelledCompanyNameForbid exposing (review)
 
@@ -72,7 +41,7 @@ import Codec
 review : Review.Review
 review =
     Review.create
-        { name = "StringWithMisspelledCompanyNameForbid" -- same as the module
+        { name = "StringWithMisspelledCompanyNameForbid"
         , inspect =
             [ Review.inspectModule
                 (\module ->
@@ -113,11 +82,11 @@ review =
                             , message = "Replace `frits.com` by `fruits.com`"
                             , details = [ "This typo has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
                             , range = misspelledName.range
-                            , fixes = []
+                            , fix = []
                             }
                         )
-        , contextMerge = \a b -> a ++ b
-        , contextSerialize =
+        , knowledgeMerge = \a b -> a ++ b
+        , knowledgeSerialize =
             Codec.list
                 (Codec.object (\modulePath range -> { modulePath = modulePath, range = range })
                     |> Codec.field "modulePath" .modulePath Codec.string
@@ -125,22 +94,6 @@ review =
                     |> Codec.finishRecord
                 )
         }
-```
-
-Then add the review in your runner:
-
-```elm
-module Reviews exposing (reviews)
-
-import NoStringWithMisspelledCompanyName
-import Review
-
-
-reviews : List Review.Review
-reviews =
-    [ NoStringWithMisspelledCompanyName.review
-    -- , ...
-    ]
 ```
 
 ## when to write or enable a review
@@ -151,21 +104,14 @@ If a developer disagrees with a review, they may try to circumvent it, resulting
 So the value provided by the review should be much greater than the trouble it causes, and if you find that a review doesn't live up to this, consider disabling it.
 
 Review reviews are most useful when some pattern must never appear in the code.
-It gets less useful when a pattern is allowed to appear in certain cases, as there is [no good solution for handling exceptions to reviews](#is-there-a-way-to-ignore-errors-).
+It gets less useful when a pattern is allowed to appear in certain cases, as there is [no good solution for handling exceptions to reviews](#what-if-i-disagree-with-a-review-on-a-specific-case-in-my-code).
 If you really need to make exceptions, they must be written in the review itself, or the review should be configurable.
 
 For reviews that enforce a certain **coding style**, or suggest simplifications to your code, I would ask you to raise the bar for inclusion even higher.
-A few examples:
-
-  - I much prefer using `|>` over `<|`, and I think using the latter to pipe
-  functions over several lines is harder to read. Even if using `|>` was indeed
-  better for most situations and even if my teammates agree, this would prevent
-  me from writing tests [the suggested way](https://github.com/elm-explorations/test#quick-start)
-  for instance.
-  - If a record contains only one field, then I could suggest not using a record
-  and use the field directly, which would make things simpler. But using a
-  record can have the advantage of being more explicit: `findFiles [] folder` is
-  harder to understand than `findFiles { exceptions = [] } folder`.
+For example: If a record contains only one field, then I could suggest not using a record
+and use the field directly, which would make things simpler. But using a
+record can have the advantage of being more explicit: `findFiles [] folder` is
+harder to understand than `findFiles { exceptions = [] } folder`.
 
 Some reviews might suggest using advanced techniques to avoid pitfalls, which can make it harder for newcomers to get something done.
 When enabling this kind of review, make sure that the message it gives is helpful enough to unblock users.
@@ -191,3 +137,22 @@ However! You can [mark specific kinds of files as not relevant to a review, prev
 
 It is a good fit if you wish for `elm-review-mini` to not report errors in vendored or generated code,
 or in files and directories that by the nature of the review should be exempted.
+
+
+--------
+
+
+## feelings
+
+I'm _scared_ of big projects, especially those with a lot of underlying covered area/complexity
+because code structures become static:
+  - You start to almost work around your code when you add new features – which again makes code harder to understand and harder to get into
+  - Trying to make all those changes backwards-compatible introduces even more layers and wires everywhere
+  - Keeping all the examples and tests up to date becomes daunting and somewhat draining, unexciting work
+
+I know I could neither maintain them well nor would I be happy doing so.
+And neither do I have hopes that anyone could.
+For big projects run by a single person, the bus factor becomes increasingly scary as well
+and I'd be horribly sad for a great tool such as `elm-review` to become stale/abandoned.
+
+I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things a bit more rough for users (performance, convenience).

@@ -3,7 +3,7 @@ module Diff exposing
     , diff
     )
 
-{-| Copied from <https://github.com/jinjor/elm-diff/> with only typos changed and elm-review fixes applied in the code
+{-| Copied from <https://github.com/jinjor/elm-diff/> with typos changed and elm-review fixes applied in the code
 
 The following is the original license
 
@@ -97,26 +97,33 @@ If it returns Err, it should be a bug.
 testDiff : List a -> List a -> Result BugReport (List (Change a))
 testDiff a b =
     let
+        arrA : Array a
         arrA =
             Array.fromList a
 
+        m : Int
         m =
             Array.length arrA
 
+        arrB : Array a
         arrB =
             Array.fromList b
 
+        n : Int
         n =
             Array.length arrB
 
         -- Elm's Array doesn't allow null element,
         -- so we'll use shifted index to access source.
+        getA : Int -> Maybe a
         getA =
             \x -> Array.get (x - 1) arrA
 
+        getB : Int -> Maybe a
         getB =
             \y -> Array.get (y - 1) arrB
 
+        path : List ( Int, Int )
         path =
             -- Is there any case ond is needed?
             -- ond getA getB m n
@@ -153,6 +160,7 @@ makeChangesHelp changes getA getB ( x, y ) path =
 
         ( prevX, prevY ) :: tail ->
             let
+                change : Result BugReport (Change a)
                 change =
                     if x - 1 == prevX && y - 1 == prevY then
                         case getA x of
@@ -196,9 +204,11 @@ makeChangesHelp changes getA getB ( x, y ) path =
 onp : (Int -> Maybe a) -> (Int -> Maybe a) -> Int -> Int -> List ( Int, Int )
 onp getA getB m n =
     let
+        v : Array (List ( Int, Int ))
         v =
             Array.initialize (m + n + 1) (\_ -> [])
 
+        delta : Int
         delta =
             n - m
     in
@@ -247,6 +257,7 @@ onpLoopP :
     -> List ( Int, Int )
 onpLoopP snake_ delta offset p v =
     let
+        ks : List Int
         ks =
             if delta > 0 then
                 List.reverse (List.range (delta + 1) (delta + p))
@@ -292,9 +303,11 @@ step :
     -> StepResult
 step snake_ offset k v =
     let
+        fromLeft : List ( Int, Int )
         fromLeft =
             Maybe.withDefault [] (Array.get (k - 1 + offset) v)
 
+        fromTop : List ( Int, Int )
         fromTop =
             Maybe.withDefault [] (Array.get (k + 1 + offset) v)
 

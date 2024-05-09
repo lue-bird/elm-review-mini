@@ -1,130 +1,159 @@
-module Review.Test exposing (run, ExpectedErrorRange(..))
+module Review.Test exposing (run, applicationConfigAfterElmInit, ExpectedErrorRange(..))
 
 {-| Module that helps you test your rules, using [`elm-test`](https://package.elm-lang.org/packages/elm-explorations/test/latest/).
 
-    import Review.Test
-    import Test exposing (Test, describe, test)
-    import The.Review.You.Want.To.Test
+Writing a rule works really well in a Test-Driven loop:
 
-    tests : Test
-    tests =
-        Test.describe "The.Review.You.Want.To.Test"
-            [ Test.test "report Debug.log use"
-                (\() ->
-                    { modules =
-                        [ Review.Test.moduleInSrc """
-                            module A exposing (a)
-                            a =
-                                Debug.log "some" "message"
-                            """
-                        ]
-                    , elmJson = """
-                        {
-                            "type": "application",
-                            "source-directories": [
-                                "src"
-                            ],
-                            "elm-version": "0.19.1",
-                            "dependencies": {
-                                "direct": {
-                                    "elm/core": "1.0.5",
-                                    "elm/html": "1.0.0"
-                                },
-                                "indirect": {
-                                }
-                            },
-                            "test-dependencies": {
-                                "direct": {},
-                                "indirect": {}
-                            }
-                        }
-                        """
-                    , extraFiles = []
-                    , directDependencies = Review.Test.elmHtml
-                    }
-                        |> Review.Test.run The.Review.You.Want.To.Test.review
-                        |> Review.Test.expectErrors
-                            [ { path = "src/A.elm"
-                              , errors =
-                                  [ { message = "Remove the use of `Debug` before shipping to production"
-                                    , details = [ "Compiling elm code in optimized mode does not allow these helpers." ]
-                                    , under = "Debug.log"
-                                    , fixedSource =
-                                        Just """
-                                            module A exposing (a)
-                                            a =
-                                                "message"
-                                            """
-                                      }
-                                  ]
-                            ]
-                )
-            ]
-
-
-# Strategies for effective testing
-
-
-## Use Test-Driven Development
-
-Writing a rule is a process that works really well with the Test-Driven
-Development process loop, which is:
-
-  - Before writing any code, write a failing test.
-  - Run the test and make sure that it is failing, otherwise you can't be
-    sure that the test is well-written.
-  - Write the simplest (almost stupid) code to make the test pass
-  - Run the tests again and make sure that the test is passing, and that you
+  - write a failing test before writing any code. Run it to make sure that it is failing
+  - write the simplest (almost stupid!) code to make the test pass,
+    using `Debug.todo` etc to cut corner cases
+  - run the tests again and make sure that the test is passing, and that you
     didn't break any previous tests
-  - Optionally, refactor your code but be sure not to change the behavior of the
-    implementation. You should not add support for new patterns, as you will
-    want to write tests for those first.
 
-Then repeat for every pattern you wish to handle.
-
-
-## Have a good title
-
-A good test title explains
-
-  - what is tested - Probably the rule, but making it explicit
-    in a [`Test.describe`](https://package.elm-lang.org/packages/elm-explorations/test/latest/Test#describe)
-    might improve your test report. Or maybe you are testing a sub-part of the rule,
-    and you can name it explicitly.
-  - what should happen: (not) reporting an error, fix <something> by <doing something>, ...
-  - when: what is the situation that this test sets up?
-
+Then repeat for every case that needs to be handled.
 Ideally, by only reading through the test titles, someone else should be able to
 rewrite the rule you are testing.
 
-
-## What should you test?
-
-You should test the scenarios where you expect the rule to report something. At
-the same time, you should also test when it shouldn't. I encourage writing tests
-to make sure that things that are similar to what you want to report are not
+Write tests to ensure cases similar to what you want to report are not
 reported.
 
 For instance, if you wish to report uses of variables named `foo`, write a test
 that ensures that the use of variables named differently does not get reported.
 
-Tests are pretty cheap, and in the case of rules, it is probably better to have
-too many tests rather than too few, since the behavior of a rule rarely changes
-drastically.
+Tests are cheap and it is better to have too many tests rather than too few,
+since the behavior of a review rarely changes drastically.
 
-@docs run, ExpectedErrorRange
+    import Review.Test
+    import Test exposing (Test)
+    import YourConvention
+
+    tests : Test
+    tests =
+        Test.describe "YourConvention"
+            [ Test.test "report Debug.log use"
+                (\() ->
+                    { files =
+                        [ { path = "src/A.elm"
+                          , source = """
+                                module A exposing (a)
+                                a =
+                                    Debug.log "some" "message"
+                                """
+                          }
+                        ]
+                    , projectConfig =
+                        { elmJson = """
+                            {
+                                "type": "application",
+                                "source-directories": [
+                                    "src"
+                                ],
+                                "elm-version": "0.19.1",
+                                "dependencies": {
+                                    "direct": {
+                                        "elm/core": "1.0.5",
+                                        "elm/html": "1.0.0"
+                                    },
+                                    "indirect": {
+                                    }
+                                },
+                                "test-dependencies": {
+                                    "direct": {},
+                                    "indirect": {}
+                                }
+                            }
+                            """
+                        , directDependencies =
+                            [ ..elm html elm.json and docs.json copied from elm home.. ]
+                        }
+                    , review = YourConvention.review
+                    , expectedErrors =
+                        [ { path = "src/A.elm"
+                          , message = "Remove the use of `Debug` before shipping to production"
+                          , details = [ "Compiling elm code in optimized mode does not allow these helpers." ]
+                          , range = Review.Test.Under "Debug.log"
+                          , fixedSource =
+                              Just """
+                                  module A exposing (a)
+                                  a =
+                                      "message"
+                                  """
+                          }
+                        ]
+                    }
+                        |> Review.Test.run
+
+                )
+            ]
+
+@docs run, applicationConfigAfterElmInit, ExpectedErrorRange
 
 -}
 
 import Elm.Parser
 import Elm.Project
 import Elm.Syntax.Range
+import ElmJson.LocalExtra
 import Expect
 import FastDict
 import Json.Decode
 import Review
 import Review.Test.FailureMessage
 import Set exposing (Set)
+
+
+{-| Equivalent to (copy and adapt if necessary)
+
+    { elmJson = """
+        {
+            "type": "application",
+            "source-directories": [
+                "src"
+            ],
+            "elm-version": "0.19.1",
+            "dependencies": {
+                "direct": {
+                    "elm/core": "1.0.5"
+                },
+                "indirect": {
+                    "elm/json": "1.1.3"
+                }
+            },
+            "test-dependencies": {
+                "direct": {},
+                "indirect": {}
+            }
+        }
+        """
+    , directDependencies = []
+    }
+
+-}
+applicationConfigAfterElmInit : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
+applicationConfigAfterElmInit =
+    { elmJson = """
+        {
+            "type": "application",
+            "source-directories": [
+                "src"
+            ],
+            "elm-version": "0.19.1",
+            "dependencies": {
+                "direct": {
+                    "elm/core": "1.0.5"
+                },
+                "indirect": {
+                    "elm/json": "1.1.3"
+                }
+            },
+            "test-dependencies": {
+                "direct": {},
+                "indirect": {}
+            }
+        }
+        """
+    , directDependencies = []
+    }
 
 
 {-| The result of running a review on a project
@@ -140,7 +169,7 @@ type alias ReviewResult =
                     { range : Elm.Syntax.Range.Range
                     , message : String
                     , details : List String
-                    , fixes : List Review.Fix
+                    , fix : List Review.Fix
                     }
             }
         )
@@ -154,7 +183,7 @@ type alias SuccessfulRunResult =
             { range : Elm.Syntax.Range.Range
             , message : String
             , details : List String
-            , fixes : List Review.Fix
+            , fix : List Review.Fix
             }
     }
 
@@ -198,7 +227,8 @@ with your provided expected errors.
         describe "The.Review.You.Want.To.Test"
             [ test "should ..."
                 (\() ->
-                    { modules =
+                    { projectConfig = Review.Test.applicationConfigAfterElmInit
+                    , files =
                         [ { path = "src/A/B.elm"
                           , source = """
                                 module A.B exposing (a, b, c)
@@ -215,50 +245,87 @@ with your provided expected errors.
                             z = 3
                             """
                         ]
+                    , review = YourConvention.review
+                    , expectedErrors =
+                        [ { path = "src/A/B.elm"
+                            , message = "message"
+                            , details = [ "details" ]
+                            , range = Review.Test.Under ...
+                            , fixedSource = Nothing
+                            }
+                        ]
                     }
-                        |> Review.Test.run rule
-                        |> Review.Test.expect
-                            [ { path = "src/A/B.elm"
-                              , error =
-                                  [ { message = "message"
-                                    , details = [ "details" ]
-                                    , range = Review.Test.Under ...
-                                    , fixedSource = Nothing
-                                    }
-                                  ]
-                               }
-                            ]
+                        |> Review.Test.run
+                )
             ]
 
 -}
 run :
-    { review : Review.Review
+    { files : List { path : String, source : String }
+    , projectConfig :
+        { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
+    , review : Review.Review
     , expectedErrors :
         List
             { path : String
-            , errors :
-                List
-                    { message : String
-                    , details : List String
-                    , range : ExpectedErrorRange
-                    , fixedSource : Maybe String
-                    }
+            , message : String
+            , details : List String
+            , range : ExpectedErrorRange
+            , fixedSource : Maybe String
             }
     }
-    ->
-        { modules : List { path : String, source : String }
-        , extraFiles : List { path : String, source : String }
-        , elmJson : String
-        , directDependencies : List { elmJson : String, docsJson : String }
-        }
     -> Expect.Expectation
-run config project =
-    case config.expectedErrors |> invalidExpectedErrorsIn project of
-        [] ->
-            toReviewResult config.review project |> expectErrors config.expectedErrors
+run config =
+    let
+        elmJsonSourceNormal : String
+        elmJsonSourceNormal =
+            config.projectConfig.elmJson |> multiLineStringNormalize
+    in
+    case elmJsonSourceNormal |> Json.Decode.decodeString Elm.Project.decoder of
+        Err elmJsonParseError ->
+            [ elmJsonParseError |> Review.Test.FailureMessage.elmJsonParsingFailure ] |> expectationsViolated
 
-        error0 :: error1Up ->
-            (error0 :: error1Up) |> expectationsViolated
+        Ok elmJsonProject ->
+            let
+                filesWithNormalSource : List { path : String, source : String }
+                filesWithNormalSource =
+                    config.files
+                        |> List.map
+                            (\file -> { path = file.path, source = file.source |> multiLineStringNormalize })
+
+                expectedErrorsWithNormalizedFixedSource : List { path : String, errors : List { message : String, details : List String, range : ExpectedErrorRange, fixedSource : Maybe String } }
+                expectedErrorsWithNormalizedFixedSource =
+                    config.expectedErrors
+                        |> List.foldl
+                            (\error soFar ->
+                                soFar
+                                    |> FastDict.update error.path
+                                        (\errorsAtPathSoFar ->
+                                            (errorsAtPathSoFar |> Maybe.withDefault [])
+                                                |> (::)
+                                                    { message = error.message
+                                                    , details = error.details
+                                                    , range = error.range
+                                                    , fixedSource = error.fixedSource |> Maybe.map multiLineStringNormalize
+                                                    }
+                                                |> Just
+                                        )
+                            )
+                            FastDict.empty
+                        |> FastDict.toList
+                        |> List.map (\( path, errors ) -> { path = path, errors = errors })
+            in
+            case expectedErrorsWithNormalizedFixedSource |> invalidExpectedErrorsIn { files = filesWithNormalSource, project = elmJsonProject } of
+                [] ->
+                    toReviewResult config.review
+                        { files = filesWithNormalSource
+                        , directDependencies = config.projectConfig.directDependencies
+                        , elmJson = { source = elmJsonSourceNormal, project = elmJsonProject }
+                        }
+                        |> expectErrors expectedErrorsWithNormalizedFixedSource
+
+                error0 :: error1Up ->
+                    (error0 :: error1Up) |> expectationsViolated
 
 
 multiLineStringNormalize : String -> String
@@ -311,20 +378,34 @@ lineIndentation =
 toReviewResult :
     Review.Review
     ->
-        { modules : List { path : String, source : String }
-        , extraFiles : List { path : String, source : String }
-        , elmJson : String
+        { files : List { path : String, source : String }
+        , elmJson : { source : String, project : Elm.Project.Project }
         , directDependencies : List { elmJson : String, docsJson : String }
         }
     -> ReviewResult
 toReviewResult review project =
     let
+        sourceDirectories : List String
+        sourceDirectories =
+            project.elmJson.project |> ElmJson.LocalExtra.sourceDirectories
+
+        pathIsModule : String -> Bool
+        pathIsModule =
+            \path ->
+                (path |> String.endsWith ".elm")
+                    && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
+
+        ( moduleFiles, extraFiles ) =
+            project.files
+                |> List.partition
+                    (\file -> file.path |> pathIsModule)
+
         moduleParseResults :
             Result
                 (List { path : String })
                 (List { path : String, source : String })
         moduleParseResults =
-            modulesWithNormalSource
+            moduleFiles
                 |> List.foldl
                     (\moduleUnparsed soFar ->
                         case moduleUnparsed.source |> Elm.Parser.parseToFile of
@@ -353,31 +434,21 @@ toReviewResult review project =
                                         failedToParseSoFar |> Err
                     )
                     (Ok [])
-
-        modulesWithNormalSource : List { path : String, source : String }
-        modulesWithNormalSource =
-            project.modules
-                |> List.map
-                    (\file -> { path = file.path, source = file.source |> multiLineStringNormalize })
-
-        elmJsonSourceNormal : String
-        elmJsonSourceNormal =
-            project.elmJson |> multiLineStringNormalize
     in
-    case ( moduleParseResults, elmJsonSourceNormal |> Json.Decode.decodeString Elm.Project.decoder ) of
-        ( Ok modulesParsed, Ok elmJsonProject ) ->
+    case moduleParseResults of
+        Err modulesThatFailedToParse ->
+            modulesThatFailedToParse
+                |> List.map Review.Test.FailureMessage.moduleParsingFailure
+                |> Err
+
+        Ok modulesParsed ->
             let
-                runErrorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix })
+                runErrorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix })
                 runErrorsByPath =
-                    { elmJson = { project = elmJsonProject, source = elmJsonSourceNormal }
+                    { elmJson = project.elmJson
                     , directDependencies = project.directDependencies
-                    , addedOrChangedModules = modulesWithNormalSource
-                    , removedModulePaths = []
-                    , addedOrChangedExtraFiles =
-                        project.extraFiles
-                            |> List.map
-                                (\file -> { path = file.path, source = file.source |> multiLineStringNormalize })
-                    , removedExtraFilePaths = []
+                    , addedOrChangedFiles = project.files
+                    , removedFilePaths = []
                     , cache = Review.cacheEmpty
                     }
                         |> Review.run review
@@ -385,66 +456,47 @@ toReviewResult review project =
 
                 fileErrors : List SuccessfulRunResult
                 fileErrors =
-                    List.concat
-                        [ modulesParsed
-                            |> List.map
-                                (\module_ ->
-                                    moduleToRunResult
-                                        (runErrorsByPath
-                                            |> FastDict.get module_.path
-                                            |> Maybe.withDefault []
-                                        )
-                                        module_
-                                )
-                        , case runErrorsByPath |> FastDict.get "elm.json" of
-                            Just errorsForElmJson ->
-                                [ { path = "elm.json"
-                                  , source = project.elmJson
-                                  , errors = errorsForElmJson
-                                  }
-                                ]
+                    [ modulesParsed
+                        |> List.map
+                            (\module_ ->
+                                moduleToRunResult
+                                    (runErrorsByPath
+                                        |> FastDict.get module_.path
+                                        |> Maybe.withDefault []
+                                    )
+                                    module_
+                            )
+                    , case runErrorsByPath |> FastDict.get "elm.json" of
+                        Just errorsForElmJson ->
+                            [ { path = "elm.json"
+                              , source = project.elmJson.source
+                              , errors = errorsForElmJson
+                              }
+                            ]
 
-                            Nothing ->
-                                []
-                        , project.extraFiles
-                            |> List.filterMap
-                                (\extraFile ->
-                                    runErrorsByPath
-                                        |> FastDict.get extraFile.path
-                                        |> Maybe.map
-                                            (\errorsForExtraFile ->
-                                                { path = extraFile.path
-                                                , source = extraFile.source
-                                                , errors = errorsForExtraFile
-                                                }
-                                            )
-                                )
-                        ]
+                        Nothing ->
+                            []
+                    , extraFiles
+                        |> List.filterMap
+                            (\extraFile ->
+                                runErrorsByPath
+                                    |> FastDict.get extraFile.path
+                                    |> Maybe.map
+                                        (\errorsForExtraFile ->
+                                            { path = extraFile.path
+                                            , source = extraFile.source
+                                            , errors = errorsForExtraFile
+                                            }
+                                        )
+                            )
+                    ]
+                        |> List.concat
             in
             fileErrors |> Ok
 
-        ( moduleParseErrors, elmJsonParsed ) ->
-            Err
-                ((case moduleParseErrors of
-                    Ok _ ->
-                        []
-
-                    Err modulesThatFailedToParse ->
-                        modulesThatFailedToParse
-                            |> List.map Review.Test.FailureMessage.moduleParsingFailure
-                 )
-                    |> (case elmJsonParsed of
-                            Ok _ ->
-                                identity
-
-                            Err parseError ->
-                                (::) (parseError |> Review.Test.FailureMessage.elmJsonParsingFailure)
-                       )
-                )
-
 
 moduleToRunResult :
-    List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
+    List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
     -> { path : String, source : String }
     -> SuccessfulRunResult
 moduleToRunResult errorsForModule projectModule =
@@ -455,22 +507,33 @@ moduleToRunResult errorsForModule projectModule =
 
 
 invalidExpectedErrorsIn :
-    { modules : List { path : String, source : String }
-    , extraFiles : List { path : String, source : String }
-    , elmJson : String
-    , directDependencies : List { elmJson : String, docsJson : String }
+    { files : List { path : String, source : String }
+    , project : Elm.Project.Project
     }
     -> (List { path : String, errors : List ExpectedError } -> List String)
 invalidExpectedErrorsIn project =
     \expectedErrors ->
         let
-            modulePathsSet : Set String
-            modulePathsSet =
-                project.modules |> List.map .path |> Set.fromList
+            sourceDirectories : List String
+            sourceDirectories =
+                project.project |> ElmJson.LocalExtra.sourceDirectories
+
+            pathIsModule : String -> Bool
+            pathIsModule =
+                \path ->
+                    (path |> String.endsWith ".elm")
+                        && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
+
+            modulePaths : Set String
+            modulePaths =
+                project.files
+                    |> List.map .path
+                    |> List.filter (\path -> path |> pathIsModule)
+                    |> Set.fromList
 
             projectPaths : Set String
             projectPaths =
-                Set.union modulePathsSet (project.extraFiles |> List.map .path |> Set.fromList)
+                (project.files |> List.map .path |> Set.fromList)
                     |> Set.insert "elm.json"
         in
         [ expectedErrors
@@ -513,7 +576,7 @@ invalidExpectedErrorsIn project =
         , expectedErrors
             |> List.concatMap
                 (\expectedFileErrors ->
-                    if modulePathsSet |> Set.member expectedFileErrors.path then
+                    if modulePaths |> Set.member expectedFileErrors.path then
                         expectedFileErrors.errors
                             |> List.filterMap
                                 (\expectedError ->
@@ -623,7 +686,7 @@ checkAllErrorsMatch runResult unorderedExpectedErrors =
         reviewErrors
 
 
-reorderErrors : String -> ReorderState -> ( List ExpectedError, List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } )
+reorderErrors : String -> ReorderState -> ( List ExpectedError, List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } )
 reorderErrors source reorderState =
     case reorderState.expectedErrors of
         [] ->
@@ -664,7 +727,7 @@ listRemoveFirstMember elementToRemove list =
                 head :: listRemoveFirstMember elementToRemove tail
 
 
-findBestMatchingReviewError : String -> ExpectedError -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> { error : Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }, confidenceLevel : Int } -> Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
+findBestMatchingReviewError : String -> ExpectedError -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> { error : Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }, confidenceLevel : Int } -> Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
 findBestMatchingReviewError source expectedErrorDetails reviewErrors bestMatch =
     case reviewErrors of
         [] ->
@@ -691,7 +754,7 @@ findBestMatchingReviewError source expectedErrorDetails reviewErrors bestMatch =
                     bestMatch
 
 
-matchingConfidenceLevel : String -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> Int
+matchingConfidenceLevel : String -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Int
 matchingConfidenceLevel source expectedErrorDetails reviewError =
     if expectedErrorDetails.message /= .message reviewError then
         0
@@ -741,7 +804,7 @@ expectedErrorRangeSection =
                 underExactly.section
 
 
-checkErrorsMatch : SuccessfulRunResult -> List ExpectedError -> Int -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> Expect.Expectation
+checkErrorsMatch : SuccessfulRunResult -> List ExpectedError -> Int -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Expect.Expectation
 checkErrorsMatch runResult expectedErrors expectedNumberOfErrors errors =
     -- IGNORE TCO
     case ( expectedErrors, errors ) of
@@ -766,7 +829,7 @@ checkErrorsMatch runResult expectedErrors expectedNumberOfErrors errors =
                 ()
 
 
-checkErrorMatch : String -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> Expect.Expectation
+checkErrorMatch : String -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Expect.Expectation
 checkErrorMatch source expectedError error =
     Expect.all
         [ \() ->
@@ -784,7 +847,7 @@ checkErrorMatch source expectedError error =
         ()
 
 
-checkMessageAppearsUnder : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> ExpectedError -> (() -> Expect.Expectation)
+checkMessageAppearsUnder : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> ExpectedError -> (() -> Expect.Expectation)
 checkMessageAppearsUnder source error expectedError =
     let
         codeAtLocation : String
@@ -795,14 +858,6 @@ checkMessageAppearsUnder source error expectedError =
         Under under ->
             Expect.all
                 [ \() ->
-                    case under of
-                        "" ->
-                            Review.Test.FailureMessage.underNotFound { message = expectedError.message }
-                                |> Expect.fail
-
-                        _ ->
-                            Expect.pass
-                , \() ->
                     codeAtLocation
                         |> Expect.equal under
                         |> Expect.onFail (Review.Test.FailureMessage.underMismatch error { under = under, codeAtLocation = codeAtLocation })
@@ -835,7 +890,7 @@ checkMessageAppearsUnder source error expectedError =
                 ]
 
 
-expectUnambiguousLocationInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String -> Expect.Expectation
+expectUnambiguousLocationInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String -> Expect.Expectation
 expectUnambiguousLocationInSourceCode sourceCode error under =
     case String.indexes under sourceCode of
         [ _ ] ->
@@ -845,7 +900,7 @@ expectUnambiguousLocationInSourceCode sourceCode error under =
             Expect.fail (Review.Test.FailureMessage.locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode)
 
 
-checkDetailsAreCorrect : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> ExpectedError -> (() -> Expect.Expectation)
+checkDetailsAreCorrect : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> ExpectedError -> (() -> Expect.Expectation)
 checkDetailsAreCorrect error expectedError =
     Expect.all
         [ \() ->
@@ -859,9 +914,9 @@ checkDetailsAreCorrect error expectedError =
         ]
 
 
-checkFixesAreCorrect : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> ExpectedError -> Expect.Expectation
+checkFixesAreCorrect : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> ExpectedError -> Expect.Expectation
 checkFixesAreCorrect source reviewError expectedError =
-    case ( expectedError.fixedSource, reviewError.fixes ) of
+    case ( expectedError.fixedSource, reviewError.fix ) of
         ( Nothing, [] ) ->
             Expect.pass
 
@@ -873,14 +928,9 @@ checkFixesAreCorrect source reviewError expectedError =
             Review.Test.FailureMessage.unexpectedFixes reviewError
                 |> Expect.fail
 
-        ( Just expectedFixedSourceNotNormalized, fix0 :: fix1Up ) ->
+        ( Just expectedFixedSource, fix0 :: fix1Up ) ->
             case Review.fixFile (fix0 :: fix1Up) source of
                 Ok fixedSource ->
-                    let
-                        expectedFixedSource : String
-                        expectedFixedSource =
-                            expectedFixedSourceNotNormalized |> multiLineStringNormalize
-                    in
                     if fixedSource == expectedFixedSource then
                         Expect.pass
 
@@ -904,7 +954,7 @@ removeWhitespace =
 
 type alias ReorderState =
     { expectedErrors : List ExpectedError
-    , reviewErrors : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix }
-    , pairs : List ( ExpectedError, { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } )
+    , reviewErrors : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
+    , pairs : List ( ExpectedError, { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } )
     , expectedErrorsWithNoMatch : List ExpectedError
     }

@@ -1,4 +1,4 @@
-module Review.Test.FailureMessage exposing (didNotExpectErrors, elmJsonFixedSourceParsingFailure, elmJsonParsingFailure, emptyDetails, expectedErrorsButFoundNone, fixedCodeMismatch, fixedCodeWhitespaceMismatch, hasCollisionsInFixRanges, locationIsAmbiguousInSourceCode, messageMismatch, missingFixes, moduleFixedSourceParsingFailure, moduleParsingFailure, tooFewErrors, tooManyErrors, unchangedSourceAfterFix, underMismatch, underNotFound, unexpectedDetails, unexpectedFixes, unknownFilesInExpectedErrors, wrongLocation)
+module Review.Test.FailureMessage exposing (didNotExpectErrors, elmJsonFixedSourceParsingFailure, elmJsonParsingFailure, emptyDetails, expectedErrorsButFoundNone, fixedCodeMismatch, fixedCodeWhitespaceMismatch, hasCollisionsInFixRanges, locationIsAmbiguousInSourceCode, messageMismatch, missingFixes, moduleFixedSourceParsingFailure, moduleParsingFailure, tooFewErrors, tooManyErrors, unchangedSourceAfterFix, underMismatch, unexpectedDetails, unexpectedFixes, unknownFilesInExpectedErrors, wrongLocation)
 
 {-| Failure messages for the `Review.Test` module.
 -}
@@ -16,7 +16,7 @@ failureMessage title content =
     [ title |> Ansi.bold |> Ansi.red, "\n\n", content ] |> String.concat
 
 
-listErrorMessagesAndPositions : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+listErrorMessagesAndPositions : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 listErrorMessagesAndPositions errors =
     errors
         |> List.map errorMessageAndPosition
@@ -44,12 +44,12 @@ rangeAsString =
             |> String.concat
 
 
-errorMessageAndPosition : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+errorMessageAndPosition : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 errorMessageAndPosition error =
     [ "  - ", wrapInQuotes error.message, "\n    at ", rangeAsString error.range ] |> String.concat
 
 
-didNotExpectErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+didNotExpectErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 didNotExpectErrors path errors =
     failureMessage "DID NOT EXPECT ERRORS"
         ([ """I expected no errors for the file at path """
@@ -133,7 +133,7 @@ moduleFixedSourceParsingFailure info =
     failureMessage "EXPECTED FIXED MODULE SOURCE CODE PARSING ERROR" ([ details, "\n\n", hint ] |> String.concat)
 
 
-messageMismatch : { message : String, details : List String, under : String } -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+messageMismatch : { message : String, details : List String, under : String } -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 messageMismatch expectedError error =
     failureMessage "UNEXPECTED ERROR MESSAGE"
         ([ """I was looking for the error with the message
@@ -183,7 +183,7 @@ formatSourceCode string =
     formatSourceCodeWithFormatter identity (String.lines string)
 
 
-underMismatch : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> { under : String, codeAtLocation : String } -> String
+underMismatch : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> { under : String, codeAtLocation : String } -> String
 underMismatch error range =
     failureMessage "UNEXPECTED ERROR LOCATION"
         ([ """I found an error with the following message:
@@ -210,7 +210,7 @@ Hint: Maybe you're passing the `Range` of a wrong node to the review error."""
         )
 
 
-unexpectedDetails : List String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+unexpectedDetails : List String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 unexpectedDetails expectedDetails error =
     failureMessage "UNEXPECTED ERROR DETAILS"
         ([ """I found an error for a file with the following message:
@@ -268,7 +268,7 @@ The details could:
         )
 
 
-wrongLocation : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> Elm.Syntax.Range.Range -> String -> String
+wrongLocation : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Elm.Syntax.Range.Range -> String -> String
 wrongLocation error range under =
     failureMessage "UNEXPECTED ERROR LOCATION"
         ([ """I was looking for the error with the following message:
@@ -334,7 +334,7 @@ expectedErrorToString expectedError =
     "  - " ++ wrapInQuotes expectedError.message
 
 
-tooManyErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+tooManyErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 tooManyErrors moduleName extraErrors =
     let
         numberOfErrors : Int
@@ -364,22 +364,7 @@ pluralizeErrors n =
         "errors"
 
 
-underNotFound : { message : String } -> String
-underNotFound errorInfo =
-    failureMessage "COULD NOT FIND RANGE FOR ERROR"
-        ([ """I was looking for the error with the following message:
-
-  """
-         , wrapInQuotes errorInfo.message
-         , """
-
-and I found it, but the `range` does not point to any source segment I could find."""
-         ]
-            |> String.concat
-        )
-
-
-locationIsAmbiguousInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String -> List Int -> String
+locationIsAmbiguousInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String -> List Int -> String
 locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
     failureMessage "AMBIGUOUS ERROR LOCATION"
         ([ """Your test passes, but where the message appears is ambiguous.
@@ -515,7 +500,7 @@ the list of provided fixes was empty."""
         )
 
 
-unexpectedFixes : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+unexpectedFixes : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 unexpectedFixes error =
     failureMessage "UNEXPECTED FIXES"
         ([ """I expected that the error with the following message
@@ -543,7 +528,7 @@ To fix this, you can call `Review.Test.whenFixed` on your error:
         )
 
 
-fixedCodeMismatch : String -> String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+fixedCodeMismatch : String -> String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 fixedCodeMismatch resultingSourceCode expectedSourceCode error =
     failureMessage "FIXED CODE MISMATCH"
         ([ """I found a different fixed source code than expected for the error with the
@@ -568,7 +553,7 @@ but I found:
         )
 
 
-fixedCodeWhitespaceMismatch : String -> String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+fixedCodeWhitespaceMismatch : String -> String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 fixedCodeWhitespaceMismatch resultingSourceCode expectedSourceCode error =
     let
         ( expected, resulting ) =
@@ -641,7 +626,7 @@ replaceWhitespace lines =
         |> String.split "\n"
 
 
-unchangedSourceAfterFix : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+unchangedSourceAfterFix : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 unchangedSourceAfterFix error =
     failureMessage "UNCHANGED SOURCE AFTER FIX"
         ([ """I got something unexpected when applying the fixes provided by the error
@@ -664,7 +649,7 @@ Hint: Maybe you inserted an empty string into the source code."""
         )
 
 
-hasCollisionsInFixRanges : { range : Elm.Syntax.Range.Range, message : String, details : List String, fixes : List Review.Fix } -> String
+hasCollisionsInFixRanges : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 hasCollisionsInFixRanges error =
     failureMessage "FOUND COLLISIONS IN FIX RANGES"
         ([ """I got something unexpected when applying the fixes provided by the error

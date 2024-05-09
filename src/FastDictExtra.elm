@@ -1,4 +1,4 @@
-module FastDictExtra exposing (fromListMap)
+module FastDictExtra exposing (concatToListMap, fromListMap)
 
 import FastDict
 
@@ -19,3 +19,16 @@ fromListMap elementToEntry =
                     soFar |> FastDict.insert newEntry.key newEntry.value
                 )
                 FastDict.empty
+
+
+concatToListMap :
+    (key -> value -> List element)
+    -> (FastDict.Dict key value -> List element)
+concatToListMap keyValueToElement =
+    \dict ->
+        dict
+            |> FastDict.foldr
+                (\key value soFar ->
+                    keyValueToElement key value ++ soFar
+                )
+                []
