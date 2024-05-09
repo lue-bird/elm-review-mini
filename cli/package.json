@@ -1,5 +1,5 @@
 {
-  "name": "elm-review-mini-cli",
+  "name": "@lue-bird/elm-review-mini-cli",
   "version": "1.0.0",
   "description": "run review-mini from the command line",
   "main": "src-compiled/index.js",
@@ -9,7 +9,7 @@
     "url": "github.com/lue-bird/elm-review-mini/cli"
   },
   "scripts": {
-    "compile": "tsc"
+    "compile": "tsc --watch"
   },
   "keywords": [
     "elm",
@@ -22,6 +22,6 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.12.7",
-    "tsc": "^2.0.4"
+    "typescript": "^5.4.5"
   }
 }
