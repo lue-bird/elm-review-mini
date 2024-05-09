@@ -299,7 +299,7 @@ program config =
                     ErrorFixRejected ->
                         case state of
                             HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                                -- TODO provide new fixes
+                                -- TODO provide new errors and fixes
                                 ( HavingRunReviewsPreviously havingRunReviewsPreviously
                                 , Cmd.none
                                 )
@@ -409,65 +409,52 @@ errorDisplay source =
         , error.range.start.row |> String.fromInt
         , ":"
         , error.range.start.column |> String.fromInt
-        , "\n    "
+        , "\n\n    "
         , error.message
         , "\n\n"
-        , codeExtract source error.range |> String.join "\n"
+        , codeExtract source error.range
+            |> String.split "\n"
+            |> List.map (\line -> "|   " ++ line)
+            |> String.join "\n"
         , "\n\n"
         , error.details |> String.join "\n\n"
         ]
             |> String.concat
 
 
-codeExtract : String -> Elm.Syntax.Range.Range -> List String
+codeExtract : String -> Elm.Syntax.Range.Range -> String
 codeExtract source range =
     let
-        lines : Array String
-        lines =
-            source
-                |> String.lines
-                |> Array.fromList
+        sourceLines : Array String
+        sourceLines =
+            source |> String.lines |> Array.fromList
 
-        getRowAtLine : Int -> String
-        getRowAtLine rowIndex =
-            case Array.get rowIndex lines of
+        sourceLineAtRow : Int -> String
+        sourceLineAtRow rowIndex =
+            case sourceLines |> Array.get rowIndex of
                 Just line ->
-                    String.trimRight line
+                    line |> String.trimRight
 
                 Nothing ->
                     ""
-
-        getRowWithLineNumberUnlessEmpty : Int -> List String
-        getRowWithLineNumberUnlessEmpty rowIndex =
-            let
-                line : String
-                line =
-                    getRowAtLine rowIndex
-            in
-            if String.isEmpty line then
-                []
-
-            else
-                [ line ]
     in
     if range.start.row == range.end.row then
         if range.start.column == range.end.column then
-            []
+            ""
 
         else
             let
                 lineContent : String
                 lineContent =
-                    getRowAtLine (range.start.row - 1)
+                    sourceLineAtRow (range.start.row - 1)
             in
-            [ getRowWithLineNumberUnlessEmpty (range.start.row - 2)
-            , [ lineContent ]
+            [ sourceLineAtRow (range.start.row - 2)
+            , lineContent
             , underline { start = range.start.column, end = range.end.column, lineContent = lineContent }
-            , getRowWithLineNumberUnlessEmpty range.end.row
+            , sourceLineAtRow range.end.row
             ]
-                |> List.filter (\l -> not (l |> List.isEmpty))
-                |> List.intersperse [ "\n" ]
-                |> List.concat
+                |> List.filter (\l -> not (l |> String.isEmpty))
+                |> String.join "\n"
 
     else
         let
@@ -477,7 +464,7 @@ codeExtract source range =
 
             startLineContent : String
             startLineContent =
-                getRowAtLine startLineNumber
+                sourceLineAtRow startLineNumber
 
             linesBetweenStartAndEnd : List Int
             linesBetweenStartAndEnd =
@@ -485,52 +472,55 @@ codeExtract source range =
 
             endLineContent : String
             endLineContent =
-                getRowAtLine (range.end.row - 1)
+                sourceLineAtRow (range.end.row - 1)
         in
-        [ getRowWithLineNumberUnlessEmpty (startLineNumber - 1)
-        , [ startLineContent ]
-        , underline
-            { start = range.start.column
-            , end = List.length (String.toList startLineContent) + 1
-            , lineContent = startLineContent
-            }
+        [ [ sourceLineAtRow (startLineNumber - 1)
+          , startLineContent
+          , underline
+                { start = range.start.column
+                , end = List.length (String.toList startLineContent) + 1
+                , lineContent = startLineContent
+                }
+          ]
+            |> List.filter (\l -> not (l |> String.isEmpty))
+            |> String.join "\n"
         , linesBetweenStartAndEnd
             |> List.map
                 (\middleLine ->
                     let
                         line : String
                         line =
-                            getRowAtLine middleLine
+                            sourceLineAtRow middleLine
                     in
                     if String.isEmpty line then
-                        [ getRowAtLine middleLine ]
+                        sourceLineAtRow middleLine
 
                     else
-                        getRowAtLine middleLine
-                            :: "\n"
-                            :: underlineWholeLine line
+                        sourceLineAtRow middleLine
+                            ++ "\n"
+                            ++ underlineWholeLine line
                 )
-            |> List.intersperse [ "\n" ]
-            |> List.concat
-        , [ endLineContent ]
-        , underline
-            { start = getIndexOfFirstNonSpace endLineContent + 1
-            , end = range.end.column
-            , lineContent = endLineContent
-            }
-        , getRowWithLineNumberUnlessEmpty range.end.row
+            |> String.join "\n"
+        , [ endLineContent
+          , underline
+                { start = getIndexOfFirstNonSpace endLineContent + 1
+                , end = range.end.column
+                , lineContent = endLineContent
+                }
+          , sourceLineAtRow range.end.row
+          ]
+            |> List.filter (\l -> not (l |> String.isEmpty))
+            |> String.join "\n"
         ]
-            |> List.filter (\l -> not (l |> List.isEmpty))
-            |> List.intersperse [ "\n" ]
-            |> List.concat
+            |> String.join "\n"
 
 
 getIndexOfFirstNonSpace : String -> Int
 getIndexOfFirstNonSpace string =
-    String.length string - String.length (String.trimLeft string)
+    (string |> String.length) - (string |> String.trimLeft |> String.length)
 
 
-underlineWholeLine : String -> List String
+underlineWholeLine : String -> String
 underlineWholeLine line =
     let
         start : Int
@@ -539,14 +529,13 @@ underlineWholeLine line =
 
         end : Int
         end =
-            String.length line
+            line |> String.length
     in
-    [ String.repeat start " "
-    , String.repeat (end - start) "^"
-    ]
+    String.repeat start " "
+        ++ String.repeat (end - start) "^"
 
 
-underline : { start : Int, end : Int, lineContent : String } -> List String
+underline : { start : Int, end : Int, lineContent : String } -> String
 underline toUnderline =
     let
         lineChars : List Char
@@ -573,6 +562,5 @@ underline toUnderline =
             -- and for unicode characters that sometimes means 2 ^
             String.length (String.fromList inText) - List.length inText
     in
-    [ String.repeat (unicodePreOffset + toUnderline.start - 1) " "
-    , String.repeat (unicodeInOffset + toUnderline.end - toUnderline.start) "^"
-    ]
+    String.repeat (unicodePreOffset + toUnderline.start - 1) " "
+        ++ String.repeat (unicodeInOffset + toUnderline.end - toUnderline.start) "^"
