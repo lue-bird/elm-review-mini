@@ -481,22 +481,54 @@ create review =
                 |> Rope.fromList
                 |> Rope.concat
                 |> inspectToToKnowledges
+
+        knowledgesFoldToMaybe : List knowledge -> Maybe knowledge
+        knowledgesFoldToMaybe =
+            \knowledges ->
+                case knowledges of
+                    [] ->
+                        Nothing
+
+                    one :: others ->
+                        others |> List.foldl review.knowledgeMerge one |> Just
+
+        moduleToMaybeKnowledge :
+            { path : String, source : String }
+            -> Maybe { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
+        moduleToMaybeKnowledge moduleFile =
+            case moduleFile.source |> Elm.Parser.parseToFile of
+                Err _ ->
+                    let
+                        _ =
+                            Debug.log "module parsing failed" ()
+                    in
+                    Nothing
+
+                Ok syntax ->
+                    let
+                        moduleData : { path : String, source : String, syntax : Elm.Syntax.File.File }
+                        moduleData =
+                            { path = moduleFile.path
+                            , source = moduleFile.source
+                            , syntax = syntax |> syntaxFileSanitize
+                            }
+                    in
+                    toKnowledges.moduleToKnowledge
+                        |> List.map (\f -> f moduleData)
+                        |> knowledgesFoldToMaybe
+                        |> Maybe.map
+                            (\foldedKnowledge ->
+                                { path = moduleFile.path
+                                , knowledge = foldedKnowledge
+                                , cache = foldedKnowledge |> knowledgeToCache
+                                }
+                            )
     in
     { name = review.name
     , ignoreErrorsForFiles = \_ -> False
     , run =
         \project ->
             let
-                knowledgesFoldToMaybe : List knowledge -> Maybe knowledge
-                knowledgesFoldToMaybe =
-                    \knowledges ->
-                        case knowledges of
-                            [] ->
-                                Nothing
-
-                            one :: others ->
-                                others |> List.foldl review.knowledgeMerge one |> Just
-
                 elmJsonKnowledgeAndCache : Maybe { knowledge : knowledge, cache : KnowledgeGeneric }
                 elmJsonKnowledgeAndCache =
                     case project.cache.elmJsonKnowledge of
@@ -504,6 +536,10 @@ create review =
                             case cache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
+                                    let
+                                        _ =
+                                            Debug.log "corrupt cache" ()
+                                    in
                                     Nothing
 
                                 Ok knowledge ->
@@ -522,6 +558,10 @@ create review =
                             case cache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
+                                    let
+                                        _ =
+                                            Debug.log "corrupt cache" ()
+                                    in
                                     Nothing
 
                                 Ok knowledge ->
@@ -545,34 +585,6 @@ create review =
                                 |> List.map (\f -> f directDependenciesIncluding)
                                 |> knowledgesFoldToMaybe
                                 |> Maybe.map (\knowledge -> { knowledge = knowledge, cache = knowledge |> knowledgeToCache })
-
-                moduleToMaybeKnowledge :
-                    { path : String, source : String }
-                    -> Maybe { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
-                moduleToMaybeKnowledge moduleFile =
-                    case moduleFile.source |> Elm.Parser.parseToFile of
-                        Err _ ->
-                            Nothing
-
-                        Ok syntax ->
-                            let
-                                moduleData : { path : String, source : String, syntax : Elm.Syntax.File.File }
-                                moduleData =
-                                    { path = moduleFile.path
-                                    , source = moduleFile.source
-                                    , syntax = syntax |> syntaxFileSanitize
-                                    }
-                            in
-                            toKnowledges.moduleToKnowledge
-                                |> List.map (\f -> f moduleData)
-                                |> knowledgesFoldToMaybe
-                                |> Maybe.map
-                                    (\foldedKnowledge ->
-                                        { path = moduleFile.path
-                                        , knowledge = foldedKnowledge
-                                        , cache = foldedKnowledge |> knowledgeToCache
-                                        }
-                                    )
 
                 sourceDirectories : List String
                 sourceDirectories =
@@ -603,6 +615,10 @@ create review =
                             case knowledgeCache |> knowledgeFromCache of
                                 Err _ ->
                                     -- corrupt cache
+                                    let
+                                        _ =
+                                            Debug.log "corrupt cache" ()
+                                    in
                                     soFar
 
                                 Ok knowledge ->
@@ -644,7 +660,10 @@ create review =
                         (\path knowledgeCache soFar ->
                             case knowledgeCache |> knowledgeFromCache of
                                 Err _ ->
-                                    -- corrupt cache
+                                    let
+                                        _ =
+                                            Debug.log "corrupt cache" ()
+                                    in
                                     soFar
 
                                 Ok knowledge ->
@@ -944,6 +963,10 @@ run review =
                 |> FastDict.foldl
                     (\path errors soFar ->
                         if path |> review.ignoreErrorsForFiles then
+                            let
+                                _ =
+                                    Debug.log "ignored" ()
+                            in
                             soFar
 
                         else
