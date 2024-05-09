@@ -11,10 +11,10 @@ export interface ElmPorts {
     fromJs: { send: (toElm: any) => void }
 }
 
-export function compileElm(elmProjectDirectoryPath: string): { init: () => { ports: ElmPorts } } {
+export function compileElm(elmProjectDirectoryPath: string, mainElmModuleName: string[]): { init: () => { ports: ElmPorts } } {
     const elmJsPath = path.resolve(elmProjectDirectoryPath, "review-mini", "elm-stuff", "review-mini-cli-elm.js")
     child_process.execSync(
-        `elm make --optimize src/Cli.elm --output "${elmJsPath}"`,
+        `elm make ${path.join(...mainElmModuleName)} --output "${elmJsPath}"`, // TODO --optimize
         { cwd: elmProjectDirectoryPath }
     )
     eval(
@@ -82,7 +82,7 @@ export function programStart(elmPorts: ElmPorts) {
                         )
                         .concat(extraFilePaths)
                         .map(filePath => ({
-                            path: filePath,
+                            path: path.relative(process.cwd(), filePath),
                             source: fs.readFileSync(filePath, { encoding: "utf8" })
                         }));
 
@@ -107,12 +107,12 @@ export function programStart(elmPorts: ElmPorts) {
                                         sendToElm({
                                             tag: "FileAddedOrChanged",
                                             value: {
-                                                path: fullPath,
+                                                path: path.relative(process.cwd(), fullPath),
                                                 source: fs.readFileSync(fullPath, { encoding: "utf8" })
                                             }
                                         })
                                     } else {
-                                        sendToElm({ tag: "FileRemoved", value: { path: fullPath } })
+                                        sendToElm({ tag: "FileRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
                                     }
                                 }
                             }
@@ -121,13 +121,12 @@ export function programStart(elmPorts: ElmPorts) {
                 break
             }
             case "ErrorsReceived": {
-                // wait for user yes/no and sendToElm
-                const readLineInterface = readLine.promises.createInterface({
-                    input: process.stdin,
-                    output: process.stdout,
-                })
                 console.log(fromElm.value.display)
                 if (fromElm.value.fix !== null) {
+                    const readLineInterface = readLine.promises.createInterface({
+                        input: process.stdin,
+                        output: process.stdout,
+                    })
                     readLineInterface.question("apply → y, reject → n")
                         .then(response => {
                             if (response === "y") {
