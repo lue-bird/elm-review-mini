@@ -237,7 +237,7 @@ reactToEvent config event =
                                     |> reviewRunList
                                         (List.map2
                                             (\review nextRun ->
-                                                { ignoreErrorsForFiles = review.ignoreErrorsForFiles
+                                                { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
                                                 , run = nextRun
                                                 }
                                             )
@@ -307,7 +307,7 @@ reactToEvent config event =
                                     |> reviewRunList
                                         (List.map2
                                             (\review nextRun ->
-                                                { ignoreErrorsForFiles = review.ignoreErrorsForFiles
+                                                { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
                                                 , run = nextRun
                                                 }
                                             )

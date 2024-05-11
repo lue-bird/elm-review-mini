@@ -1,5 +1,5 @@
 module Review exposing
-    ( ignoreErrorsForPathsWhere, Review
+    ( Review, ignoreErrorsForPathsWhere
     , create
     , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
     , Error, elmJsonPath
@@ -9,13 +9,13 @@ module Review exposing
     , sourceExtractInRange
     , packageElmJsonExposedModules
     , Inspect(..)
-    , Run(..), run, Cache, applyFix, FixError(..), KnowledgeGeneric(..)
+    , run, applyFix, FixError(..), Run(..)
     )
 
 {-| A review inspects modules, `elm.json`, dependencies and extra files like `README.md` from your project
 and uses the combined knowledge to report problems.
 
-@docs ignoreErrorsForPathsWhere, Review
+@docs Review, ignoreErrorsForPathsWhere
 
 @docs create
 
@@ -46,7 +46,7 @@ Collect knowledge from parts of the project.
 If you want to make `elm-review-mini` run in a new environment
 
 @docs Inspect
-@docs Run, run, Cache, applyFix, FixError, KnowledgeGeneric
+@docs run, applyFix, FixError, Run
 
 -}
 
@@ -67,7 +67,6 @@ import ElmJson.LocalExtra
 import FastDict
 import FastDictExtra
 import Json.Decode
-import Json.Encode
 import ListExtra
 import Set exposing (Set)
 import Unicode
@@ -76,13 +75,14 @@ import Unicode
 {-| A construct that can inspect your project files and report errors, see [`Review.create`](Review#create)
 -}
 type alias Review =
-    { ignoreErrorsForFiles : String -> Bool
+    { ignoreErrorsForPathsWhere : String -> Bool
     , run : Run
     }
 
 
-{-| A wild thing: A recursive-able function that inspects, folds knowledge and reports errors all in one go.
-Why does it need to be so complicated?
+{-| A function that inspects, folds knowledge and reports errors in one go, and provides
+a recursively-defined future run function that already has the calculated knowledges cached.
+Does it need to be so complicated?
 
 Different reviews can have different knowledge types,
 so how can we put all of them in a single list?
@@ -119,9 +119,10 @@ I know about roughly three options:
     internal complexity compared to something like the codec one.
     If you're intrigued and have a week,
     some smart folks have written [an entertaining dialog-blog-ish series about these "Jeremy's interfaces"](https://discourse.elm-lang.org/t/demystifying-jeremys-interfaces/8834)
-      - still pretty fast
+      - still very fast (much faster than the codec one)
       - concise internals
       - possibly less flexible for implementing stuff like shared knowledge
+        (I much prefer defunctionalization wherever possible)
       - slightly less obvious than the codec one
 
 I didn't expect to ever need to resort to such a complex feature but here we are.
@@ -149,13 +150,6 @@ type Run
             , nextRun : Run
             }
         )
-
-
-{-| The collected info from scanning a project in a generic format that can be used for caching.
-See [`Inspect`](#Inspect)
--}
-type KnowledgeGeneric
-    = KnowledgeJson Json.Encode.Value
 
 
 {-| How to collect knowledge from scanning a project.
@@ -665,7 +659,7 @@ create review =
                             }
                 )
     in
-    { ignoreErrorsForFiles = \_ -> False
+    { ignoreErrorsForPathsWhere = \_ -> False
     , run =
         runWithCache
             { elmJsonKnowledge = Nothing
@@ -821,13 +815,13 @@ ignoreErrorsForPathsWhere : (String -> Bool) -> (Review -> Review)
 ignoreErrorsForPathsWhere filterOut =
     \review ->
         { review
-            | ignoreErrorsForFiles =
+            | ignoreErrorsForPathsWhere =
                 \path ->
-                    (path |> review.ignoreErrorsForFiles) || (path |> filterOut)
+                    (path |> review.ignoreErrorsForPathsWhere) || (path |> filterOut)
         }
 
 
-{-| Review a given project and return the errors reported by the given rules + the updated cache.
+{-| Review a given project and return the errors reported by the given [`Review`](#Review).
 
     import Review
     import SomeConvention
@@ -835,8 +829,7 @@ ignoreErrorsForPathsWhere filterOut =
     doReview =
         let
             project =
-                { cache = Review.cacheEmpty
-                , addedOrChangedFiles =
+                { addedOrChangedFiles =
                     [ { path = "src/A.elm", source = "module A exposing (a)\na = 1" }
                     , { path = "src/B.elm", source = "module B exposing (b)\nb = 1" }
                     ]
@@ -850,10 +843,20 @@ ignoreErrorsForPathsWhere filterOut =
 
 (elm/core is automatically part of every project)
 
-updated internal cache to make it faster to re-run the rules on the same project.
-If you plan on re-reviewing with the same rules and project, for instance to
-review the project after a file has changed, you may want to store the rules in
-your `Model`.
+The result also contains a [`Run`](#Run) which
+internally keeps a cache to make it faster to re-run the review when only some files have changed.
+You can store this resulting `nextRun` in your application state type, e.g.
+
+    Review.run
+        { run = yourApplicationState.nextRunProvidedByTheLastReviewRun
+        , ignoreErrorsForPathsWhere = SomeConvention.review.ignoreErrorsForPathsWhere
+        }
+        { addedOrChangedFiles =
+            [ { path = "src/C.elm", source = "module C exposing (c)\nc = 1" }
+            ]
+        , removedPaths = [ "src/B.elm" ]
+        , ...
+        }
 
 -}
 run :
@@ -902,7 +905,7 @@ run review =
             runResult.errorsByPath
                 |> FastDictExtra.justsMap
                     (\path errors ->
-                        if path |> review.ignoreErrorsForFiles then
+                        if path |> review.ignoreErrorsForPathsWhere then
                             Nothing
 
                         else
@@ -1157,28 +1160,28 @@ findModuleDocumentationBeforeCutOffLine cutOffLine comments =
                 findModuleDocumentationBeforeCutOffLine cutOffLine restOfComments
 
 
-{-| Represents (part of a) fix that will be applied to a file's source code in order to
-automatically fix a review error.
+{-| A single edit to be applied to a file's source code
+in order to fix a review error
 -}
 type Fix
     = FixRangeReplacement { range : Elm.Syntax.Range.Range, replacement : String }
 
 
-{-| Remove the code in between a range
+{-| Remove the section in between a given range
 -}
 fixRemoveRange : Elm.Syntax.Range.Range -> Fix
 fixRemoveRange rangeToRemove =
     fixReplaceRange rangeToRemove ""
 
 
-{-| Replace the code in between a range by some other code
+{-| Replace the section in between a given range by something
 -}
 fixReplaceRange : Elm.Syntax.Range.Range -> String -> Fix
 fixReplaceRange range replacement =
     FixRangeReplacement { range = range, replacement = replacement }
 
 
-{-| Insert some code at the given position
+{-| Insert something at the given position
 -}
 fixInsertAt : Elm.Syntax.Range.Location -> String -> Fix
 fixInsertAt location toInsert =
