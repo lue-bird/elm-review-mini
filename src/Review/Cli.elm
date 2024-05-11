@@ -4,12 +4,8 @@ module Review.Cli exposing (program, Program, ProgramEvent(..), ProgramState(..)
 
 @docs program, Program, ProgramEvent, ProgramState
 
-dev notes:
-
-  - TODO: consider switching from Json.Encode.Value for context generic to either Jeremy's interfaces or unsafe Anytype with zero conversion steps
-
-  - if you experience high memory footprint for large project,
-    please open an issue called "only ask for file sources to generate local error displays"
+dev note: if you experience high memory footprint for large project,
+please open an issue called "only ask for file sources to generate local error displays"
 
 -}
 
@@ -35,7 +31,7 @@ type alias Program =
 type ProgramState
     = WaitingForInitialFiles
     | HavingRunReviewsPreviously
-        { cache : List Review.Cache
+        { nextRuns : List Review.Run
         , availableErrorsOnReject :
             FastDict.Dict
                 String
@@ -130,14 +126,13 @@ reactToEvent config event =
 
                     runResult :
                         { errorsByPath : FastDict.Dict String (List ProjectFileError)
-                        , cache : List Review.Cache
+                        , nextRuns : List Review.Run
                         }
                     runResult =
                         { addedOrChangedFiles = initialFiles.files
                         , directDependencies = initialFiles.directDependencies
                         , elmJson = initialFiles.elmJson
                         , removedFilePaths = []
-                        , cache = List.repeat (config.configuration.reviews |> List.length) Review.cacheEmpty
                         }
                             |> reviewRunList config.configuration.reviews
 
@@ -150,7 +145,7 @@ reactToEvent config event =
                                 }
                 in
                 ( HavingRunReviewsPreviously
-                    { cache = runResult.cache
+                    { nextRuns = runResult.nextRuns
                     , availableErrorsOnReject =
                         case maybeNextFixableErrorOrAllUnfixable of
                             Nothing ->
@@ -231,16 +226,24 @@ reactToEvent config event =
 
                             runResult :
                                 { errorsByPath : FastDict.Dict String (List ProjectFileError)
-                                , cache : List Review.Cache
+                                , nextRuns : List Review.Run
                                 }
                             runResult =
                                 { addedOrChangedFiles = [ fileAddedOrChanged ]
                                 , directDependencies = []
                                 , elmJson = havingRunReviewsPreviously.elmJson
                                 , removedFilePaths = []
-                                , cache = havingRunReviewsPreviously.cache
                                 }
-                                    |> reviewRunList config.configuration.reviews
+                                    |> reviewRunList
+                                        (List.map2
+                                            (\review nextRun ->
+                                                { ignoreErrorsForFiles = review.ignoreErrorsForFiles
+                                                , run = nextRun
+                                                }
+                                            )
+                                            config.configuration.reviews
+                                            havingRunReviewsPreviously.nextRuns
+                                        )
 
                             maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
                             maybeNextFixableErrorOrAllUnfixable =
@@ -251,7 +254,7 @@ reactToEvent config event =
                                         }
                         in
                         ( HavingRunReviewsPreviously
-                            { cache = runResult.cache
+                            { nextRuns = runResult.nextRuns
                             , availableErrorsOnReject =
                                 case maybeNextFixableErrorOrAllUnfixable of
                                     Nothing ->
@@ -293,16 +296,24 @@ reactToEvent config event =
 
                             runResult :
                                 { errorsByPath : FastDict.Dict String (List ProjectFileError)
-                                , cache : List Review.Cache
+                                , nextRuns : List Review.Run
                                 }
                             runResult =
                                 { addedOrChangedFiles = []
                                 , directDependencies = []
                                 , elmJson = havingRunReviewsPreviously.elmJson
                                 , removedFilePaths = [ fileRemoved.path ]
-                                , cache = havingRunReviewsPreviously.cache
                                 }
-                                    |> reviewRunList config.configuration.reviews
+                                    |> reviewRunList
+                                        (List.map2
+                                            (\review nextRun ->
+                                                { ignoreErrorsForFiles = review.ignoreErrorsForFiles
+                                                , run = nextRun
+                                                }
+                                            )
+                                            config.configuration.reviews
+                                            havingRunReviewsPreviously.nextRuns
+                                        )
 
                             maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
                             maybeNextFixableErrorOrAllUnfixable =
@@ -313,7 +324,7 @@ reactToEvent config event =
                                         }
                         in
                         ( HavingRunReviewsPreviously
-                            { cache = runResult.cache
+                            { nextRuns = runResult.nextRuns
                             , availableErrorsOnReject =
                                 case maybeNextFixableErrorOrAllUnfixable of
                                     Nothing ->
@@ -362,32 +373,29 @@ reviewRunList :
         , directDependencies : List { elmJson : String, docsJson : String }
         , addedOrChangedFiles : List { path : String, source : String }
         , removedFilePaths : List String
-        , cache : List Review.Cache
         }
     ->
         { errorsByPath : FastDict.Dict String (List ProjectFileError)
-        , cache : List Review.Cache
+        , nextRuns : List Review.Run
         }
 reviewRunList reviews project =
     let
         runResultsForReviews :
             List
                 { errorsByPath : FastDict.Dict String (List ProjectFileError)
-                , cache : Review.Cache
+                , nextRun : Review.Run
                 }
         runResultsForReviews =
-            List.map2
-                (\review cache ->
+            List.map
+                (\review ->
                     { addedOrChangedFiles = project.addedOrChangedFiles
                     , directDependencies = project.directDependencies
                     , elmJson = project.elmJson
                     , removedFilePaths = project.removedFilePaths
-                    , cache = cache
                     }
                         |> Review.run review
                 )
                 reviews
-                project.cache
     in
     { errorsByPath =
         runResultsForReviews
@@ -398,7 +406,7 @@ reviewRunList reviews project =
                         soFar
                 )
                 FastDict.empty
-    , cache = runResultsForReviews |> List.map .cache
+    , nextRuns = runResultsForReviews |> List.map .nextRun
     }
 
 

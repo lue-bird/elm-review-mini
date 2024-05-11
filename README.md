@@ -36,7 +36,6 @@ module StringWithMisspelledCompanyNameForbid exposing (review)
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
 import Review
-import Codec
 
 review : Review.Review
 review =
@@ -73,6 +72,7 @@ review =
                             )
                 )
             ]
+        , knowledgeMerge = \a b -> a ++ b
         , report =
             \stringsWithTypos ->
                 stringsWithTypos
@@ -85,14 +85,6 @@ review =
                             , fix = []
                             }
                         )
-        , knowledgeMerge = \a b -> a ++ b
-        , knowledgeSerialize =
-            Codec.list
-                (Codec.object (\modulePath range -> { modulePath = modulePath, range = range })
-                    |> Codec.field "modulePath" .modulePath Codec.string
-                    |> Codec.field "range" .range Review.rangeCodec
-                    |> Codec.finishRecord
-                )
         }
 ```
 

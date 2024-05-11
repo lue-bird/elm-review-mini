@@ -1,5 +1,5 @@
 module Review exposing
-    ( ignoreErrorsForPathsWhere
+    ( ignoreErrorsForPathsWhere, Review
     , create
     , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
     , Error, elmJsonPath
@@ -8,15 +8,14 @@ module Review exposing
     , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
     , sourceExtractInRange
     , packageElmJsonExposedModules
-    , locationCodec, rangeCodec, moduleNameCodec
     , Inspect(..)
-    , Review, run, Cache, cacheEmpty, applyFix, FixError(..), KnowledgeGeneric(..)
+    , Run(..), run, Cache, applyFix, FixError(..), KnowledgeGeneric(..)
     )
 
 {-| A review inspects modules, `elm.json`, dependencies and extra files like `README.md` from your project
 and uses the combined knowledge to report problems.
 
-@docs ignoreErrorsForPathsWhere
+@docs ignoreErrorsForPathsWhere, Review
 
 @docs create
 
@@ -40,7 +39,6 @@ Collect knowledge from parts of the project.
 @docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
 @docs sourceExtractInRange
 @docs packageElmJsonExposedModules
-@docs locationCodec, rangeCodec, moduleNameCodec
 
 
 # safe internals
@@ -48,11 +46,10 @@ Collect knowledge from parts of the project.
 If you want to make `elm-review-mini` run in a new environment
 
 @docs Inspect
-@docs Review, run, Cache, cacheEmpty, applyFix, FixError, KnowledgeGeneric
+@docs Run, run, Cache, applyFix, FixError, KnowledgeGeneric
 
 -}
 
-import Codec
 import Elm.Docs
 import Elm.Module
 import Elm.Parser
@@ -76,25 +73,82 @@ import Set exposing (Set)
 import Unicode
 
 
-{-| A construct that can inspect your project files and report errors.
-
-You can create one with [`Review.create`](Review#create)
-
+{-| A construct that can inspect your project files and report errors, see [`Review.create`](Review#create)
 -}
 type alias Review =
     { ignoreErrorsForFiles : String -> Bool
-    , run :
-        { elmJson : { source : String, project : Elm.Project.Project }
-        , directDependencies : List { elmJson : String, docsJson : String }
-        , addedOrChangedFiles : List { path : String, source : String }
-        , removedFilePaths : List String
-        , cache : Cache
-        }
-        ->
-            { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Fix })
-            , cache : Cache
-            }
+    , run : Run
     }
+
+
+{-| A wild thing!
+
+The problem this recursive-able function solves?
+Different reviews can have different knowledge types,
+so how can we put all of them in a single list?
+
+No problem, make hide this parameter by storing just the run function from project files to errors.
+
+But how do we implement caching this way
+(only re-run inspections for files that changed, otherwise take the already computed knowledge parts)?
+
+I know about roughly three options:
+
+  - require users to provide encode/decode pairs to some generic structure.
+    The simplest and fastest seems to be [miniBill/elm-codec](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
+      - the ability to use the encoded cache at any time enables write to disk
+        (not a goal of `elm-review-mini` but the option is nice to have)
+      - the ability to show the encoded cache in the elm debugger
+        (undeniably cool, though that only works in the browser. `Debug.log` is likely a nice enough alternative)
+      - the ability to export the produced json for external use
+        (not a goal of `elm-review-mini` but undeniably cool, similar to `elm-review` insights/extract although less explicit)
+      - quite a burden users should preferably not bear
+
+  - use js shenanigans to effectively "cast specific context type to any" and "cast any to specific context type"
+    similar to [linsyking/elm-anytype](https://dark.elm.dmy.fr/packages/linsyking/elm-anytype/latest/)
+      - faster than any possible alternative
+      - simpler internals than any possible alternative
+      - the highest possible degree of danger, as incorrect casting is always possible
+        (+ no way to control that `Review.run` users wire them correctly)
+      - custom embeds of running reviews (e.g. if you wanted to create a browser playground)
+        always need additional js hacking which to me is deal breaking
+
+  - provide a future function as a result which knows about the
+    previously calculated knowledges.
+    Surprising to me, that's almost trivial to implement and even cuts down
+    internal complexity compared to something like the cache codec.
+    If you're intrigued and have a week,
+    some smart folks have written [an entertaining dialog-blog-ish series about these "Jeremy's interfaces"](https://discourse.elm-lang.org/t/demystifying-jeremys-interfaces/8834)
+      - still pretty fast
+      - concise internals
+      - possibly less flexible for implementing stuff like shared knowledge
+      - slightly less obvious than the codec one
+
+I didn't expect to ever need to resort to such a complex feature but here we are.
+Though I'm always excited to try and experiment with other options (except the codec one which I already tried), issues welcome!
+
+-}
+type Run
+    = Run
+        ({ elmJson : { source : String, project : Elm.Project.Project }
+         , directDependencies : List { elmJson : String, docsJson : String }
+         , addedOrChangedFiles : List { path : String, source : String }
+         , removedFilePaths : List String
+         }
+         ->
+            { errorsByPath :
+                FastDict.Dict
+                    String
+                    (List
+                        { range : Elm.Syntax.Range.Range
+                        , message : String
+                        , details : List String
+                        , fix : List Fix
+                        }
+                    )
+            , nextRun : Run
+            }
+        )
 
 
 {-| The collected info from scanning a project in a generic format that can be used for caching.
@@ -367,8 +421,6 @@ having read ["when to write or enable a review"](./#when-to-write-or-enable-a-re
 ### use Test-Driven Development
 
 [`Review.Test`](Review-Test) works with [`elm-test`](https://github.com/elm-explorations/test).
-If you like putting `Debug.log`s in your code, you'll have a pleasant time
-running your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
 
 ### document
@@ -383,23 +435,10 @@ create :
     { inspect : List (Inspect knowledge)
     , knowledgeMerge : knowledge -> knowledge -> knowledge
     , report : knowledge -> List Error
-    , knowledgeCodec : Codec.Codec knowledge
     }
     -> Review
 create review =
     let
-        knowledgeToCache : knowledge -> KnowledgeGeneric
-        knowledgeToCache =
-            \knowledge ->
-                knowledge
-                    |> Codec.encodeToValue review.knowledgeCodec
-                    |> KnowledgeJson
-
-        knowledgeFromCache : KnowledgeGeneric -> Result Json.Decode.Error knowledge
-        knowledgeFromCache =
-            \(KnowledgeJson serializedBase64) ->
-                serializedBase64 |> Codec.decodeValue review.knowledgeCodec
-
         toKnowledges :
             { directDependenciesToKnowledge : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
             , elmJsonToKnowledge : List (Elm.Project.Project -> knowledge)
@@ -422,7 +461,7 @@ create review =
 
         moduleToMaybeKnowledge :
             { path : String, source : String }
-            -> Maybe { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
+            -> Maybe { path : String, knowledge : knowledge }
         moduleToMaybeKnowledge moduleFile =
             case moduleFile.source |> Elm.Parser.parseToFile of
                 Err _ ->
@@ -448,222 +487,192 @@ create review =
                             (\foldedKnowledge ->
                                 { path = moduleFile.path
                                 , knowledge = foldedKnowledge
-                                , cache = foldedKnowledge |> knowledgeToCache
                                 }
                             )
+
+        runWithCache : Cache knowledge -> Run
+        runWithCache cache =
+            -- IGNORE TCO
+            Run
+                (\project ->
+                    let
+                        elmJsonKnowledgeAndCache : Maybe knowledge
+                        elmJsonKnowledgeAndCache =
+                            case cache.elmJsonKnowledge of
+                                Just elmJsonKnowledgeCache ->
+                                    elmJsonKnowledgeCache |> Just
+
+                                Nothing ->
+                                    toKnowledges.elmJsonToKnowledge
+                                        |> List.map (\f -> f project.elmJson.project)
+                                        |> knowledgesFoldToMaybe
+
+                        directDependenciesKnowledgeAndCache : Maybe knowledge
+                        directDependenciesKnowledgeAndCache =
+                            case cache.directDependenciesKnowledge of
+                                Just knowledge ->
+                                    knowledge |> Just
+
+                                Nothing ->
+                                    let
+                                        directDependenciesIncluding : List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
+                                        directDependenciesIncluding =
+                                            project.directDependencies
+                                                |> List.filterMap
+                                                    (\dependency ->
+                                                        Result.map2 (\elmJson modules -> { elmJson = elmJson, modules = modules })
+                                                            (dependency.elmJson |> Json.Decode.decodeString Elm.Project.decoder)
+                                                            (dependency.elmJson |> Json.Decode.decodeString (Json.Decode.list Elm.Docs.decoder))
+                                                            |> Result.toMaybe
+                                                    )
+                                                |> ListExtra.consJust ElmCoreDependency.parsed
+                                    in
+                                    toKnowledges.directDependenciesToKnowledge
+                                        |> List.map (\f -> f directDependenciesIncluding)
+                                        |> knowledgesFoldToMaybe
+
+                        sourceDirectories : List String
+                        sourceDirectories =
+                            project.elmJson.project |> ElmJson.LocalExtra.sourceDirectories
+
+                        pathIsModule : String -> Bool
+                        pathIsModule =
+                            \path ->
+                                (path |> String.endsWith ".elm")
+                                    && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
+
+                        ( addedOrChangedModuleFiles, addedOrChangedExtraFiles ) =
+                            project.addedOrChangedFiles
+                                |> List.partition
+                                    (\file -> file.path |> pathIsModule)
+
+                        ( removedModuleFilePaths, removedExtraFilePaths ) =
+                            project.removedFilePaths
+                                |> List.partition
+                                    (\path -> path |> pathIsModule)
+
+                        moduleKnowledges : List { path : String, knowledge : knowledge }
+                        moduleKnowledges =
+                            FastDict.merge
+                                (\_ new soFar -> soFar |> ListExtra.consJust new)
+                                (\_ new _ soFar -> soFar |> ListExtra.consJust new)
+                                (\path knowledgeCache soFar ->
+                                    soFar |> (::) { path = path, knowledge = knowledgeCache }
+                                )
+                                (addedOrChangedModuleFiles
+                                    |> FastDictExtra.fromListMap
+                                        (\file ->
+                                            { key = file.path
+                                            , value = file |> moduleToMaybeKnowledge
+                                            }
+                                        )
+                                )
+                                (cache.moduleKnowledgeByPath
+                                    |> dictRemoveKeys removedModuleFilePaths
+                                )
+                                []
+
+                        extraFileToMaybeKnowledge :
+                            { path : String, source : String }
+                            -> Maybe { path : String, knowledge : knowledge }
+                        extraFileToMaybeKnowledge fileInfo =
+                            toKnowledges.extraFileToKnowledge
+                                |> List.map (\f -> f fileInfo)
+                                |> knowledgesFoldToMaybe
+                                |> Maybe.map
+                                    (\foldedKnowledge ->
+                                        { path = fileInfo.path
+                                        , knowledge = foldedKnowledge
+                                        }
+                                    )
+
+                        extraFilesKnowledges : List { path : String, knowledge : knowledge }
+                        extraFilesKnowledges =
+                            FastDict.merge
+                                (\_ new soFar -> soFar |> ListExtra.consJust new)
+                                (\_ new _ soFar -> soFar |> ListExtra.consJust new)
+                                (\path knowledgeCache soFar ->
+                                    soFar |> (::) { path = path, knowledge = knowledgeCache }
+                                )
+                                (addedOrChangedExtraFiles
+                                    |> FastDictExtra.fromListMap
+                                        (\file ->
+                                            { key = file.path
+                                            , value = file |> extraFileToMaybeKnowledge
+                                            }
+                                        )
+                                )
+                                (cache.extraFileKnowledgeByPath
+                                    |> dictRemoveKeys removedExtraFilePaths
+                                )
+                                []
+
+                        allKnowledges : List knowledge
+                        allKnowledges =
+                            ((moduleKnowledges |> List.map .knowledge)
+                                ++ (extraFilesKnowledges |> List.map .knowledge)
+                            )
+                                |> ListExtra.consJust directDependenciesKnowledgeAndCache
+                                |> ListExtra.consJust elmJsonKnowledgeAndCache
+                    in
+                    case allKnowledges |> knowledgesFoldToMaybe of
+                        Nothing ->
+                            { errorsByPath = FastDict.empty, nextRun = runWithCache cache }
+
+                        Just completeKnowledge ->
+                            { errorsByPath =
+                                completeKnowledge
+                                    |> review.report
+                                    |> List.foldl
+                                        (\error soFar ->
+                                            soFar
+                                                |> FastDict.update
+                                                    error.path
+                                                    (\errorsForPathSoFar ->
+                                                        errorsForPathSoFar
+                                                            |> Maybe.withDefault []
+                                                            |> (::)
+                                                                { message = error.message
+                                                                , details = error.details
+                                                                , range = error.range
+                                                                , fix = error.fix
+                                                                }
+                                                            |> Just
+                                                    )
+                                        )
+                                        FastDict.empty
+                                    |> FastDict.map
+                                        (\_ errors ->
+                                            errors |> List.sortWith (\a b -> rangeCompare a.range b.range)
+                                        )
+                            , nextRun =
+                                runWithCache
+                                    { elmJsonKnowledge = elmJsonKnowledgeAndCache
+                                    , directDependenciesKnowledge = directDependenciesKnowledgeAndCache
+                                    , moduleKnowledgeByPath =
+                                        moduleKnowledges
+                                            |> FastDictExtra.fromListMap
+                                                (\moduleKnowledge ->
+                                                    { key = moduleKnowledge.path, value = moduleKnowledge.knowledge }
+                                                )
+                                    , extraFileKnowledgeByPath =
+                                        moduleKnowledges
+                                            |> FastDictExtra.fromListMap
+                                                (\extraFileKnowledge ->
+                                                    { key = extraFileKnowledge.path, value = extraFileKnowledge.knowledge }
+                                                )
+                                    }
+                            }
+                )
     in
     { ignoreErrorsForFiles = \_ -> False
     , run =
-        \project ->
-            let
-                elmJsonKnowledgeAndCache : Maybe { knowledge : knowledge, cache : KnowledgeGeneric }
-                elmJsonKnowledgeAndCache =
-                    case project.cache.elmJsonKnowledge of
-                        Just cache ->
-                            case cache |> knowledgeFromCache of
-                                Err _ ->
-                                    -- corrupt cache
-                                    let
-                                        _ =
-                                            Debug.log "corrupt cache" ()
-                                    in
-                                    Nothing
-
-                                Ok knowledge ->
-                                    { knowledge = knowledge, cache = cache } |> Just
-
-                        Nothing ->
-                            toKnowledges.elmJsonToKnowledge
-                                |> List.map (\f -> f project.elmJson.project)
-                                |> knowledgesFoldToMaybe
-                                |> Maybe.map (\knowledge -> { knowledge = knowledge, cache = knowledge |> knowledgeToCache })
-
-                directDependenciesKnowledgeAndCache : Maybe { knowledge : knowledge, cache : KnowledgeGeneric }
-                directDependenciesKnowledgeAndCache =
-                    case project.cache.directDependenciesKnowledge of
-                        Just cache ->
-                            case cache |> knowledgeFromCache of
-                                Err _ ->
-                                    -- corrupt cache
-                                    let
-                                        _ =
-                                            Debug.log "corrupt cache" ()
-                                    in
-                                    Nothing
-
-                                Ok knowledge ->
-                                    { knowledge = knowledge, cache = cache } |> Just
-
-                        Nothing ->
-                            let
-                                directDependenciesIncluding : List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
-                                directDependenciesIncluding =
-                                    project.directDependencies
-                                        |> List.filterMap
-                                            (\dependency ->
-                                                Result.map2 (\elmJson modules -> { elmJson = elmJson, modules = modules })
-                                                    (dependency.elmJson |> Json.Decode.decodeString Elm.Project.decoder)
-                                                    (dependency.elmJson |> Json.Decode.decodeString (Json.Decode.list Elm.Docs.decoder))
-                                                    |> Result.toMaybe
-                                            )
-                                        |> ListExtra.consJust ElmCoreDependency.parsed
-                            in
-                            toKnowledges.directDependenciesToKnowledge
-                                |> List.map (\f -> f directDependenciesIncluding)
-                                |> knowledgesFoldToMaybe
-                                |> Maybe.map (\knowledge -> { knowledge = knowledge, cache = knowledge |> knowledgeToCache })
-
-                sourceDirectories : List String
-                sourceDirectories =
-                    project.elmJson.project |> ElmJson.LocalExtra.sourceDirectories
-
-                pathIsModule : String -> Bool
-                pathIsModule =
-                    \path ->
-                        (path |> String.endsWith ".elm")
-                            && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
-
-                ( addedOrChangedModuleFiles, addedOrChangedExtraFiles ) =
-                    project.addedOrChangedFiles
-                        |> List.partition
-                            (\file -> file.path |> pathIsModule)
-
-                ( removedModuleFilePaths, removedExtraFilePaths ) =
-                    project.removedFilePaths
-                        |> List.partition
-                            (\path -> path |> pathIsModule)
-
-                moduleKnowledges : List { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
-                moduleKnowledges =
-                    FastDict.merge
-                        (\_ new soFar -> soFar |> ListExtra.consJust new)
-                        (\_ new _ soFar -> soFar |> ListExtra.consJust new)
-                        (\path knowledgeCache soFar ->
-                            case knowledgeCache |> knowledgeFromCache of
-                                Err _ ->
-                                    -- corrupt cache
-                                    let
-                                        _ =
-                                            Debug.log "corrupt cache" ()
-                                    in
-                                    soFar
-
-                                Ok knowledge ->
-                                    soFar |> (::) { path = path, knowledge = knowledge, cache = knowledgeCache }
-                        )
-                        (addedOrChangedModuleFiles
-                            |> FastDictExtra.fromListMap
-                                (\file ->
-                                    { key = file.path
-                                    , value = file |> moduleToMaybeKnowledge
-                                    }
-                                )
-                        )
-                        (project.cache.moduleKnowledgeByPath
-                            |> dictRemoveKeys removedModuleFilePaths
-                        )
-                        []
-
-                extraFileToMaybeKnowledge :
-                    { path : String, source : String }
-                    -> Maybe { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
-                extraFileToMaybeKnowledge fileInfo =
-                    toKnowledges.extraFileToKnowledge
-                        |> List.map (\f -> f fileInfo)
-                        |> knowledgesFoldToMaybe
-                        |> Maybe.map
-                            (\foldedKnowledge ->
-                                { path = fileInfo.path
-                                , knowledge = foldedKnowledge
-                                , cache = foldedKnowledge |> knowledgeToCache
-                                }
-                            )
-
-                extraFilesKnowledges : List { path : String, knowledge : knowledge, cache : KnowledgeGeneric }
-                extraFilesKnowledges =
-                    FastDict.merge
-                        (\_ new soFar -> soFar |> ListExtra.consJust new)
-                        (\_ new _ soFar -> soFar |> ListExtra.consJust new)
-                        (\path knowledgeCache soFar ->
-                            case knowledgeCache |> knowledgeFromCache of
-                                Err _ ->
-                                    let
-                                        _ =
-                                            Debug.log "corrupt cache" ()
-                                    in
-                                    soFar
-
-                                Ok knowledge ->
-                                    soFar |> (::) { path = path, knowledge = knowledge, cache = knowledgeCache }
-                        )
-                        (addedOrChangedExtraFiles
-                            |> FastDictExtra.fromListMap
-                                (\file ->
-                                    { key = file.path
-                                    , value = file |> extraFileToMaybeKnowledge
-                                    }
-                                )
-                        )
-                        (project.cache.extraFileKnowledgeByPath
-                            |> dictRemoveKeys removedExtraFilePaths
-                        )
-                        []
-
-                allKnowledges : List knowledge
-                allKnowledges =
-                    ((moduleKnowledges |> List.map .knowledge)
-                        ++ (extraFilesKnowledges |> List.map .knowledge)
-                    )
-                        |> ListExtra.consJust (directDependenciesKnowledgeAndCache |> Maybe.map .knowledge)
-                        |> ListExtra.consJust (elmJsonKnowledgeAndCache |> Maybe.map .knowledge)
-            in
-            case allKnowledges |> knowledgesFoldToMaybe of
-                Nothing ->
-                    { errorsByPath = FastDict.empty, cache = project.cache }
-
-                Just completeKnowledge ->
-                    { errorsByPath =
-                        completeKnowledge
-                            |> review.report
-                            |> List.foldl
-                                (\error soFar ->
-                                    soFar
-                                        |> FastDict.update
-                                            error.path
-                                            (\errorsForPathSoFar ->
-                                                errorsForPathSoFar
-                                                    |> Maybe.withDefault []
-                                                    |> (::)
-                                                        { message = error.message
-                                                        , details = error.details
-                                                        , range = error.range
-                                                        , fix = error.fix
-                                                        }
-                                                    |> Just
-                                            )
-                                )
-                                FastDict.empty
-                            |> FastDict.map
-                                (\_ errors ->
-                                    errors |> List.sortWith (\a b -> rangeCompare a.range b.range)
-                                )
-                    , cache =
-                        { elmJsonKnowledge = elmJsonKnowledgeAndCache |> Maybe.map .cache
-                        , directDependenciesKnowledge = directDependenciesKnowledgeAndCache |> Maybe.map .cache
-                        , moduleKnowledgeByPath =
-                            moduleKnowledges
-                                |> FastDictExtra.fromListMap
-                                    (\moduleKnowledge ->
-                                        { key = moduleKnowledge.path, value = moduleKnowledge.cache }
-                                    )
-                        , extraFileKnowledgeByPath =
-                            moduleKnowledges
-                                |> FastDictExtra.fromListMap
-                                    (\extraFileKnowledge ->
-                                        { key = extraFileKnowledge.path, value = extraFileKnowledge.cache }
-                                    )
-                        }
-                    }
+        runWithCache
+            { elmJsonKnowledge = Nothing
+            , directDependenciesKnowledge = Nothing
+            , moduleKnowledgeByPath = FastDict.empty
+            , extraFileKnowledgeByPath = FastDict.empty
+            }
     }
 
 
@@ -799,17 +808,6 @@ type alias Error =
     }
 
 
-{-| A fresh [`Cache`](#Cache) for a fresh session (or single [`run`](#run))
--}
-cacheEmpty : Cache
-cacheEmpty =
-    { elmJsonKnowledge = Nothing
-    , directDependenciesKnowledge = Nothing
-    , moduleKnowledgeByPath = FastDict.empty
-    , extraFileKnowledgeByPath = FastDict.empty
-    }
-
-
 {-| There are situations where you don't want a review to report errors:
 
   - an external library you copied over and don't want to modify it more than necessary
@@ -865,7 +863,6 @@ run :
          , directDependencies : List { elmJson : String, docsJson : String }
          , addedOrChangedFiles : List { path : String, source : String }
          , removedFilePaths : List String
-         , cache : Cache
          }
          ->
             { errorsByPath :
@@ -878,7 +875,7 @@ run :
                         , fix : List Fix
                         }
                     )
-            , cache : Cache
+            , nextRun : Run
             }
         )
 run review =
@@ -895,12 +892,12 @@ run review =
                             , fix : List Fix
                             }
                         )
-                , cache : Cache
+                , nextRun : Run
                 }
             runResult =
-                project |> review.run
+                project |> (review.run |> (\(Run r) -> r))
         in
-        { cache = runResult.cache
+        { nextRun = runResult.nextRun
         , errorsByPath =
             runResult.errorsByPath
                 |> FastDictExtra.justsMap
@@ -916,11 +913,11 @@ run review =
 
 {-| Cache for the result of the analysis of an inspected project part (modules, elm.json, extra files, direct dependencies).
 -}
-type alias Cache =
-    { elmJsonKnowledge : Maybe KnowledgeGeneric
-    , directDependenciesKnowledge : Maybe KnowledgeGeneric
-    , moduleKnowledgeByPath : FastDict.Dict String KnowledgeGeneric
-    , extraFileKnowledgeByPath : FastDict.Dict String KnowledgeGeneric
+type alias Cache knowledge =
+    { elmJsonKnowledge : Maybe knowledge
+    , directDependenciesKnowledge : Maybe knowledge
+    , moduleKnowledgeByPath : FastDict.Dict String knowledge
+    , extraFileKnowledgeByPath : FastDict.Dict String knowledge
     }
 
 
@@ -1303,33 +1300,3 @@ rangesCollide a b =
 
                 GT ->
                     True
-
-
-{-| Convenience [`Codec`](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
-for an [`Elm.Syntax.ModuleName.ModuleName`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-ModuleName#ModuleName)
--}
-moduleNameCodec : Codec.Codec Elm.Syntax.ModuleName.ModuleName
-moduleNameCodec =
-    Codec.list Codec.string
-
-
-{-| Convenience [`Codec`](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
-for an [`Elm.Syntax.Range.Range`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Range#Range)
--}
-rangeCodec : Codec.Codec Elm.Syntax.Range.Range
-rangeCodec =
-    Codec.object (\start end -> { start = start, end = end })
-        |> Codec.field "start" .start locationCodec
-        |> Codec.field "end" .end locationCodec
-        |> Codec.buildObject
-
-
-{-| Convenience [`Codec`](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
-for an [`Elm.Syntax.Range.Location`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Range#Location)
--}
-locationCodec : Codec.Codec Elm.Syntax.Range.Location
-locationCodec =
-    Codec.object (\row column -> { row = row, column = column })
-        |> Codec.field "row" .row Codec.int
-        |> Codec.field "colum" .column Codec.int
-        |> Codec.buildObject

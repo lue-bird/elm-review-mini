@@ -1,6 +1,5 @@
 module UnderscoreInModuleNameForbid exposing (review)
 
-import Codec
 import Dict
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
@@ -34,12 +33,6 @@ review =
                 )
             ]
         , knowledgeMerge = \a b -> Dict.union a b
-        , knowledgeCodec =
-            Codec.dict
-                (Codec.object (\range -> { range = range })
-                    |> Codec.field "range" .range Review.rangeCodec
-                    |> Codec.buildObject
-                )
         , report =
             \knowledge ->
                 knowledge

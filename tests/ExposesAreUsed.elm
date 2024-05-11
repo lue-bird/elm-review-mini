@@ -1,6 +1,5 @@
 module ExposesAreUsed exposing (review)
 
-import Codec
 import Declaration.LocalExtra
 import Elm.Project
 import Elm.Syntax.Declaration
@@ -70,7 +69,6 @@ review =
             ]
         , knowledgeMerge = knowledgeMerge
         , report = report
-        , knowledgeCodec = knowledgeCodec
         }
 
 
@@ -349,87 +347,6 @@ knowledgeMerge a b =
     , modulesAllowingUnusedExposes =
         Set.union a.modulesAllowingUnusedExposes b.modulesAllowingUnusedExposes
     }
-
-
-knowledgeCodec : Codec.Codec Knowledge
-knowledgeCodec =
-    Codec.object
-        (\moduleExposes referenceUseCounts modulesAllowingUnusedExposes ->
-            { moduleExposes = moduleExposes
-            , referenceUseCounts = referenceUseCounts
-            , modulesAllowingUnusedExposes = modulesAllowingUnusedExposes
-            }
-        )
-        |> Codec.field "moduleExposes"
-            .moduleExposes
-            (fastDictKeyValueCodec Review.moduleNameCodec
-                (Codec.object
-                    (\path exposingRange exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames exposedTypesWithVariantNames ->
-                        { path = path
-                        , exposingRange = exposingRange
-                        , exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames = exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
-                        , exposedTypesWithVariantNames = exposedTypesWithVariantNames
-                        }
-                    )
-                    |> Codec.field "path" .path Codec.string
-                    |> Codec.field "exposingRange" .exposingRange Review.rangeCodec
-                    |> Codec.field "exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames"
-                        .exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
-                        (fastDictKeyValueCodec Codec.string Review.rangeCodec)
-                    |> Codec.field "exposedTypesWithVariantNames"
-                        .exposedTypesWithVariantNames
-                        (fastDictKeyValueCodec Codec.string
-                            (Codec.object (\variants range -> { variants = variants, range = range })
-                                |> Codec.field "variants" .variants (Codec.set Codec.string)
-                                |> Codec.field "range" .range Review.rangeCodec
-                                |> Codec.buildObject
-                            )
-                        )
-                    |> Codec.buildObject
-                )
-            )
-        |> Codec.field "referenceUseCounts"
-            .referenceUseCounts
-            (fastDictKeyValueCodec Review.moduleNameCodec
-                (Codec.object (\referenceUseCounts imports -> { referenceUseCounts = referenceUseCounts, imports = imports })
-                    |> Codec.field "referenceUseCounts"
-                        .referenceUseCounts
-                        (fastDictKeyValueCodec
-                            (Codec.tuple Review.moduleNameCodec Codec.string)
-                            Codec.int
-                        )
-                    |> Codec.field "imports" .imports (Codec.list importCodec)
-                    |> Codec.buildObject
-                )
-            )
-        |> Codec.field "modulesAllowingUnusedExposes"
-            .modulesAllowingUnusedExposes
-            (Codec.set Review.moduleNameCodec)
-        |> Codec.buildObject
-
-
-importCodec : Codec.Codec Elm.Syntax.Import.Import
-importCodec =
-    Codec.build Elm.Syntax.Import.encode Elm.Syntax.Import.decoder
-
-
-
---
-
-
-fastDictKeyValueCodec :
-    Codec.Codec comparableKey
-    -> Codec.Codec value
-    -> Codec.Codec (FastDict.Dict comparableKey value)
-fastDictKeyValueCodec keyCodec valueCodec =
-    Codec.map FastDict.fromList
-        FastDict.toList
-        (Codec.list
-            (Codec.tuple
-                keyCodec
-                valueCodec
-            )
-        )
 
 
 type alias Knowledge =
