@@ -1,40 +1,37 @@
 module Review exposing
-    ( ignoreErrorsForFilesWhere
+    ( ignoreErrorsForPathsWhere
     , create
-    , Inspect, inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
-    , inspectBatch, inspectMap
-    , Error, FileTarget(..)
-    , Fix(..), fixInsertAt, fixRemoveRange, fixReplaceRangeBy
+    , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
+    , Error, elmJsonPath
+    , Fix(..), fixInsertAt, fixRemoveRange, fixReplaceRange
     , expressionSubs, expressionFold
     , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
     , sourceExtractInRange
     , packageElmJsonExposedModules
     , locationCodec, rangeCodec, moduleNameCodec
-    , run, Cache, cacheEmpty, fixFile, FixError(..)
-    , KnowledgeGeneric(..)
-    , Review, InspectSingleTargetToKnowledge(..)
+    , Inspect(..)
+    , Review, run, Cache, cacheEmpty, applyFix, FixError(..), KnowledgeGeneric(..)
     )
 
-{-| `elm-review-mini` scans the modules, `elm.json`, dependencies and extra files like `README.md` from your project.
-All this data is then fed into your reviews, which in turn inspect it to report problems.
+{-| A review inspects modules, `elm.json`, dependencies and extra files like `README.md` from your project
+and uses the combined knowledge to report problems.
 
-@docs ignoreErrorsForFilesWhere
+@docs ignoreErrorsForPathsWhere
 
 @docs create
 
 
 ## inspecting
 
-Look at the global picture of an Elm project to collect knowledge.
+Collect knowledge from parts of the project.
 
-@docs Inspect, inspectElmJson, inspectModule, inspectDirectDependencies, inspectExtraFile
-@docs inspectBatch, inspectMap
+@docs inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
 
 
 ## reporting
 
-@docs Error, FileTarget
-@docs Fix, fixInsertAt, fixRemoveRange, fixReplaceRangeBy
+@docs Error, elmJsonPath
+@docs Fix, fixInsertAt, fixRemoveRange, fixReplaceRange
 
 
 ## convenience helpers
@@ -48,9 +45,10 @@ Look at the global picture of an Elm project to collect knowledge.
 
 # safe internals
 
-@docs run, Cache, cacheEmpty, fixFile, FixError
-@docs KnowledgeGeneric
-@docs Review, InspectSingleTargetToKnowledge
+If you want to make `elm-review-mini` run in a new environment
+
+@docs Inspect
+@docs Review, run, Cache, cacheEmpty, applyFix, FixError, KnowledgeGeneric
 
 -}
 
@@ -74,7 +72,6 @@ import FastDictExtra
 import Json.Decode
 import Json.Encode
 import ListExtra
-import Rope exposing (Rope)
 import Set exposing (Set)
 import Unicode
 
@@ -85,8 +82,7 @@ You can create one with [`Review.create`](Review#create)
 
 -}
 type alias Review =
-    { name : String
-    , ignoreErrorsForFiles : String -> Bool
+    { ignoreErrorsForFiles : String -> Bool
     , run :
         { elmJson : { source : String, project : Elm.Project.Project }
         , directDependencies : List { elmJson : String, docsJson : String }
@@ -108,14 +104,7 @@ type KnowledgeGeneric
     = KnowledgeJson Json.Encode.Value
 
 
-{-| How to collect info from scanning a project.
--}
-type alias Inspect knowledge =
-    Rope (InspectSingleTargetToKnowledge knowledge)
-
-
-{-| Allow multiple reviews to feed off the same collected knowledge,
-for example published in a package.
+{-| How to collect knowledge from scanning a project.
 
 Examples:
 
@@ -124,67 +113,38 @@ Examples:
   - "data to determine the reference's minimum qualification"
   - "type information"
 
-The given name should describe what's in the knowledge,
-like "module exposes including variants from project, direct and indirect dependencies"
-
 -}
-inspectBatch : List (Inspect knowledge) -> Inspect knowledge
-inspectBatch inspects =
-    inspects |> Rope.fromList |> Rope.concat
+type Inspect knowledge
+    = InspectDirectDependencies (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
+    | InspectElmJson (Elm.Project.Project -> knowledge)
+    | InspectExtraFile ({ path : String, source : String } -> knowledge)
+    | InspectModule ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
 
 
-{-| The smallest possible thing you can inspect and create knowledge from
+{-| Relative reference to the project elm.json to be used in an [`Error`](#Error) or [test](Review-Test).
+You could also just use `"elm.json"` which feels a bit brittle.
 -}
-type InspectSingleTargetToKnowledge knowledge
-    = InspectDirectDependenciesToKnowledge (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
-    | InspectElmJsonToKnowledge (Elm.Project.Project -> knowledge)
-    | InspectExtraFileToKnowledge ({ path : String, source : String } -> knowledge)
-    | InspectProjectModuleToKnowledge ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
-
-
-{-| Reference to a project file.
-For modules and extra files, use `FileTarget` with the path from the inspect.
-To refer to the elm.json, use `FileTargetElmJson`
--}
-type FileTarget
-    = FileTargetElmJson
-    | FileTarget { path : String }
-
-
-{-| Usually, when using an external [`inspectBatch`](#inspectBatch)
-your knowledge type and its knowledge type don't match up.
-
-Use [`inspectMap`](#inspectMap) to use all that information to create your own knowledge from it
-
--}
-inspectMap : (knowledge -> knowledgeMapped) -> (Inspect knowledge -> Inspect knowledgeMapped)
-inspectMap knowledgeChange =
-    \inspect ->
-        inspect
-            |> Rope.map
-                (\inspectSingle ->
-                    inspectSingle |> inspectSingleTargetToKnowledgeMap knowledgeChange
-                )
-
-
-inspectSingleTargetToKnowledgeMap : (knowledge -> knowledgeMapped) -> (InspectSingleTargetToKnowledge knowledge -> InspectSingleTargetToKnowledge knowledgeMapped)
-inspectSingleTargetToKnowledgeMap knowledgeChange =
-    \inspectSingle ->
-        case inspectSingle of
-            InspectDirectDependenciesToKnowledge toKnowledge ->
-                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectDirectDependenciesToKnowledge
-
-            InspectElmJsonToKnowledge toKnowledge ->
-                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectElmJsonToKnowledge
-
-            InspectExtraFileToKnowledge toKnowledge ->
-                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectExtraFileToKnowledge
-
-            InspectProjectModuleToKnowledge toKnowledge ->
-                (\data -> data |> toKnowledge |> knowledgeChange) |> InspectProjectModuleToKnowledge
+elmJsonPath : String
+elmJsonPath =
+    "elm.json"
 
 
 {-| All the info you can get from a module.
+
+
+## path
+
+The file path, relative to the project's `elm.json`
+that you can use to check for the source directory name
+or to specify an error project file path
+
+
+## source
+
+The raw elm file content that you can use
+to preserve existing formatting in a range
+in case you want to move and copy things around,
+see [`sourceExtractInRange`](#sourceExtractInRange)
 
 
 ## syntax
@@ -197,8 +157,7 @@ need to have the documentation for that package open when writing a review.
 
 ### module header
 
-the module's
-[module definition](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`).
+The [module definition](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`).
 
 Through a couple of helpers, you can get to the specific information you need faster:
 
@@ -208,82 +167,73 @@ Through a couple of helpers, you can get to the specific information you need fa
 
 ### imports
 
-the module's
+The module's
 [import statements](https://package.elm-lang.org/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Import)
 (`import Html as H exposing (div)`) in order of their definition
 
-The following example forbids importing both `Element` (`elm-ui`) and
-`Html.Styled` (`elm-css`).
+An example review that forbids importing both `Element` (`elm-ui`) and
+`Html.Styled` (`elm-css`) in the same module:
 
-    import Elm.Syntax.Import exposing (Import)
-    import Elm.Syntax.Node as Node exposing (Node)
-    import Review.Rule as Rule exposing (Rule)
+    import Elm.Syntax.Import
+    import Elm.Syntax.Node
+    import Elm.Syntax.Range
+    import Review
+    import Dict
 
-    type alias Knowledge =
-        { elmUiWasImported : Bool
-        , elmCssWasImported : Bool
-        }
+    review : Review
+    review =
+        Review.create
+            { inspect =
+                [ Review.inspectModule
+                    (\moduleData ->
+                        let
+                            importedModuleNames : Dict Elm.Syntax.ModuleName.ModuleName Elm.Syntax.Range.Range
+                            importedModuleNames =
+                                moduleData.syntax.imports
+                                    |> List.map
+                                        (\(Elm.Syntax.Node.Node _ import_) ->
+                                            ( import.moduleName |> Elm.Syntax.Node.value, import.moduleName |> Elm.Syntax.Node.range )
+                                        )
+                                    |> Dict.fromList
+                        in
+                        case
+                            ( importedModuleNames |> Dict.get [ "Element" ]
+                            , importedModuleNames |> Dict.get [ "Html", "Styled" ]
+                            )
+                        of
+                            ( Just elementImportRange, Just _ ) ->
+                                Dict.singleton moduleData.path elementImportRange
 
-    rule : Rule
-    rule =
-        Rule.newModuleRuleSchema "NoUsingBothHtmlAndHtmlStyled" initialKnowledge
-            |> Rule.withImportVisitor importVisitor
-            |> Rule.fromModuleRuleSchema
-
-    initialKnowledge : Knowledge
-    initialKnowledge =
-        { elmUiWasImported = False
-        , elmCssWasImported = False
-        }
-
-    error : Node Import -> Error
-    error node =
-        Rule.error
-            { message = "Do not use both `elm-ui` and `elm-css`"
-            , details = [ "At fruits.com, we use `elm-ui` in the dashboard application, and `elm-css` in the rest of the code. We want to use `elm-ui` in our new projects, but in projects using `elm-css`, we don't want to use both libraries to keep things simple." ]
+                        else
+                            Dict.empty
+                    )
+                ]
+            , knowledgeMerge = \a b -> Dict.union a b
+            , report =
+                \invalidImportsByPath ->
+                    invalidImportsByPath
+                        |> Dict.toList
+                        |> List.map
+                            (\( path, elementImportRange) ->
+                                { target = Review.ProjectFileTarget moduleData.path
+                                , message = "Do not use both `elm-ui` and `elm-css`"
+                                , details = [ "At fruits.com, we use `elm-ui` in the dashboard application, and `elm-css` in the rest of the code. We want to use `elm-ui` in our new projects, but in projects using `elm-css`, we don't want to use both libraries to keep things simple." ]
+                                , range = elementImportRange
+                                , fix = []
+                                }
+                            )
             }
-            (Node.range node)
-
-    importVisitor : Node Import -> Knowledge -> ( List Rule.Error, Knowledge )
-    importVisitor node knowledge =
-        case Node.value node |> .moduleName |> Node.value of
-            [ "Element" ] ->
-                if knowledge.elmCssWasImported then
-                    ( [ error node ]
-                    , { knowledge | elmUiWasImported = True }
-                    )
-
-                else
-                    ( [ error node ]
-                    , { knowledge | elmUiWasImported = True }
-                    )
-
-            [ "Html", "Styled" ] ->
-                if knowledge.elmUiWasImported then
-                    ( [ error node ]
-                    , { knowledge | elmCssWasImported = True }
-                    )
-
-                else
-                    ( [ error node ]
-                    , { knowledge | elmCssWasImported = True }
-                    )
-
-            _ ->
-                ( [], knowledge )
 
 
 ### comments
 
-the module's comments in source order not parsed as attached documentation by
-[`elm-syntax`](https://package.elm-lang.org/packages/stil4m/elm-syntax/latest/):
-included (✅) / excluded (❌)
+Function/type/type alias declarations have their possible documentation comment (`{-| -}`) included directly in the syntax data.
 
-  - ✅ Module documentation (`{-| -}`)
-  - ✅ Port documentation comments (`{-| -}`)
-  - ✅ Top-level comments not internal to a function/type/etc.
-  - ✅ Comments internal to a function/type/etc.
-  - ❌ Function/type/type alias documentation comments (`{-| -}`)
+All other comments are provided in source order
+
+  - Module documentation (`{-| -}`)
+  - Port documentation comments (`{-| -}`)
+  - comments (`{- -}` and `--`)
 
 If you only need to access the module documentation, you can use
 [`moduleHeaderDocumentation`](#moduleHeaderDocumentation).
@@ -370,15 +320,10 @@ type annotation.
             OnlySome exposedList ->
                 List.member name exposedList
 
-
-### path
-
-The file path, relative to the project's `elm.json`
-
 -}
 inspectModule : ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge) -> Inspect knowledge
 inspectModule moduleDataToKnowledge =
-    InspectProjectModuleToKnowledge moduleDataToKnowledge |> Rope.singleton
+    InspectModule moduleDataToKnowledge
 
 
 {-| Collect knowledge from the [elm.json project config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project)
@@ -388,69 +333,54 @@ A commonly useful helper is [`packageElmJsonExposedModules`](#packageElmJsonExpo
 -}
 inspectElmJson : (Elm.Project.Project -> knowledge) -> Inspect knowledge
 inspectElmJson moduleDataToKnowledge =
-    InspectElmJsonToKnowledge moduleDataToKnowledge |> Rope.singleton
+    InspectElmJson moduleDataToKnowledge
 
 
 {-| Collect knowledge from a provided non-elm or elm.json file like README.md or CHANGELOG.md.
 
 The provided file path is relative to the project's `elm.json`
+and can also be used to specify an [error](#Error) path
 
 -}
 inspectExtraFile : ({ path : String, source : String } -> knowledge) -> Inspect knowledge
 inspectExtraFile moduleDataToKnowledge =
-    InspectExtraFileToKnowledge moduleDataToKnowledge |> Rope.singleton
+    InspectExtraFile moduleDataToKnowledge
 
 
 {-| Collect knowledge from all [project config and docs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/) you directly depend upon
 -}
 inspectDirectDependencies : (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge) -> Inspect knowledge
 inspectDirectDependencies moduleDataToKnowledge =
-    InspectDirectDependenciesToKnowledge moduleDataToKnowledge |> Rope.singleton
+    InspectDirectDependencies moduleDataToKnowledge
 
 
-{-| Write a new [`Review`](#Review)
+{-| Write a new [`Review`](#Review),
+having read ["when to write or enable a review"](./#when-to-write-or-enable-a-review)
 
-  - read ["when to write or enable a review"](./#when-to-write-or-enable-a-review)
-  - `name`: (`VariablesAreUsed`, `DebugForbid`, ...)
-    the name of the module this review is defined in including all the `.`s.
-    It should really quickly convey what kind of pattern we're dealing with. A user who
-    encounters this pattern for the first time could guess the problem just from the
-    name. And a user who encountered it several times should know how to fix the
-    problem just from the name, too
-  - `inspect`: the parts you want to analyze and collect knowledge from. See [`Inspect`](#Inspect)
+  - `inspect`: the parts you want to scan to collect knowledge from. See [section inspecting](#inspecting)
   - `knowledgeMerge`: assemble knowledge from multiple you've collected into one
-  - `report`: the final evaluation, turning your collected and merged knowledge into a list of errors.
-    Take the elm compiler errors as inspiration in terms of helpfulness:
-  - error `message`: half-sentence on what _is_ undesired here. A user
-    that has encountered this error multiple times should know exactly what to do.
-    Example: "`foo` is never used" → a user who
-    knows the rule knows that a function can be removed and which one
-  - error `details`: additional information such as the rationale and suggestions
-    for a solution or alternative
-  - error report `range`: where the squiggly lines appear under. Make this section as small as
-    possible. For instance, in a rule that would forbid
-    `Debug.log`, you would the error to appear under `Debug.log`, not on the whole
-    function call
+  - `report`: the final evaluation, turning your collected and merged knowledge into a list of [errors](#Error).
   - `knowledgeCodec`: For big files especially, re-running all the parsing and inspection every time we change a different file
     is costly, so we serialize it for caching using [miniBill/elm-codec](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
-  - documentation: explain when (not) to enable the review. For instance, for a review that
-    makes sure that a package is publishable by ensuring that all docs are valid,
-    it should say something like "If you are writing an application, you shouldn't enable it".
-    Add a few examples of patterns that will (not) be reported
 
 
-### use Test-Driven Development!
+### use Test-Driven Development
 
 [`Review.Test`](Review-Test) works with [`elm-test`](https://github.com/elm-explorations/test).
-Read ["strategies for effective testing"](Review-Test) before
-starting writing a review.
 If you like putting `Debug.log`s in your code, you'll have a pleasant time
 running your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
+
+### document
+
+Explain when (not) to enable the review. For instance, for a review that
+makes sure that a package is publishable by ensuring that all docs are valid,
+it should say something like "If you are writing an application, you shouldn't enable it".
+Add a few examples of patterns that will (not) be reported
+
 -}
 create :
-    { name : String
-    , inspect : List (Inspect knowledge)
+    { inspect : List (Inspect knowledge)
     , knowledgeMerge : knowledge -> knowledge -> knowledge
     , report : knowledge -> List Error
     , knowledgeCodec : Codec.Codec knowledge
@@ -478,8 +408,6 @@ create review =
             }
         toKnowledges =
             review.inspect
-                |> Rope.fromList
-                |> Rope.concat
                 |> inspectToToKnowledges
 
         knowledgesFoldToMaybe : List knowledge -> Maybe knowledge
@@ -524,8 +452,7 @@ create review =
                                 }
                             )
     in
-    { name = review.name
-    , ignoreErrorsForFiles = \_ -> False
+    { ignoreErrorsForFiles = \_ -> False
     , run =
         \project ->
             let
@@ -632,7 +559,7 @@ create review =
                                     }
                                 )
                         )
-                        (project.cache.moduleKnowledgesByPath
+                        (project.cache.moduleKnowledgeByPath
                             |> dictRemoveKeys removedModuleFilePaths
                         )
                         []
@@ -677,7 +604,7 @@ create review =
                                     }
                                 )
                         )
-                        (project.cache.extraFileKnowledgesByPath
+                        (project.cache.extraFileKnowledgeByPath
                             |> dictRemoveKeys removedExtraFilePaths
                         )
                         []
@@ -702,7 +629,7 @@ create review =
                                 (\error soFar ->
                                     soFar
                                         |> FastDict.update
-                                            (error.target |> fileTargetToPath)
+                                            error.path
                                             (\errorsForPathSoFar ->
                                                 errorsForPathSoFar
                                                     |> Maybe.withDefault []
@@ -723,13 +650,13 @@ create review =
                     , cache =
                         { elmJsonKnowledge = elmJsonKnowledgeAndCache |> Maybe.map .cache
                         , directDependenciesKnowledge = directDependenciesKnowledgeAndCache |> Maybe.map .cache
-                        , moduleKnowledgesByPath =
+                        , moduleKnowledgeByPath =
                             moduleKnowledges
                                 |> FastDictExtra.fromListMap
                                     (\moduleKnowledge ->
                                         { key = moduleKnowledge.path, value = moduleKnowledge.cache }
                                     )
-                        , extraFileKnowledgesByPath =
+                        , extraFileKnowledgeByPath =
                             moduleKnowledges
                                 |> FastDictExtra.fromListMap
                                     (\extraFileKnowledge ->
@@ -740,19 +667,8 @@ create review =
     }
 
 
-fileTargetToPath : FileTarget -> String
-fileTargetToPath =
-    \fileTarget ->
-        case fileTarget of
-            FileTargetElmJson ->
-                "elm.json"
-
-            FileTarget filePath ->
-                filePath.path
-
-
 inspectToToKnowledges :
-    Inspect knowledge
+    List (Inspect knowledge)
     ->
         { directDependenciesToKnowledge : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
         , elmJsonToKnowledge : List (Elm.Project.Project -> knowledge)
@@ -762,28 +678,28 @@ inspectToToKnowledges :
 inspectToToKnowledges =
     \inspect ->
         inspect
-            |> Rope.foldl
+            |> List.foldl
                 (\inspectSingle soFar ->
                     case inspectSingle of
-                        InspectDirectDependenciesToKnowledge toKnowledge ->
+                        InspectDirectDependencies toKnowledge ->
                             { soFar
                                 | directDependenciesToKnowledge =
                                     soFar.directDependenciesToKnowledge |> (::) toKnowledge
                             }
 
-                        InspectElmJsonToKnowledge toKnowledge ->
+                        InspectElmJson toKnowledge ->
                             { soFar
                                 | elmJsonToKnowledge =
                                     soFar.elmJsonToKnowledge |> (::) toKnowledge
                             }
 
-                        InspectExtraFileToKnowledge toKnowledge ->
+                        InspectExtraFile toKnowledge ->
                             { soFar
                                 | extraFileToKnowledge =
                                     soFar.extraFileToKnowledge |> (::) toKnowledge
                             }
 
-                        InspectProjectModuleToKnowledge toKnowledge ->
+                        InspectModule toKnowledge ->
                             { soFar
                                 | moduleToKnowledge =
                                     soFar.moduleToKnowledge |> (::) toKnowledge
@@ -851,15 +767,31 @@ syntaxFileSanitize =
         { syntaxFile
             | comments =
                 syntaxFile.comments
-                    |> List.sortBy (\(Elm.Syntax.Node.Node range _) -> ( range.start.row, range.start.column ))
+                    |> List.sortBy
+                        (\(Elm.Syntax.Node.Node range _) ->
+                            ( range.start.row, range.start.column )
+                        )
         }
 
 
-{-| A thing to report in a given [file](#FileTarget) and range,
-suggesting [fixes](#Fix) and giving details with hints
+{-| A report in a given project file and range, possibly suggesting a [fix](#Fix)
+
+Take the elm compiler errors as inspiration in terms of helpfulness:
+
+  - error `message`: half-sentence on what _is_ undesired here. A user
+    that has encountered this error multiple times should know exactly what to do.
+    Example: "\`\` is never used" → a user who
+    knows the rule knows that a function can be removed and which one
+  - error `details`: additional information such as the rationale and suggestions
+    for a solution or alternative
+  - error report `range`: where the squiggly lines appear under. Make this section as small as
+    possible. For instance, in a rule that would forbid
+    `Debug.log`, you would the error to appear under `Debug.log`, not on the whole
+    function call
+
 -}
 type alias Error =
-    { target : FileTarget
+    { path : String
     , range : Elm.Syntax.Range.Range
     , message : String
     , details : List String
@@ -873,22 +805,22 @@ cacheEmpty : Cache
 cacheEmpty =
     { elmJsonKnowledge = Nothing
     , directDependenciesKnowledge = Nothing
-    , moduleKnowledgesByPath = FastDict.empty
-    , extraFileKnowledgesByPath = FastDict.empty
+    , moduleKnowledgeByPath = FastDict.empty
+    , extraFileKnowledgeByPath = FastDict.empty
     }
 
 
-{-| There are situations where you don't want review rules to report errors:
+{-| There are situations where you don't want a review to report errors:
 
-  - You copied and updated over an external library because one of your needs wasn't met, and you don't want to modify it more than necessary
-  - Your project contains generated source code which isn't supposed to be read and or over which you have less control
-  - You wrote a review that is very specific and should only be applied for a portion of your codebase
+  - an external library you copied over and don't want to modify it more than necessary
+  - generated source code which isn't supposed to be read and or over which you have little control
+  - you wrote a review that is very specific and should only be applied for a portion of your codebase
 
-Note that `tests/` directory is never inspected
+Note that a possible `tests/` directory is never inspected
 
 -}
-ignoreErrorsForFilesWhere : (String -> Bool) -> (Review -> Review)
-ignoreErrorsForFilesWhere filterOut =
+ignoreErrorsForPathsWhere : (String -> Bool) -> (Review -> Review)
+ignoreErrorsForPathsWhere filterOut =
     \review ->
         { review
             | ignoreErrorsForFiles =
@@ -897,33 +829,26 @@ ignoreErrorsForFilesWhere filterOut =
         }
 
 
-{-| Review a project and return the errors reported by the given rules.
+{-| Review a given project and return the errors reported by the given rules + the updated cache.
 
-Note that you won't need to use this function when writing a rule. You should
-only need it if you try to make `elm-review` run in a new environment.
-
-    import Review exposing (Review)
-
-    config : List Review
-    config =
-        [ Some.review
-        , Some.Other.review
-        ]
-
-    project =
-        { modules =
-            [ { path = "src/A.elm", source = "module A exposing (a)\na = 1" }
-            , { path = "src/B.elm", source = "module B exposing (b)\nb = 1" }
-            ]
-        , ...
-        }
+    import Review
+    import SomeConvention
 
     doReview =
         let
-            { errorsByPath, cache } =
-                Rule.review config project
+            project =
+                { cache = Review.cacheEmpty
+                , addedOrChangedFiles =
+                    [ { path = "src/A.elm", source = "module A exposing (a)\na = 1" }
+                    , { path = "src/B.elm", source = "module B exposing (b)\nb = 1" }
+                    ]
+                , ...
+                }
+
+            runResult =
+                Review.run SomeConvention.review project
         in
-        doSomethingWithTheseValues
+        doSomethingWith runResult.errorsByPath
 
 (elm/core is automatically part of every project)
 
@@ -943,7 +868,16 @@ run :
          , cache : Cache
          }
          ->
-            { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Fix })
+            { errorsByPath :
+                FastDict.Dict
+                    String
+                    (List
+                        { range : Elm.Syntax.Range.Range
+                        , message : String
+                        , details : List String
+                        , fix : List Fix
+                        }
+                    )
             , cache : Cache
             }
         )
@@ -951,7 +885,16 @@ run review =
     \project ->
         let
             runResult :
-                { errorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Fix })
+                { errorsByPath :
+                    FastDict.Dict
+                        String
+                        (List
+                            { range : Elm.Syntax.Range.Range
+                            , message : String
+                            , details : List String
+                            , fix : List Fix
+                            }
+                        )
                 , cache : Cache
                 }
             runResult =
@@ -960,29 +903,24 @@ run review =
         { cache = runResult.cache
         , errorsByPath =
             runResult.errorsByPath
-                |> FastDict.foldl
-                    (\path errors soFar ->
+                |> FastDictExtra.justsMap
+                    (\path errors ->
                         if path |> review.ignoreErrorsForFiles then
-                            let
-                                _ =
-                                    Debug.log "ignored" ()
-                            in
-                            soFar
+                            Nothing
 
                         else
-                            soFar |> FastDict.insert path errors
+                            errors |> Just
                     )
-                    FastDict.empty
         }
 
 
-{-| Cache for the result of the analysis of an inspected project part (modules, elm.json, extra files, direct and indirect dependencies).
+{-| Cache for the result of the analysis of an inspected project part (modules, elm.json, extra files, direct dependencies).
 -}
 type alias Cache =
     { elmJsonKnowledge : Maybe KnowledgeGeneric
     , directDependenciesKnowledge : Maybe KnowledgeGeneric
-    , moduleKnowledgesByPath : FastDict.Dict String KnowledgeGeneric
-    , extraFileKnowledgesByPath : FastDict.Dict String KnowledgeGeneric
+    , moduleKnowledgeByPath : FastDict.Dict String KnowledgeGeneric
+    , extraFileKnowledgeByPath : FastDict.Dict String KnowledgeGeneric
     }
 
 
@@ -1233,13 +1171,13 @@ type Fix
 -}
 fixRemoveRange : Elm.Syntax.Range.Range -> Fix
 fixRemoveRange rangeToRemove =
-    fixReplaceRangeBy rangeToRemove ""
+    fixReplaceRange rangeToRemove ""
 
 
 {-| Replace the code in between a range by some other code
 -}
-fixReplaceRangeBy : Elm.Syntax.Range.Range -> String -> Fix
-fixReplaceRangeBy range replacement =
+fixReplaceRange : Elm.Syntax.Range.Range -> String -> Fix
+fixReplaceRange range replacement =
     FixRangeReplacement { range = range, replacement = replacement }
 
 
@@ -1247,10 +1185,10 @@ fixReplaceRangeBy range replacement =
 -}
 fixInsertAt : Elm.Syntax.Range.Location -> String -> Fix
 fixInsertAt location toInsert =
-    fixReplaceRangeBy { start = location, end = location } toInsert
+    fixReplaceRange { start = location, end = location } toInsert
 
 
-{-| Unexpected cased when trying to apply [`Fix`](#Fix)es
+{-| An undesired situation when trying to apply a [`Fix`](#Fix)
 -}
 type FixError
     = AfterFixIsUnchanged
@@ -1280,8 +1218,8 @@ comparePosition a b =
 {-| Try to apply a set of [`Fix`](#Fix)es to the relevant file source,
 potentially failing with a [`FixError`](#FixError)
 -}
-fixFile : List Fix -> String -> Result FixError String
-fixFile fixes sourceCode =
+applyFix : List Fix -> String -> Result FixError String
+applyFix fixes sourceCode =
     if containRangeCollisions fixes then
         FixHasCollisionsInRanges |> Err
 
@@ -1295,7 +1233,7 @@ fixFile fixes sourceCode =
                             -- flipped order
                             comparePosition (b |> fixRange |> .start) (a |> fixRange |> .start)
                         )
-                    |> List.foldl applyFix (sourceCode |> String.lines)
+                    |> List.foldl applyFixSingle (sourceCode |> String.lines)
                     |> String.join "\n"
         in
         if sourceCode == resultAfterFix then
@@ -1305,8 +1243,8 @@ fixFile fixes sourceCode =
             resultAfterFix |> Ok
 
 
-applyFix : Fix -> (List String -> List String)
-applyFix fixToApply =
+applyFixSingle : Fix -> (List String -> List String)
+applyFixSingle fixToApply =
     \lines ->
         case fixToApply of
             FixRangeReplacement replace ->

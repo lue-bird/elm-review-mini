@@ -10,8 +10,7 @@ import Review exposing (Review)
 review : Review
 review =
     Review.create
-        { name = "UnderscoreInModuleNameForbid"
-        , inspect =
+        { inspect =
             [ Review.inspectModule
                 (\moduleData ->
                     let
@@ -47,8 +46,8 @@ review =
                     |> Dict.toList
                     |> List.map
                         (\( path, moduleNameWithUnderscore ) ->
-                            { target = Review.FileTarget { path = path }
-                            , message = "_ in a module name"
+                            { path = path
+                            , message = "module name contains _"
                             , details = [ "By convention, elm modules names use Pascal case (like `MyModuleName`). Please rename your module using this format." ]
                             , range = moduleNameWithUnderscore.range
                             , fix = []

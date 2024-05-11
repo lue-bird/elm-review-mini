@@ -20,8 +20,7 @@ import Set exposing (Set)
 review : Review
 review =
     Review.create
-        { name = "ExposesAreUsed"
-        , inspect =
+        { inspect =
             [ Review.inspectElmJson
                 (\elmJson ->
                     { referenceUseCounts = FastDict.empty
@@ -75,7 +74,7 @@ review =
         }
 
 
-report : Knowledge -> List { target : Review.FileTarget, range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
+report : Knowledge -> List { path : String, range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
 report knowledge =
     let
         allFullyQualifiedReferenceUseCounts : FastDict.Dict Elm.Syntax.ModuleName.ModuleName (FastDict.Dict ( List String, String ) Int)
@@ -154,13 +153,13 @@ report knowledge =
                                 Nothing
 
                             else
-                                { target = Review.FileTarget { path = moduleKnowledge.exposes.path }
+                                { path = moduleKnowledge.exposes.path
                                 , message = [ "expose ", ( moduleKnowledge.name, exposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
                                 , details =
                                     [ "Either use it or remove it from the exposing part of the module header which might reveal its declaration as unused." ]
                                 , range = exposeRange
                                 , fix =
-                                    [ Review.fixReplaceRangeBy moduleKnowledge.exposes.exposingRange
+                                    [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
                                         (Set.union
                                             (moduleKnowledge.exposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
                                                 |> FastDict.LocalExtra.keys
@@ -187,13 +186,13 @@ report knowledge =
                                 (usedReferences |> Set.member ( moduleKnowledge.name, typeExposeUnqualified ))
                                     && (Set.diff (typeExposeVariantReferences ()) usedReferences |> Set.isEmpty)
                             then
-                                { target = Review.FileTarget { path = moduleKnowledge.exposes.path }
+                                { path = moduleKnowledge.exposes.path
                                 , message = [ "expose ", ( moduleKnowledge.name, typeExposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
                                 , details =
                                     [ "Either use it or remove it from the exposing part of the module header which might reveal its declaration as unused." ]
                                 , range = typeExpose.range
                                 , fix =
-                                    [ Review.fixReplaceRangeBy moduleKnowledge.exposes.exposingRange
+                                    [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
                                         (Set.union
                                             (moduleKnowledge.exposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
                                                 |> FastDict.LocalExtra.keys
