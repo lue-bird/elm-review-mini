@@ -19,6 +19,9 @@ recreate the rule you are testing.
 Tests are cheap and it is better to have too many tests rather than too few,
 since the behavior of a review rarely changes drastically.
 
+If you like putting `Debug.log`s in your code, you'll have a pleasant time
+running your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
+
 @docs run, applicationConfigAfterElmInit, ExpectedErrorRange
 
 -}
@@ -450,7 +453,6 @@ toReviewResult review project =
                     , directDependencies = project.directDependencies
                     , addedOrChangedFiles = project.files
                     , removedFilePaths = []
-                    , cache = Review.cacheEmpty
                     }
                         |> Review.run review
                         |> .errorsByPath
