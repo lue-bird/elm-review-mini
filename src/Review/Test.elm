@@ -1,90 +1,23 @@
 module Review.Test exposing (run, applicationConfigAfterElmInit, ExpectedErrorRange(..))
 
-{-| Module that helps you test your rules, using [`elm-test`](https://package.elm-lang.org/packages/elm-explorations/test/latest/).
+{-| Test your review using [`elm-test`](https://package.elm-lang.org/packages/elm-explorations/test/latest/).
 
-Writing a rule works really well in a Test-Driven loop:
+Implementing a review works really well in a Test-Driven loop:
 
-  - write a failing test before writing any code. Run it to make sure that it is failing
-  - write the simplest (almost stupid!) code to make the test pass,
+  - write a failing test before writing any code. Run it to make sure that it is failing.
+    Also write tests to ensure cases _similar_ to what you want to report are not reported.
+    For instance, if you wish to report uses of variables named `foo`, write a test
+    that ensures that the use of variables named differently does not get reported
+  - write simple (almost stupid) review code to make the test pass,
     using `Debug.todo` etc to cut corner cases
-  - run the tests again and make sure that the test is passing, and that you
-    didn't break any previous tests
+  - run the tests again and make sure that both new and previous tests are passing
 
 Then repeat for every case that needs to be handled.
 Ideally, by only reading through the test titles, someone else should be able to
-rewrite the rule you are testing.
-
-Write tests to ensure cases similar to what you want to report are not
-reported.
-
-For instance, if you wish to report uses of variables named `foo`, write a test
-that ensures that the use of variables named differently does not get reported.
+recreate the rule you are testing.
 
 Tests are cheap and it is better to have too many tests rather than too few,
 since the behavior of a review rarely changes drastically.
-
-    import Review.Test
-    import Test exposing (Test)
-    import YourConvention
-
-    tests : Test
-    tests =
-        Test.describe "YourConvention"
-            [ Test.test "report Debug.log use"
-                (\() ->
-                    { files =
-                        [ { path = "src/A.elm"
-                          , source = """
-                                module A exposing (a)
-                                a =
-                                    Debug.log "some" "message"
-                                """
-                          }
-                        ]
-                    , projectConfig =
-                        { elmJson = """
-                            {
-                                "type": "application",
-                                "source-directories": [
-                                    "src"
-                                ],
-                                "elm-version": "0.19.1",
-                                "dependencies": {
-                                    "direct": {
-                                        "elm/core": "1.0.5",
-                                        "elm/html": "1.0.0"
-                                    },
-                                    "indirect": {
-                                    }
-                                },
-                                "test-dependencies": {
-                                    "direct": {},
-                                    "indirect": {}
-                                }
-                            }
-                            """
-                        , directDependencies =
-                            [ ..elm html elm.json and docs.json copied from elm home.. ]
-                        }
-                    , review = YourConvention.review
-                    , expectedErrors =
-                        [ { path = "src/A.elm"
-                          , message = "Remove the use of `Debug` before shipping to production"
-                          , details = [ "Compiling elm code in optimized mode does not allow these helpers." ]
-                          , range = Review.Test.Under "Debug.log"
-                          , fixedSource =
-                              Just """
-                                  module A exposing (a)
-                                  a =
-                                      "message"
-                                  """
-                          }
-                        ]
-                    }
-                        |> Review.Test.run
-
-                )
-            ]
 
 @docs run, applicationConfigAfterElmInit, ExpectedErrorRange
 
@@ -199,8 +132,8 @@ type alias ExpectedError =
 
 
 {-| An expectation for the reported error range.
-If the section to mark is unique in the file, use `Under "your section source"`.
-If the section occurs multiple times in this file, use `UnderExactly { section = "your section source", startingAt = { row = ..., column = ... } }`
+If the section to mark is unique in the source, use `Under "your section source"`.
+If the section occurs multiple times in the source, use `UnderExactly { section = "your section source", startingAt = { row = ..., column = ... } }`
 -}
 type ExpectedErrorRange
     = Under String
@@ -216,8 +149,6 @@ expectationsViolated =
 {-| Run a `Review` on a project, matching all reported module errors, `elm.json` errors and extra file errors
 with your provided expected errors.
 
-(elm/core is automatically part of every project)
-
     import Review.Test
     import Test exposing (Test, describe, test)
     import The.Review.You.Want.To.Test exposing (rule)
@@ -225,37 +156,107 @@ with your provided expected errors.
     tests : Test
     tests =
         describe "The.Review.You.Want.To.Test"
-            [ test "should ..."
+            [ test "should report ... when ..."
                 (\() ->
                     { projectConfig = Review.Test.applicationConfigAfterElmInit
                     , files =
                         [ { path = "src/A/B.elm"
                           , source = """
-                                module A.B exposing (a, b, c)
-                                import B
-                                a = 1
-                                b = 2
-                                c = 3
-                                """
+                              module A.B exposing (a, b, c)
+                              import B
+                              a = 1
+                              b = 2
+                              c = 3
+                              """
                           }
-                        , """
-                            module B exposing (x, y, z)
-                            x = 1
-                            y = 2
-                            z = 3
-                            """
+                        , { path = "src/B.elm"
+                          , source = """
+                              module B exposing (x, y, z)
+                              x = 1
+                              y = 2
+                              z = 3
+                              """
+                          }
                         ]
                     , review = YourConvention.review
                     , expectedErrors =
                         [ { path = "src/A/B.elm"
-                            , message = "message"
-                            , details = [ "details" ]
-                            , range = Review.Test.Under ...
-                            , fixedSource = Nothing
-                            }
+                          , message = "message"
+                          , details = [ "details" ]
+                          , range = Review.Test.Under "where it's located"
+                          , fixedSource = Nothing
+                          }
                         ]
                     }
                         |> Review.Test.run
+                )
+            ]
+
+The extra indentation specified by the first line will be stripped of all the provided source strings.
+
+You can also specify a custom project config in case you need to test a package
+or want to add dependencies (elm/core is automatically part of every tested project)
+
+    import Review.Test
+    import Test exposing (Test)
+    import DebugForbid
+
+    tests : Test
+    tests =
+        Test.describe "DebugForbid"
+            [ Test.test "report Debug.log use"
+                (\() ->
+                    { files =
+                        [ { path = "src/A.elm"
+                          , source = """
+                                module A exposing (a)
+                                a =
+                                    Debug.log "some" "message"
+                                """
+                          }
+                        ]
+                    , projectConfig =
+                        { elmJson = """
+                            {
+                                "type": "application",
+                                "source-directories": [
+                                    "src"
+                                ],
+                                "elm-version": "0.19.1",
+                                "dependencies": {
+                                    "direct": {
+                                        "elm/core": "1.0.5",
+                                        "elm/html": "1.0.0"
+                                    },
+                                    "indirect": {
+                                    }
+                                },
+                                "test-dependencies": {
+                                    "direct": {},
+                                    "indirect": {}
+                                }
+                            }
+                            """
+                        , directDependencies =
+                            [ ..elm html elm.json and docs.json copied from elm home.. ]
+                        }
+                    , review = DebugForbid.review
+                    , expectedErrors =
+                        [ { path = "src/A.elm"
+                          , message = "Remove the use of `Debug` before shipping to production"
+                          , details = [ "Compiling elm code in optimized mode does not allow these helpers." ]
+                          , range = Review.Test.Under "Debug.log"
+                          , fixedSource =
+                              Just """
+                                  module A exposing (a)
+                                  a =
+                                      "message"
+                                  """
+                          }
+                        ]
+                    }
+                        |> Review.Test.run
+
                 )
             ]
 
@@ -929,7 +930,7 @@ checkFixesAreCorrect source reviewError expectedError =
                 |> Expect.fail
 
         ( Just expectedFixedSource, fix0 :: fix1Up ) ->
-            case Review.fixFile (fix0 :: fix1Up) source of
+            case Review.applyFix (fix0 :: fix1Up) source of
                 Ok fixedSource ->
                     if fixedSource == expectedFixedSource then
                         Expect.pass
