@@ -81,13 +81,13 @@ type alias Review =
     }
 
 
-{-| A wild thing!
+{-| A wild thing: A recursive-able function that inspects, folds knowledge and reports errors all in one go.
+Why does it need to be so complicated?
 
-The problem this recursive-able function solves?
 Different reviews can have different knowledge types,
 so how can we put all of them in a single list?
 
-No problem, make hide this parameter by storing just the run function from project files to errors.
+No problem, hide this parameter by only storing the combined run function from project files to errors.
 
 But how do we implement caching this way
 (only re-run inspections for files that changed, otherwise take the already computed knowledge parts)?
@@ -97,7 +97,7 @@ I know about roughly three options:
   - require users to provide encode/decode pairs to some generic structure.
     The simplest and fastest seems to be [miniBill/elm-codec](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
       - the ability to use the encoded cache at any time enables write to disk
-        (not a goal of `elm-review-mini` but the option is nice to have)
+        (not a goal of `elm-review-mini` but having the option is nice)
       - the ability to show the encoded cache in the elm debugger
         (undeniably cool, though that only works in the browser. `Debug.log` is likely a nice enough alternative)
       - the ability to export the produced json for external use
@@ -107,7 +107,7 @@ I know about roughly three options:
   - use js shenanigans to effectively "cast specific context type to any" and "cast any to specific context type"
     similar to [linsyking/elm-anytype](https://dark.elm.dmy.fr/packages/linsyking/elm-anytype/latest/)
       - faster than any possible alternative
-      - simpler internals than any possible alternative
+      - simpler elm internals than any possible alternative
       - the highest possible degree of danger, as incorrect casting is always possible
         (+ no way to control that `Review.run` users wire them correctly)
       - custom embeds of running reviews (e.g. if you wanted to create a browser playground)
@@ -115,8 +115,8 @@ I know about roughly three options:
 
   - provide a future function as a result which knows about the
     previously calculated knowledges.
-    Surprising to me, that's almost trivial to implement and even cuts down
-    internal complexity compared to something like the cache codec.
+    was surprised to find that it's almost trivial to implement and even cuts down
+    internal complexity compared to something like the codec one.
     If you're intrigued and have a week,
     some smart folks have written [an entertaining dialog-blog-ish series about these "Jeremy's interfaces"](https://discourse.elm-lang.org/t/demystifying-jeremys-interfaces/8834)
       - still pretty fast
