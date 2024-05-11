@@ -141,10 +141,8 @@ report knowledge =
                                     reference |> Just
                                 )
                             |> Set.insert ( moduleKnowledge.name, "main" )
-                            |> Debug.log "used references"
                 in
                 [ moduleKnowledge.exposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
-                    |> Debug.log "exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames"
                     |> FastDict.LocalExtra.justsToListMap
                         (\exposeUnqualified exposeRange ->
                             if usedReferences |> Set.member ( moduleKnowledge.name, exposeUnqualified ) then
