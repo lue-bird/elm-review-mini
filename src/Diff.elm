@@ -3,7 +3,7 @@ module Diff exposing
     , diff
     )
 
-{-| Copied from <https://github.com/jinjor/elm-diff/> with typos changed and elm-review fixes applied in the code
+{-| Derived from <https://github.com/jinjor/elm-diff/> including edits to typos, types and inlining in the code
 
 The following is the original license
 
@@ -71,14 +71,15 @@ type StepResult
 
 
 type BugReport
-    = CannotGetA Int
-    | CannotGetB Int
-    | UnexpectedPath ( Int, Int ) (List ( Int, Int ))
+    = CannotGetA
+    | CannotGetB
+    | UnexpectedPath
 
 
 {-| Compares general lists.
 
-    diff [ 1, 3 ] [ 2, 3 ] == [ Removed 1, Added 2, NoChange 3 ] -- True
+    diff [ 1, 3 ] [ 2, 3 ]
+    --> [ Removed 1, Added 2, NoChange 3 ]
 
 -}
 diff : List a -> List a -> List (Change a)
@@ -96,23 +97,12 @@ If it returns Err, it should be a bug.
 -}
 testDiff : List a -> List a -> Result BugReport (List (Change a))
 testDiff a b =
+    arrayTestDiff (a |> Array.fromList) (b |> Array.fromList)
+
+
+arrayTestDiff : Array a -> Array a -> Result BugReport (List (Change a))
+arrayTestDiff arrA arrB =
     let
-        arrA : Array a
-        arrA =
-            Array.fromList a
-
-        m : Int
-        m =
-            Array.length arrA
-
-        arrB : Array a
-        arrB =
-            Array.fromList b
-
-        n : Int
-        n =
-            Array.length arrB
-
         -- Elm's Array doesn't allow null element,
         -- so we'll use shifted index to access source.
         getA : Int -> Maybe a
@@ -123,13 +113,23 @@ testDiff a b =
         getB =
             \y -> Array.get (y - 1) arrB
 
-        path : List ( Int, Int )
-        path =
-            -- Is there any case ond is needed?
-            -- ond getA getB m n
-            onp getA getB m n
+        aLength : Int
+        aLength =
+            Array.length arrA
+
+        bLength : Int
+        bLength =
+            Array.length arrB
     in
-    makeChanges getA getB path
+    makeChanges
+        getA
+        getB
+        (onpLoopP (snake getA getB)
+            (bLength - aLength)
+            aLength
+            0
+            (Array.initialize (aLength + bLength + 1) (\_ -> []))
+        )
 
 
 makeChanges :
@@ -154,65 +154,47 @@ makeChangesHelp :
     -> List ( Int, Int )
     -> Result BugReport (List (Change a))
 makeChangesHelp changes getA getB ( x, y ) path =
+    -- IGNORE TCO
     case path of
         [] ->
             Ok changes
 
         ( prevX, prevY ) :: tail ->
             let
-                change : Result BugReport (Change a)
-                change =
-                    if x - 1 == prevX && y - 1 == prevY then
-                        case getA x of
-                            Just a ->
-                                Ok (NoChange a)
-
-                            Nothing ->
-                                Err (CannotGetA x)
-
-                    else if x == prevX then
-                        case getB y of
-                            Just b ->
-                                Ok (Added b)
-
-                            Nothing ->
-                                Err (CannotGetB y)
-
-                    else if y == prevY then
-                        case getA x of
-                            Just a ->
-                                Ok (Removed a)
-
-                            Nothing ->
-                                Err (CannotGetA x)
-
-                    else
-                        Err (UnexpectedPath ( x, y ) path)
-            in
-            case change of
-                Ok c ->
+                makeChangesHelpWith : Change a -> Result BugReport (List (Change a))
+                makeChangesHelpWith c =
                     makeChangesHelp (c :: changes) getA getB ( prevX, prevY ) tail
+            in
+            if x - 1 == prevX && y - 1 == prevY then
+                case getA x of
+                    Just a ->
+                        NoChange a |> makeChangesHelpWith
 
-                Err e ->
-                    Err e
+                    Nothing ->
+                        Err CannotGetA
+
+            else if x == prevX then
+                case getB y of
+                    Just b ->
+                        Added b |> makeChangesHelpWith
+
+                    Nothing ->
+                        Err CannotGetB
+
+            else if y == prevY then
+                case getA x of
+                    Just a ->
+                        Removed a |> makeChangesHelpWith
+
+                    Nothing ->
+                        Err CannotGetA
+
+            else
+                Err UnexpectedPath
 
 
 
 -- Myers's O(ND) algorithm (http://www.xmailserver.org/diff2.pdf)
-
-
-onp : (Int -> Maybe a) -> (Int -> Maybe a) -> Int -> Int -> List ( Int, Int )
-onp getA getB m n =
-    let
-        v : Array (List ( Int, Int ))
-        v =
-            Array.initialize (m + n + 1) (\_ -> [])
-
-        delta : Int
-        delta =
-            n - m
-    in
-    onpLoopP (snake getA getB) delta m 0 v
 
 
 snake :
@@ -312,23 +294,27 @@ step snake_ offset k v =
             Maybe.withDefault [] (Array.get (k + 1 + offset) v)
 
         ( path, ( x, y ) ) =
-            case ( fromLeft, fromTop ) of
-                ( [], [] ) ->
-                    ( [], ( 0, 0 ) )
+            case fromLeft of
+                [] ->
+                    case fromTop of
+                        [] ->
+                            ( [], ( 0, 0 ) )
 
-                ( [], ( topX, topY ) :: _ ) ->
-                    ( fromTop, ( topX + 1, topY ) )
+                        ( topX, topY ) :: topTail ->
+                            ( ( topX, topY ) :: topTail, ( topX + 1, topY ) )
 
-                ( ( leftX, leftY ) :: _, [] ) ->
-                    ( fromLeft, ( leftX, leftY + 1 ) )
+                ( leftX, leftY ) :: leftTail ->
+                    case fromTop of
+                        [] ->
+                            ( ( leftX, leftY ) :: leftTail, ( leftX, leftY + 1 ) )
 
-                ( ( leftX, leftY ) :: _, ( topX, topY ) :: _ ) ->
-                    -- this implies "remove" comes always earlier than "add"
-                    if leftY + 1 >= topY then
-                        ( fromLeft, ( leftX, leftY + 1 ) )
+                        ( topX, topY ) :: topTail ->
+                            -- this implies "remove" comes always earlier than "add"
+                            if leftY + 1 >= topY then
+                                ( ( leftX, leftY ) :: leftTail, ( leftX, leftY + 1 ) )
 
-                    else
-                        ( fromTop, ( topX + 1, topY ) )
+                            else
+                                ( ( topX, topY ) :: topTail, ( topX + 1, topY ) )
 
         ( newPath, goal ) =
             snake_ (x + 1) (y + 1) (( x, y ) :: path)
