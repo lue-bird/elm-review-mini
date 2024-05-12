@@ -406,9 +406,7 @@ having read ["when to write or enable a review"](./#when-to-write-or-enable-a-re
 
   - `inspect`: the parts you want to scan to collect knowledge from. See [section inspecting](#inspecting)
   - `knowledgeMerge`: assemble knowledge from multiple you've collected into one
-  - `report`: the final evaluation, turning your collected and merged knowledge into a list of [errors](#Error).
-  - `knowledgeCodec`: For big files especially, re-running all the parsing and inspection every time we change a different file
-    is costly, so we serialize it for caching using [miniBill/elm-codec](https://dark.elm.dmy.fr/packages/miniBill/elm-codec/latest/)
+  - `report`: the final evaluation, turning your collected and merged knowledge into a list of [errors](#Error)
 
 
 ### use Test-Driven Development
