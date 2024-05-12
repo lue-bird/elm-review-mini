@@ -52,7 +52,6 @@ If you want to make `elm-review-mini` run in a new environment
 
 import Elm.Docs
 import Elm.Module
-import Elm.Parser
 import Elm.Project
 import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
@@ -63,10 +62,8 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import ElmCoreDependency
-import ElmJson.LocalExtra
 import FastDict
 import FastDictExtra
-import Json.Decode
 import ListExtra
 import Set exposing (Set)
 import Unicode
@@ -132,9 +129,11 @@ Though I'm always excited to try and experiment with other options (except the c
 type Run
     = Run
         ({ elmJson : { source : String, project : Elm.Project.Project }
-         , directDependencies : List { elmJson : String, docsJson : String }
-         , addedOrChangedFiles : List { path : String, source : String }
-         , removedFilePaths : List String
+         , directDependencies : List { elmJson : Elm.Project.Project, docsJson : List Elm.Docs.Module }
+         , addedOrChangedExtraFiles : List { path : String, source : String }
+         , addedOrChangedModules : List { path : String, source : String, syntax : Elm.Syntax.File.File }
+         , removedExtraFilePaths : List String
+         , removedModulePaths : List String
          }
          ->
             { errorsByPath :
@@ -454,35 +453,26 @@ create review =
                         others |> List.foldl review.knowledgeMerge one |> Just
 
         moduleToMaybeKnowledge :
-            { path : String, source : String }
+            { path : String, source : String, syntax : Elm.Syntax.File.File }
             -> Maybe { path : String, knowledge : knowledge }
         moduleToMaybeKnowledge moduleFile =
-            case moduleFile.source |> Elm.Parser.parseToFile of
-                Err _ ->
-                    let
-                        _ =
-                            Debug.log "module parsing failed" ()
-                    in
-                    Nothing
-
-                Ok syntax ->
-                    let
-                        moduleData : { path : String, source : String, syntax : Elm.Syntax.File.File }
-                        moduleData =
-                            { path = moduleFile.path
-                            , source = moduleFile.source
-                            , syntax = syntax |> syntaxFileSanitize
-                            }
-                    in
-                    toKnowledges.moduleToKnowledge
-                        |> List.map (\f -> f moduleData)
-                        |> knowledgesFoldToMaybe
-                        |> Maybe.map
-                            (\foldedKnowledge ->
-                                { path = moduleFile.path
-                                , knowledge = foldedKnowledge
-                                }
-                            )
+            let
+                moduleData : { path : String, source : String, syntax : Elm.Syntax.File.File }
+                moduleData =
+                    { path = moduleFile.path
+                    , source = moduleFile.source
+                    , syntax = moduleFile.syntax |> syntaxFileSanitize
+                    }
+            in
+            toKnowledges.moduleToKnowledge
+                |> List.map (\f -> f moduleData)
+                |> knowledgesFoldToMaybe
+                |> Maybe.map
+                    (\foldedKnowledge ->
+                        { path = moduleFile.path
+                        , knowledge = foldedKnowledge
+                        }
+                    )
 
         runWithCache : Cache knowledge -> Run
         runWithCache cache =
@@ -509,41 +499,15 @@ create review =
 
                                 Nothing ->
                                     let
-                                        directDependenciesIncluding : List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
-                                        directDependenciesIncluding =
+                                        directDependenciesData : List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
+                                        directDependenciesData =
                                             project.directDependencies
-                                                |> List.filterMap
-                                                    (\dependency ->
-                                                        Result.map2 (\elmJson modules -> { elmJson = elmJson, modules = modules })
-                                                            (dependency.elmJson |> Json.Decode.decodeString Elm.Project.decoder)
-                                                            (dependency.elmJson |> Json.Decode.decodeString (Json.Decode.list Elm.Docs.decoder))
-                                                            |> Result.toMaybe
-                                                    )
+                                                |> List.map (\directDep -> { elmJson = directDep.elmJson, modules = directDep.docsJson })
                                                 |> ListExtra.consJust ElmCoreDependency.parsed
                                     in
                                     toKnowledges.directDependenciesToKnowledge
-                                        |> List.map (\f -> f directDependenciesIncluding)
+                                        |> List.map (\f -> f directDependenciesData)
                                         |> knowledgesFoldToMaybe
-
-                        sourceDirectories : List String
-                        sourceDirectories =
-                            project.elmJson.project |> ElmJson.LocalExtra.sourceDirectories
-
-                        pathIsModule : String -> Bool
-                        pathIsModule =
-                            \path ->
-                                (path |> String.endsWith ".elm")
-                                    && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
-
-                        ( addedOrChangedModuleFiles, addedOrChangedExtraFiles ) =
-                            project.addedOrChangedFiles
-                                |> List.partition
-                                    (\file -> file.path |> pathIsModule)
-
-                        ( removedModuleFilePaths, removedExtraFilePaths ) =
-                            project.removedFilePaths
-                                |> List.partition
-                                    (\path -> path |> pathIsModule)
 
                         moduleKnowledges : List { path : String, knowledge : knowledge }
                         moduleKnowledges =
@@ -553,7 +517,7 @@ create review =
                                 (\path knowledgeCache soFar ->
                                     soFar |> (::) { path = path, knowledge = knowledgeCache }
                                 )
-                                (addedOrChangedModuleFiles
+                                (project.addedOrChangedModules
                                     |> FastDictExtra.fromListMap
                                         (\file ->
                                             { key = file.path
@@ -562,7 +526,7 @@ create review =
                                         )
                                 )
                                 (cache.moduleKnowledgeByPath
-                                    |> dictRemoveKeys removedModuleFilePaths
+                                    |> dictRemoveKeys project.removedModulePaths
                                 )
                                 []
 
@@ -588,7 +552,7 @@ create review =
                                 (\path knowledgeCache soFar ->
                                     soFar |> (::) { path = path, knowledge = knowledgeCache }
                                 )
-                                (addedOrChangedExtraFiles
+                                (project.addedOrChangedExtraFiles
                                     |> FastDictExtra.fromListMap
                                         (\file ->
                                             { key = file.path
@@ -597,7 +561,7 @@ create review =
                                         )
                                 )
                                 (cache.extraFileKnowledgeByPath
-                                    |> dictRemoveKeys removedExtraFilePaths
+                                    |> dictRemoveKeys project.removedExtraFilePaths
                                 )
                                 []
 
@@ -829,9 +793,9 @@ ignoreErrorsForPathsWhere filterOut =
     doReview =
         let
             project =
-                { addedOrChangedFiles =
-                    [ { path = "src/A.elm", source = "module A exposing (a)\na = 1" }
-                    , { path = "src/B.elm", source = "module B exposing (b)\nb = 1" }
+                { addedOrChangedModules =
+                    [ { path = "src/A.elm", source = "module A exposing (a)\na = 1", syntax = ... }
+                    , { path = "src/B.elm", source = "module B exposing (b)\nb = 1", syntax = ... }
                     ]
                 , ...
                 }
@@ -851,10 +815,10 @@ You can store this resulting `nextRun` in your application state type, e.g.
         { run = yourApplicationState.nextRunProvidedByTheLastReviewRun
         , ignoreErrorsForPathsWhere = SomeConvention.review.ignoreErrorsForPathsWhere
         }
-        { addedOrChangedFiles =
-            [ { path = "src/C.elm", source = "module C exposing (c)\nc = 1" }
+        { addedOrChangedModules =
+            [ { path = "src/C.elm", source = "module C exposing (c)\nc = 1", syntax = ... }
             ]
-        , removedPaths = [ "src/B.elm" ]
+        , removedModulePaths = [ "src/B.elm" ]
         , ...
         }
 
@@ -863,9 +827,11 @@ run :
     Review
     ->
         ({ elmJson : { source : String, project : Elm.Project.Project }
-         , directDependencies : List { elmJson : String, docsJson : String }
-         , addedOrChangedFiles : List { path : String, source : String }
-         , removedFilePaths : List String
+         , directDependencies : List { elmJson : Elm.Project.Project, docsJson : List Elm.Docs.Module }
+         , addedOrChangedExtraFiles : List { path : String, source : String }
+         , addedOrChangedModules : List { path : String, source : String, syntax : Elm.Syntax.File.File }
+         , removedExtraFilePaths : List String
+         , removedModulePaths : List String
          }
          ->
             { errorsByPath :

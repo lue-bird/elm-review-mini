@@ -26,8 +26,10 @@ run your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
 -}
 
+import Elm.Docs
 import Elm.Parser
 import Elm.Project
+import Elm.Syntax.File
 import Elm.Syntax.Range
 import ElmJson.LocalExtra
 import Expect
@@ -65,7 +67,7 @@ import Set exposing (Set)
     }
 
 -}
-applicationConfigAfterElmInit : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
+applicationConfigAfterElmInit : { elmJson : String, directDependencies : List { elmJson : Elm.Project.Project, docsJson : List Elm.Docs.Module } }
 applicationConfigAfterElmInit =
     { elmJson = """
         {
@@ -407,7 +409,7 @@ toReviewResult review project =
         moduleParseResults :
             Result
                 (List { path : String })
-                (List { path : String, source : String })
+                (List { path : String, source : String, syntax : Elm.Syntax.File.File })
         moduleParseResults =
             moduleFiles
                 |> List.foldl
@@ -424,13 +426,14 @@ toReviewResult review project =
                                     |> (::) { path = moduleUnparsed.path }
                                     |> Err
 
-                            Ok _ ->
+                            Ok syntax ->
                                 case soFar of
                                     Ok parsedSoFar ->
                                         parsedSoFar
                                             |> (::)
                                                 { path = moduleUnparsed.path
                                                 , source = moduleUnparsed.source
+                                                , syntax = syntax
                                                 }
                                             |> Ok
 
@@ -447,66 +450,106 @@ toReviewResult review project =
 
         Ok modulesParsed ->
             let
-                runErrorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix })
-                runErrorsByPath =
-                    { elmJson = project.elmJson
-                    , directDependencies = project.directDependencies
-                    , addedOrChangedFiles = project.files
-                    , removedFilePaths = []
-                    }
-                        |> Review.run review
-                        |> .errorsByPath
-
-                fileErrors : List SuccessfulRunResult
-                fileErrors =
-                    [ modulesParsed
+                directDependenciesParsed : List { parsed : Maybe { elmJson : Elm.Project.Project, docsJson : List Elm.Docs.Module }, errors : List String }
+                directDependenciesParsed =
+                    project.directDependencies
                         |> List.map
-                            (\module_ ->
-                                moduleToRunResult
-                                    (runErrorsByPath
-                                        |> FastDict.get module_.path
-                                        |> Maybe.withDefault []
-                                    )
-                                    module_
-                            )
-                    , case runErrorsByPath |> FastDict.get "elm.json" of
-                        Just errorsForElmJson ->
-                            [ { path = "elm.json"
-                              , source = project.elmJson.source
-                              , errors = errorsForElmJson
-                              }
-                            ]
+                            (\directDependency ->
+                                let
+                                    elmJsonParseResult : Result Json.Decode.Error Elm.Project.Project
+                                    elmJsonParseResult =
+                                        directDependency.elmJson |> Json.Decode.decodeString Elm.Project.decoder
 
-                        Nothing ->
-                            []
-                    , extraFiles
-                        |> List.filterMap
-                            (\extraFile ->
-                                runErrorsByPath
-                                    |> FastDict.get extraFile.path
-                                    |> Maybe.map
-                                        (\errorsForExtraFile ->
-                                            { path = extraFile.path
-                                            , source = extraFile.source
-                                            , errors = errorsForExtraFile
-                                            }
-                                        )
+                                    docsJsonParseResult : Result Json.Decode.Error (List Elm.Docs.Module)
+                                    docsJsonParseResult =
+                                        directDependency.docsJson |> Json.Decode.decodeString (Json.Decode.list Elm.Docs.decoder)
+                                in
+                                case ( elmJsonParseResult, docsJsonParseResult ) of
+                                    ( Ok elmJsonParsed, Ok docsJsonParsed ) ->
+                                        { parsed = Just { elmJson = elmJsonParsed, docsJson = docsJsonParsed }
+                                        , errors = []
+                                        }
+
+                                    ( Ok _, Err docsJsonParseError ) ->
+                                        { parsed = Nothing
+                                        , errors = [ Review.Test.FailureMessage.dependencyDocsJsonParsingFailure docsJsonParseError ]
+                                        }
+
+                                    ( Err elmJsonParseError, Ok _ ) ->
+                                        { parsed = Nothing
+                                        , errors = [ Review.Test.FailureMessage.dependencyElmJsonParsingFailure elmJsonParseError ]
+                                        }
+
+                                    ( Err elmJsonParseError, Err docsJsonParseError ) ->
+                                        { parsed = Nothing
+                                        , errors =
+                                            [ Review.Test.FailureMessage.dependencyDocsJsonParsingFailure docsJsonParseError
+                                            , Review.Test.FailureMessage.dependencyElmJsonParsingFailure elmJsonParseError
+                                            ]
+                                        }
                             )
-                    ]
-                        |> List.concat
             in
-            fileErrors |> Ok
+            case directDependenciesParsed |> List.concatMap .errors of
+                directDependenciesFailedToParse0 :: directDependenciesFailedToParse1Up ->
+                    (directDependenciesFailedToParse0 :: directDependenciesFailedToParse1Up)
+                        |> Err
 
+                [] ->
+                    let
+                        runErrorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix })
+                        runErrorsByPath =
+                            { elmJson = project.elmJson
+                            , directDependencies =
+                                directDependenciesParsed
+                                    |> List.filterMap .parsed
+                            , addedOrChangedExtraFiles = extraFiles
+                            , addedOrChangedModules = modulesParsed
+                            , removedExtraFilePaths = []
+                            , removedModulePaths = []
+                            }
+                                |> Review.run review
+                                |> .errorsByPath
 
-moduleToRunResult :
-    List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
-    -> { path : String, source : String }
-    -> SuccessfulRunResult
-moduleToRunResult errorsForModule projectModule =
-    { path = projectModule.path
-    , source = projectModule.source
-    , errors = errorsForModule
-    }
+                        fileErrors : List SuccessfulRunResult
+                        fileErrors =
+                            [ modulesParsed
+                                |> List.map
+                                    (\module_ ->
+                                        { path = module_.path
+                                        , source = module_.source
+                                        , errors =
+                                            runErrorsByPath
+                                                |> FastDict.get module_.path
+                                                |> Maybe.withDefault []
+                                        }
+                                    )
+                            , case runErrorsByPath |> FastDict.get "elm.json" of
+                                Just errorsForElmJson ->
+                                    [ { path = "elm.json"
+                                      , source = project.elmJson.source
+                                      , errors = errorsForElmJson
+                                      }
+                                    ]
+
+                                Nothing ->
+                                    []
+                            , extraFiles
+                                |> List.filterMap
+                                    (\extraFile ->
+                                        runErrorsByPath
+                                            |> FastDict.get extraFile.path
+                                            |> Maybe.map
+                                                (\errorsForExtraFile ->
+                                                    { path = extraFile.path
+                                                    , source = extraFile.source
+                                                    , errors = errorsForExtraFile
+                                                    }
+                                                )
+                                    )
+                            ]
+                                |> List.concat
+                    in
+                    fileErrors |> Ok
 
 
 invalidExpectedErrorsIn :

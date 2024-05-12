@@ -1,4 +1,4 @@
-module Review.Test.FailureMessage exposing (didNotExpectErrors, elmJsonFixedSourceParsingFailure, elmJsonParsingFailure, emptyDetails, expectedErrorsButFoundNone, fixedCodeMismatch, fixedCodeWhitespaceMismatch, hasCollisionsInFixRanges, locationIsAmbiguousInSourceCode, messageMismatch, missingFixes, moduleFixedSourceParsingFailure, moduleParsingFailure, tooFewErrors, tooManyErrors, unchangedSourceAfterFix, underMismatch, unexpectedDetails, unexpectedFixes, unknownFilesInExpectedErrors, wrongLocation)
+module Review.Test.FailureMessage exposing (dependencyDocsJsonParsingFailure, dependencyElmJsonParsingFailure, didNotExpectErrors, elmJsonFixedSourceParsingFailure, elmJsonParsingFailure, emptyDetails, expectedErrorsButFoundNone, fixedCodeMismatch, fixedCodeWhitespaceMismatch, hasCollisionsInFixRanges, locationIsAmbiguousInSourceCode, messageMismatch, missingFixes, moduleFixedSourceParsingFailure, moduleParsingFailure, tooFewErrors, tooManyErrors, unchangedSourceAfterFix, underMismatch, unexpectedDetails, unexpectedFixes, unknownFilesInExpectedErrors, wrongLocation)
 
 {-| Failure messages for the `Review.Test` module.
 -}
@@ -111,6 +111,40 @@ moduleParsingFailure file =
                 |> String.concat
     in
     failureMessage "MODULE SOURCE CODE PARSING ERROR" ([ details, "\n\n", hint ] |> String.concat)
+
+
+dependencyElmJsonParsingFailure : Json.Decode.Error -> String
+dependencyElmJsonParsingFailure jsonDecodeError =
+    let
+        hint : String
+        hint =
+            """Hint: Maybe you copy pasted the wrong file?"""
+
+        details : String
+        details =
+            [ """I could not parse a provided dependency elm.json source: """
+            , jsonDecodeError |> Json.Decode.errorToString
+            ]
+                |> String.concat
+    in
+    failureMessage "DEPENDENCY ELM.JSON SOURCE PARSING ERROR" ([ details, "\n\n", hint ] |> String.concat)
+
+
+dependencyDocsJsonParsingFailure : Json.Decode.Error -> String
+dependencyDocsJsonParsingFailure jsonDecodeError =
+    let
+        hint : String
+        hint =
+            """Hint: Maybe you copy pasted the wrong file?"""
+
+        details : String
+        details =
+            [ """I could not parse a provided dependency docs.json source: """
+            , jsonDecodeError |> Json.Decode.errorToString
+            ]
+                |> String.concat
+    in
+    failureMessage "DEPENDENCY DOCS.JSON SOURCE PARSING ERROR" ([ details, "\n\n", hint ] |> String.concat)
 
 
 moduleFixedSourceParsingFailure : { path : String, errorInfo : { message : String, details : List String } } -> String
