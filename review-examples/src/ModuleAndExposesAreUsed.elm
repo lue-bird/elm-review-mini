@@ -222,7 +222,7 @@ report knowledge =
                                 in
                                 if fixedExposes |> Set.isEmpty then
                                     { path = moduleKnowledge.exposes.path
-                                    , message = [ "module ", moduleKnowledge.name |> String.join ".", " isn't imported by any module" ] |> String.concat
+                                    , message = [ "module ", moduleKnowledge.name |> String.join ".", " isn't used" ] |> String.concat
                                     , details =
                                         [ "Since all exposed members aren't used outside of this module, the whole module is unused."
                                         , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.

@@ -518,7 +518,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                 , review = ModuleAndExposesAreUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
-                      , message = "module A isn't imported by any module"
+                      , message = "module A isn't used"
                       , details =
                             [ "Since all exposed members aren't used outside of this module, the whole module is unused."
                             , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
