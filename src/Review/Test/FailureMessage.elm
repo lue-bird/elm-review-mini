@@ -28,25 +28,33 @@ wrapInQuotes string =
     [ "`", string, "`" ] |> String.concat
 
 
-rangeAsString : Elm.Syntax.Range.Range -> String
-rangeAsString =
+rangeToCodeString : Elm.Syntax.Range.Range -> String
+rangeToCodeString =
     \range ->
-        [ "{ start = { row = "
-        , String.fromInt range.start.row
+        [ "{ start = "
+        , range.start |> locationToCodeString
+        , ", end = "
+        , range.end |> locationToCodeString
+        , " }"
+        ]
+            |> String.concat
+
+
+locationToCodeString : Elm.Syntax.Range.Location -> String
+locationToCodeString =
+    \location ->
+        [ "{ row = "
+        , String.fromInt location.row
         , ", column = "
-        , String.fromInt range.start.column
-        , " }, end = { row = "
-        , String.fromInt range.end.row
-        , ", column = "
-        , String.fromInt range.end.column
-        , " } }"
+        , String.fromInt location.column
+        , " }"
         ]
             |> String.concat
 
 
 errorMessageAndPosition : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
 errorMessageAndPosition error =
-    [ "  - ", wrapInQuotes error.message, "\n    at ", rangeAsString error.range ] |> String.concat
+    [ "  - ", wrapInQuotes error.message, "\n    at ", rangeToCodeString error.range ] |> String.concat
 
 
 didNotExpectErrors : String -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String
@@ -322,13 +330,13 @@ and I found it, but the exact location you specified is not the one I found.
 I was expecting the error at:
 
   """
-         , rangeAsString range
+         , rangeToCodeString range
          , """
 
 but I found it at:
 
   """
-         , rangeAsString error.range
+         , rangeToCodeString error.range
          ]
             |> String.concat
         )
@@ -436,7 +444,8 @@ listOccurrencesAsLocations sourceCode under occurrences =
                 "  - "
                     ++ (occurrence
                             |> positionAsRange sourceCode under
-                            |> rangeAsString
+                            |> .start
+                            |> locationToCodeString
                        )
             )
         |> String.join "\n"

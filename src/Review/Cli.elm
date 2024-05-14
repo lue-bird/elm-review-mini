@@ -1,10 +1,10 @@
 module Review.Cli exposing (program, Program, ProgramEvent(..), ProgramState(..))
 
-{-| Run a review in the terminal
+{-| Run reviews from the terminal, re-running on file changes
 
 @docs program, Program, ProgramEvent, ProgramState
 
-dev note: if you experience high memory footprint for large project,
+If you experience a high memory footprint in a large project,
 please open an issue called "only ask for file sources to generate local error displays"
 
 -}

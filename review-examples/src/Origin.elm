@@ -71,7 +71,7 @@ bundleResourcesForEasyLookup :
     FastDict.Dict
         Elm.Syntax.ModuleName.ModuleName
         { exposedTypesWithVariantNames : FastDict.Dict String (Set String)
-        , exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames : Set String
+        , exposedSimpleNames : Set String
         }
     -> List Elm.Syntax.Import.Import
     -> ResourcesForEasyLookup
@@ -91,7 +91,7 @@ bundleResourcesForEasyLookup byModule syntaxImports =
                                 |> FastDict.get moduleName
                                 |> Maybe.withDefault
                                     { exposedTypesWithVariantNames = FastDict.empty
-                                    , exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames = Set.empty
+                                    , exposedSimpleNames = Set.empty
                                     }
                             )
             in
@@ -216,7 +216,7 @@ implicitImports =
 
 importKnowledge :
     { exposedTypesWithVariantNames : FastDict.Dict String (Set String)
-    , exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames : Set String
+    , exposedSimpleNames : Set String
     }
     -> (Elm.Syntax.Import.Import -> { exposed : Set String, alias : Maybe String })
 importKnowledge moduleExposes import_ =
@@ -229,7 +229,7 @@ importKnowledge moduleExposes import_ =
             Just (Elm.Syntax.Node.Node _ existingExposing) ->
                 case existingExposing of
                     Elm.Syntax.Exposing.All _ ->
-                        [ moduleExposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
+                        [ moduleExposes.exposedSimpleNames
                         , moduleExposes |> .exposedTypesWithVariantNames |> FastDict.keys |> Set.fromList
                         , moduleExposes |> .exposedTypesWithVariantNames |> FastDict.values |> Set.LocalExtra.unionFromList
                         ]

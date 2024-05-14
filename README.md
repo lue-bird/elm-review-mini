@@ -1,7 +1,8 @@
-> Status: CLI isn't ready for use
+> Status: unpublished, a few helpers still missing
 
 elm-review-mini scans your [elm](https://elm-lang.org/) project to enforce conventions
-using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-). It takes heavy inspiration from [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) but focuses on a much simpler API and internals (see also [the feeling section](#feelings)).
+using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
+While heavily inspired by [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/), it has a much simpler API, much lighter internals (see also [the feeling section](#feelings)) but also almost no published reviews so far.
 
 Use it in your project by adding this starter config with the CLI set up
 ```bash
@@ -40,11 +41,10 @@ import Review
 review : Review.Review
 review =
     Review.create
-        { name = "StringWithMisspelledCompanyNameForbid"
-        , inspect =
+        { inspect =
             [ Review.inspectModule
-                (\module ->
-                    module.syntax.declarations
+                (\moduleData ->
+                    moduleData.syntax.declarations
                         |> List.concatMap
                             (\(Elm.Syntax.Node.Node _ declaration) ->
                                 case Elm.Syntax.Node.value declaration of
@@ -62,7 +62,7 @@ review =
                                 case expressionNode of
                                     Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
                                         if string |> String.contains "frits.com" then
-                                            { modulePath = module.path, range = range } |> Just
+                                            { modulePath = moduleData.path, range = range } |> Just
 
                                         else
                                             Nothing
@@ -148,5 +148,5 @@ For big projects run by a single person, the bus factor becomes increasingly sca
 and I'd be horribly sad for a tool as great as `elm-review` to become stale/abandoned.
 
 I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things more rough for users (performance, convenience, even beginner friendliness!).
-You have been warned, I will take away all your favorite APIs and tool interactions!
+You have been warned: all your favorite APIs and tool interactions might get canned.
 Most things that seem rather simple and super cool will sneakily demand "just this edge case as well". Wait a few years and we have elm-review all over again.

@@ -67,7 +67,7 @@ import Set exposing (Set)
     }
 
 -}
-applicationConfigAfterElmInit : { elmJson : String, directDependencies : List { elmJson : Elm.Project.Project, docsJson : List Elm.Docs.Module } }
+applicationConfigAfterElmInit : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
 applicationConfigAfterElmInit =
     { elmJson = """
         {

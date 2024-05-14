@@ -1,14 +1,13 @@
 module Review exposing
     ( Review, ignoreErrorsForPathsWhere
     , create
-    , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
+    , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule, Inspect(..)
     , Error, elmJsonPath
     , Fix(..), fixInsertAt, fixRemoveRange, fixReplaceRange
     , expressionSubs, expressionFold
-    , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
+    , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
     , sourceExtractInRange
     , packageElmJsonExposedModules
-    , Inspect(..)
     , run, applyFix, FixError(..), Run(..)
     )
 
@@ -24,7 +23,7 @@ and uses the combined knowledge to report problems.
 
 Collect knowledge from parts of the project.
 
-@docs inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
+@docs inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule, Inspect
 
 
 ## reporting
@@ -36,16 +35,15 @@ Collect knowledge from parts of the project.
 ## convenience helpers
 
 @docs expressionSubs, expressionFold
-@docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposing
+@docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
 @docs sourceExtractInRange
 @docs packageElmJsonExposedModules
 
 
-# safe internals
+## running
 
-If you want to make `elm-review-mini` run in a new environment
+Make `elm-review-mini` run in a new environment
 
-@docs Inspect
 @docs run, applyFix, FixError, Run
 
 -}
@@ -151,15 +149,7 @@ type Run
         )
 
 
-{-| How to collect knowledge from scanning a project.
-
-Examples:
-
-  - "data to determine all bindings in scope"
-  - "data to determine a given reference's full origin"
-  - "data to determine the reference's minimum qualification"
-  - "type information"
-
+{-| How to collect knowledge from scanning a single part of the project
 -}
 type Inspect knowledge
     = InspectDirectDependencies (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
@@ -168,7 +158,7 @@ type Inspect knowledge
     | InspectModule ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
 
 
-{-| Relative reference to the project elm.json to be used in an [`Error`](#Error) or [test](Review-Test).
+{-| Relative path to the project elm.json to be used in an [`Error`](#Error) or [test](Review-Test).
 You could also just use `"elm.json"` which feels a bit brittle.
 -}
 elmJsonPath : String
@@ -1064,8 +1054,8 @@ moduleHeaderNameNode =
 
 {-| The module header [exposing part](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Exposing#Exposing) + range
 -}
-moduleHeaderExposing : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
-moduleHeaderExposing =
+moduleHeaderExposingNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
+moduleHeaderExposingNode =
     \(Elm.Syntax.Node.Node _ moduleHeader) ->
         case moduleHeader of
             Elm.Syntax.Module.NormalModule moduleHeaderData ->

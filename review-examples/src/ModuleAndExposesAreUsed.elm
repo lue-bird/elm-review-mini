@@ -1,4 +1,10 @@
-module ExposesAreUsed exposing (review)
+module ModuleAndExposesAreUsed exposing (review)
+
+{-|
+
+@docs review
+
+-}
 
 import Declaration.LocalExtra
 import Elm.Project
@@ -16,6 +22,59 @@ import Review exposing (Review)
 import Set exposing (Set)
 
 
+{-| Report exposed members of modules that aren't referenced outside of the module itself.
+If there would be no exposed members left, report the whole module as unused.
+
+Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+But maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important.
+
+If intended for determined future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it.
+
+
+### reported
+
+    module Main exposing (main)
+
+    import A
+
+    main =
+        A.a
+
+using
+
+    import A exposing (a, unusedExpose)
+
+    a =
+        unusedExpose
+
+    unusedExpose =
+        ...
+
+
+### not reported
+
+    module Main exposing (main)
+
+    import A
+
+    main =
+        A.a
+
+using
+
+    import A exposing (a)
+
+    a =
+        private
+
+    private =
+        ...
+
+-}
 review : Review
 review =
     Review.create
@@ -50,7 +109,7 @@ review =
                         let
                             exposes :
                                 { range : Elm.Syntax.Range.Range
-                                , typeWithoutVariantsAndTypeAliasAndValueAndFunctionNames : FastDict.Dict String Elm.Syntax.Range.Range
+                                , simpleNames : FastDict.Dict String Elm.Syntax.Range.Range
                                 , typesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : Set String }
                                 }
                             exposes =
@@ -60,7 +119,7 @@ review =
                             moduleName
                             { path = moduleData.path
                             , exposingRange = exposes.range
-                            , exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames = exposes.typeWithoutVariantsAndTypeAliasAndValueAndFunctionNames
+                            , exposedSimpleNames = exposes.simpleNames
                             , exposedTypesWithVariantNames = exposes.typesWithVariantNames
                             }
                     , modulesAllowingUnusedExposes = Set.empty
@@ -87,8 +146,8 @@ report knowledge =
                                     (knowledge.moduleExposes
                                         |> FastDict.map
                                             (\_ moduleExposes ->
-                                                { exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames =
-                                                    moduleExposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
+                                                { exposedSimpleNames =
+                                                    moduleExposes.exposedSimpleNames
                                                         |> FastDict.LocalExtra.keys
                                                 , exposedTypesWithVariantNames =
                                                     moduleExposes.exposedTypesWithVariantNames
@@ -142,33 +201,63 @@ report knowledge =
                                 )
                             |> Set.insert ( moduleKnowledge.name, "main" )
                 in
-                [ moduleKnowledge.exposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
+                [ moduleKnowledge.exposes.exposedSimpleNames
                     |> FastDict.LocalExtra.justsToListMap
                         (\exposeUnqualified exposeRange ->
                             if usedReferences |> Set.member ( moduleKnowledge.name, exposeUnqualified ) then
                                 Nothing
 
                             else
-                                { path = moduleKnowledge.exposes.path
-                                , message = [ "expose ", ( moduleKnowledge.name, exposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
-                                , details =
-                                    [ "Either use it or remove it from the exposing part of the module header which might reveal its declaration as unused." ]
-                                , range = exposeRange
-                                , fix =
-                                    [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
-                                        (Set.union
-                                            (moduleKnowledge.exposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
+                                let
+                                    fixedExposes : Set String
+                                    fixedExposes =
+                                        Set.union
+                                            (moduleKnowledge.exposes.exposedSimpleNames
                                                 |> FastDict.LocalExtra.keys
                                                 |> Set.remove exposeUnqualified
                                             )
                                             (moduleKnowledge.exposes.exposedTypesWithVariantNames
                                                 |> FastDict.LocalExtra.keys
                                             )
-                                            |> exposingToString
-                                        )
-                                    ]
-                                }
-                                    |> Just
+                                in
+                                if fixedExposes |> Set.isEmpty then
+                                    { path = moduleKnowledge.exposes.path
+                                    , message = [ "module ", moduleKnowledge.name |> String.join ".", " isn't imported by any module" ] |> String.concat
+                                    , details =
+                                        [ "Since all exposed members aren't used outside of this module, the whole module is unused."
+                                        , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+But maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important."""
+                                        , """If intended for determined future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
+                                        ]
+                                    , range = exposeRange
+                                    , fix = []
+                                    }
+                                        |> Just
+
+                                else
+                                    { path = moduleKnowledge.exposes.path
+                                    , message = [ "expose ", ( moduleKnowledge.name, exposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
+                                    , details =
+                                        [ "Since all exposed members aren't used outside of this module, the whole module is unused."
+                                        , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+But maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important."""
+                                        , """If intended for determined future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
+                                        ]
+                                    , range = exposeRange
+                                    , fix =
+                                        [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
+                                            (fixedExposes |> exposingToString)
+                                        ]
+                                    }
+                                        |> Just
                         )
                 , moduleKnowledge.exposes.exposedTypesWithVariantNames
                     |> FastDict.LocalExtra.justsToListMap
@@ -190,7 +279,7 @@ report knowledge =
                                 , fix =
                                     [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
                                         (Set.union
-                                            (moduleKnowledge.exposes.exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames
+                                            (moduleKnowledge.exposes.exposedSimpleNames
                                                 |> FastDict.LocalExtra.keys
                                             )
                                             (moduleKnowledge.exposes.exposedTypesWithVariantNames
@@ -235,7 +324,7 @@ moduleToExposes :
     Elm.Syntax.File.File
     ->
         { range : Elm.Syntax.Range.Range
-        , typeWithoutVariantsAndTypeAliasAndValueAndFunctionNames : FastDict.Dict String Elm.Syntax.Range.Range
+        , simpleNames : FastDict.Dict String Elm.Syntax.Range.Range
         , typesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : Set String }
         }
 moduleToExposes syntaxFile =
@@ -262,71 +351,92 @@ moduleToExposes syntaxFile =
                     )
                 |> FastDict.fromList
     in
-    case syntaxFile.moduleDefinition |> Review.moduleHeaderExposing of
+    case syntaxFile.moduleDefinition |> Review.moduleHeaderExposingNode of
         Elm.Syntax.Node.Node range (Elm.Syntax.Exposing.Explicit exposeSet) ->
-            { range = range
-            , typeWithoutVariantsAndTypeAliasAndValueAndFunctionNames =
-                exposeSet
-                    |> List.filterMap
-                        (\(Elm.Syntax.Node.Node exposeRange expose) ->
-                            case expose of
-                                Elm.Syntax.Exposing.TypeExpose choiceTypeExpose ->
-                                    case choiceTypeExpose.open of
-                                        Nothing ->
-                                            ( choiceTypeExpose.name, exposeRange ) |> Just
+            exposeSet
+                |> List.foldl
+                    (\(Elm.Syntax.Node.Node exposeRange expose) soFar ->
+                        case expose of
+                            Elm.Syntax.Exposing.TypeExpose choiceTypeExpose ->
+                                case choiceTypeExpose.open of
+                                    Nothing ->
+                                        { soFar
+                                            | simpleNames = soFar.simpleNames |> FastDict.insert choiceTypeExpose.name exposeRange
+                                        }
 
-                                        Just _ ->
-                                            Nothing
+                                    Just _ ->
+                                        moduleTypesWithVariantNames
+                                            |> FastDict.get choiceTypeExpose.name
+                                            |> Maybe.map
+                                                (\variantNames ->
+                                                    { soFar
+                                                        | typesWithVariantNames =
+                                                            soFar.typesWithVariantNames
+                                                                |> FastDict.insert choiceTypeExpose.name
+                                                                    { range = exposeRange
+                                                                    , variants = variantNames
+                                                                    }
+                                                    }
+                                                )
+                                            |> Maybe.withDefault soFar
 
-                                Elm.Syntax.Exposing.FunctionExpose valueOrFunctionName ->
-                                    ( valueOrFunctionName, exposeRange ) |> Just
+                            Elm.Syntax.Exposing.FunctionExpose valueOrFunctionName ->
+                                { soFar
+                                    | simpleNames =
+                                        soFar.simpleNames |> FastDict.insert valueOrFunctionName exposeRange
+                                }
 
-                                Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
-                                    ( exposeName, exposeRange ) |> Just
+                            Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
+                                { soFar
+                                    | simpleNames =
+                                        soFar.simpleNames |> FastDict.insert exposeName exposeRange
+                                }
 
-                                Elm.Syntax.Exposing.InfixExpose _ ->
-                                    Nothing
-                        )
-                    |> FastDict.fromList
-            , typesWithVariantNames =
-                exposeSet
-                    |> List.filterMap
-                        (\(Elm.Syntax.Node.Node exposeRange expose) ->
-                            case expose of
-                                Elm.Syntax.Exposing.TypeExpose choiceTypeExpose ->
-                                    case choiceTypeExpose.open of
-                                        Nothing ->
-                                            Nothing
-
-                                        Just _ ->
-                                            moduleTypesWithVariantNames
-                                                |> FastDict.get choiceTypeExpose.name
-                                                |> Maybe.map
-                                                    (\variantNames ->
-                                                        ( choiceTypeExpose.name
-                                                        , { range = exposeRange
-                                                          , variants = variantNames
-                                                          }
-                                                        )
-                                                    )
-
-                                Elm.Syntax.Exposing.FunctionExpose _ ->
-                                    Nothing
-
-                                Elm.Syntax.Exposing.TypeOrAliasExpose _ ->
-                                    Nothing
-
-                                Elm.Syntax.Exposing.InfixExpose _ ->
-                                    Nothing
-                        )
-                    |> FastDict.fromList
-            }
+                            Elm.Syntax.Exposing.InfixExpose symbol ->
+                                { soFar
+                                    | simpleNames =
+                                        soFar.simpleNames |> FastDict.insert symbol exposeRange
+                                }
+                    )
+                    { range = range
+                    , simpleNames = FastDict.empty
+                    , typesWithVariantNames = FastDict.empty
+                    }
 
         Elm.Syntax.Node.Node range (Elm.Syntax.Exposing.All allRange) ->
             { range = range
-            , typeWithoutVariantsAndTypeAliasAndValueAndFunctionNames =
-                Debug.todo ""
-                    |> FastDict.fromList
+            , simpleNames =
+                syntaxFile.declarations
+                    |> List.foldl
+                        (\(Elm.Syntax.Node.Node _ declaration) soFar ->
+                            case declaration of
+                                Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                    soFar
+
+                                Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
+                                    soFar
+                                        |> FastDict.insert
+                                            (valueOrFunctionDeclaration.declaration
+                                                |> Elm.Syntax.Node.value
+                                                |> .name
+                                                |> Elm.Syntax.Node.value
+                                            )
+                                            allRange
+
+                                Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
+                                    soFar |> FastDict.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value) allRange
+
+                                Elm.Syntax.Declaration.PortDeclaration signature ->
+                                    soFar |> FastDict.insert (signature.name |> Elm.Syntax.Node.value) allRange
+
+                                Elm.Syntax.Declaration.InfixDeclaration symbol ->
+                                    soFar |> FastDict.insert (symbol.function |> Elm.Syntax.Node.value) allRange
+
+                                -- invalid elm
+                                Elm.Syntax.Declaration.Destructuring _ _ ->
+                                    soFar
+                        )
+                        FastDict.empty
             , typesWithVariantNames =
                 moduleTypesWithVariantNames
                     |> FastDict.map (\_ variants -> { variants = variants, range = allRange })
@@ -360,7 +470,7 @@ type alias Knowledge =
             Elm.Syntax.ModuleName.ModuleName
             { path : String
             , exposingRange : Elm.Syntax.Range.Range
-            , exposedValueAndFunctionAndTypeAliasAndTypeWithoutVariantsNames : FastDict.Dict String Elm.Syntax.Range.Range
+            , exposedSimpleNames : FastDict.Dict String Elm.Syntax.Range.Range
             , exposedTypesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : Set String }
             }
     }

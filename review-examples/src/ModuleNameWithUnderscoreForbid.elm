@@ -1,4 +1,4 @@
-module UnderscoreInModuleNameForbid exposing (review)
+module ModuleNameWithUnderscoreForbid exposing (review)
 
 import Dict
 import Elm.Syntax.ModuleName

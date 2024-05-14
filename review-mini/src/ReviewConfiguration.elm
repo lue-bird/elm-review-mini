@@ -1,8 +1,11 @@
 module ReviewConfiguration exposing (configuration)
 
 import Review
-import UnderscoreInModuleNameForbid
 import ExposesAreUsed
+import ImportExposingIsExplicit
+import LetValueOrFunctionIsTypeAnnotated
+import ModuleExposingIsExplicit
+import ModuleValueOrFunctionIsTypeAnnotated
 
 
 configuration : { reviews : List Review.Review, extraPaths : List String }
@@ -10,7 +13,10 @@ configuration =
     { extraPaths =
         [ "README.md" ]
     , reviews =
-        [ UnderscoreInModuleNameForbid.review
+        [ ImportExposingIsExplicit.review
+        , ModuleExposingIsExplicit.review
         , ExposesAreUsed.review
+        , ModuleValueOrFunctionIsTypeAnnotated.review
+        , LetValueOrFunctionIsTypeAnnotated.review
         ]
     }
