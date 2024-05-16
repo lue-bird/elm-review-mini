@@ -427,8 +427,7 @@ create review =
             , moduleToKnowledge : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
             }
         toKnowledges =
-            review.inspect
-                |> inspectToToKnowledges
+            review.inspect |> inspectToToKnowledges
 
         knowledgesFoldToMaybe : List knowledge -> Maybe knowledge
         knowledgesFoldToMaybe =
@@ -563,7 +562,7 @@ create review =
                     in
                     case allKnowledges |> knowledgesFoldToMaybe of
                         Nothing ->
-                            { errorsByPath = FastDict.empty, nextRun = runWithCache cache }
+                            { errorsByPath = FastDict.empty, nextRun = runWithCache knowledgeCacheEmpty }
 
                         Just completeKnowledge ->
                             { errorsByPath =
@@ -602,7 +601,7 @@ create review =
                                                     { key = moduleKnowledge.path, value = moduleKnowledge.knowledge }
                                                 )
                                     , extraFileKnowledgeByPath =
-                                        moduleKnowledges
+                                        extraFilesKnowledges
                                             |> FastDictExtra.fromListMap
                                                 (\extraFileKnowledge ->
                                                     { key = extraFileKnowledge.path, value = extraFileKnowledge.knowledge }
@@ -612,13 +611,16 @@ create review =
                 )
     in
     { ignoreErrorsForPathsWhere = \_ -> False
-    , run =
-        runWithCache
-            { elmJsonKnowledge = Nothing
-            , directDependenciesKnowledge = Nothing
-            , moduleKnowledgeByPath = FastDict.empty
-            , extraFileKnowledgeByPath = FastDict.empty
-            }
+    , run = runWithCache knowledgeCacheEmpty
+    }
+
+
+knowledgeCacheEmpty : Cache knowledge_
+knowledgeCacheEmpty =
+    { elmJsonKnowledge = Nothing
+    , directDependenciesKnowledge = Nothing
+    , moduleKnowledgeByPath = FastDict.empty
+    , extraFileKnowledgeByPath = FastDict.empty
     }
 
 
@@ -750,7 +752,7 @@ type alias Error =
     , range : Elm.Syntax.Range.Range
     , message : String
     , details : List String
-    , fix : List Fix
+    , fix : List Fix -- TODO consider fixes across files by path
     }
 
 
