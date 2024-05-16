@@ -1,11 +1,13 @@
 module Tests exposing (tests)
 
+import DebugIsNotUsed
 import ImportExposingIsExplicit
 import LetValueOrFunctionIsTypeAnnotated
 import ModuleAndExposesAreUsed
 import ModuleExposingIsExplicit
 import ModuleNameWithUnderscoreForbid
 import ModuleValueOrFunctionIsTypeAnnotated
+import PatternVariableIsUsed
 import Review
 import Review.Test
 import Test exposing (Test)
@@ -17,9 +19,11 @@ tests =
         [ moduleNameWithUnderscoreForbidTests
         , moduleValueOrFunctionIsTypeAnnotatedTests
         , letValueOrFunctionIsTypeAnnotatedTests
-        , exposesAreUsedTests
+        , moduleAndExposesAreUsedTests
+        , patternVariablesAreUsedTests
         , moduleExposingIsExplicitTests
         , importExposingIsExplicitTests
+        , debugIsNotUsedTests
         ]
 
 
@@ -442,8 +446,8 @@ importExposingIsExplicitTests =
         ]
 
 
-exposesAreUsedTests : Test
-exposesAreUsedTests =
+moduleAndExposesAreUsedTests : Test
+moduleAndExposesAreUsedTests =
     Test.describe "ModuleAndExposesAreUsed"
         [ Test.test "unused exposed value, usage fully qualified"
             (\() ->
@@ -629,6 +633,748 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             b =
                                 2
                             """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        ]
+
+
+patternVariablesAreUsedTests : Test
+patternVariablesAreUsedTests =
+    Test.describe "PatternVariableIsUsed"
+        [ Test.test "used pattern variables are not reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+
+                        type A
+                            = A String
+                        
+                        a x0 ( x1, x2 ) { x3 } =
+                            \\(() as x4) ->
+                                let
+                                    (A x5) =
+                                        A x0
+                                    
+                                    ( _, _, x6 ) =
+                                        ( x3, x4, x5 )
+                                    
+                                    b (((x7))) =
+                                        case x1 of
+                                            [ x8 ] ->
+                                                [ x2, x6, x7, x8 ]
+                                            
+                                            _ ->
+                                                []
+                                in
+                                b x0
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused function declaration argument pattern variable is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a unused =
+                            ""
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a _ =
+                                ""
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused function declaration argument pattern variable from single-field record is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a { unused } =
+                            ""
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a _ =
+                                ""
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused function declaration argument pattern variable as first from multi-field record is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a { unused, used } =
+                            used
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a { used } =
+                                used
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused function declaration argument pattern variable as last from multi-field record is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a { used, unused } =
+                            used
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a { used } =
+                                used
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused function declaration argument pattern variable from as is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a (() as unused) =
+                            ""
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a (()) =
+                                ""
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused lambda argument pattern variable is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a =
+                            \\unused -> ""
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a =
+                                \\_ -> ""
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused case argument pattern variable is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a =
+                            case () of
+                                unused ->
+                                    ""
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a =
+                                case () of
+                                    _ ->
+                                        ""
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused let destructured argument pattern variable is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a =
+                            let
+                                ( unused, _ ) =
+                                    ( (), () )
+                            in
+                            ""
+                        """
+                      }
+                    ]
+                , review = PatternVariableIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "pattern variable unused isn't used"
+                      , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedSource = Just """
+                            module A exposing (a)
+                            
+                            a =
+                                let
+                                    ( _, _ ) =
+                                        ( (), () )
+                                in
+                                ""
+                            """
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        ]
+
+
+debugIsNotUsedTests : Test
+debugIsNotUsedTests =
+    Test.describe "DebugIsNotUsed"
+        [ Test.test "using variables named log, toString, todo are allowed"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a todo =
+                                \\toString ->
+                                    let
+                                        log =
+                                            toString
+                                    in
+                                    [ log, todo ]
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using log with import Debug exposing (log) and module-declared log is allowed"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug exposing (log)
+
+                            log =
+                                identity
+                            
+                            a =
+                                log ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using log with import Debug exposing (log) with alias and module-declared log is allowed"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as DebugAlias exposing (log)
+
+                            log =
+                                identity
+                            
+                            a =
+                                log ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using \"Debug.log\" though unambiguous import alias to a module different than Debug is allowed"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as DebugAlias
+                            import Debug2 as Debug
+                            
+                            a =
+                                Debug.log
+                            """
+                      }
+                    , { path = "src/Debug2.elm"
+                      , source = """
+                            module Debug2 exposing (log)
+                            
+                            log =
+                                identity
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using Debug.todo from implicit import is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                Debug.todo ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.todo is used"
+                      , details =
+                            [ "Debug.todo marks missing functionality which needs to be added gradually."
+                            ]
+                      , range = Review.Test.Under "Debug.todo"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using Debug.log from implicit import is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                Debug.log ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.log is used"
+                      , details =
+                            [ """Debug.log is a quick and dirty way to display an elm value in the console
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.Under "Debug.log"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using Debug.toString from implicit import is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                Debug.toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.Under "Debug.toString"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using Debug.toString qualified by import alias is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as Dbg
+                            
+                            a =
+                                Dbg.toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.Under "Dbg.toString"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using unqualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug exposing (toString)
+                            
+                            a =
+                                toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using qualified Debug.toString from explicit import exposing and import alias and without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as Dbg exposing (toString)
+                            
+                            a =
+                                Dbg.toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.Under "Dbg.toString"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using unqualified Debug.toString from explicit import exposing with alias and without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as Dbg exposing (toString)
+                            
+                            a =
+                                toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using qualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug exposing (toString)
+                            
+                            a =
+                                Debug.toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.Under "Debug.toString"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using qualified Debug.toString from explicit import exposing (..) and import alias and without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as Dbg exposing (..)
+                            
+                            a =
+                                Dbg.toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.Under "Dbg.toString"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using unqualified Debug.toString from import exposing (..) with alias and without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug as Dbg exposing (..)
+                            
+                            a =
+                                toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "using unqualified Debug.toString from import exposing (..) without module value/function declaration with the same name is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import Debug exposing (..)
+                            
+                            a =
+                                toString ""
+                            """
+                      }
+                    ]
+                , review = DebugIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "Debug.toString is used"
+                      , details =
+                            [ """Debug.toString is a quick and dirty way to display an elm value somewhere
+and can for example be used to inspect private (opaque) types.
+It's nothing a published product should make use of.
+Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
+                            ]
+                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , fixedSource = Nothing
                       }
                     ]
                 }

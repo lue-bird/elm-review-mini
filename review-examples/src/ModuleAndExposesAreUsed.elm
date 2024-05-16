@@ -101,7 +101,14 @@ review =
                     in
                     { referenceUseCounts =
                         { referenceUseCounts =
-                            moduleData.syntax.declarations |> Declaration.LocalExtra.listReferenceCountUses
+                            moduleData.syntax.declarations
+                                |> FastDict.LocalExtra.unionFromListWithMap
+                                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                                        declaration
+                                            |> Declaration.LocalExtra.referenceUses
+                                            |> FastDict.map (\_ ranges -> ranges |> List.length)
+                                    )
+                                    (+)
                         , imports = moduleData.syntax.imports |> List.map Elm.Syntax.Node.value
                         }
                             |> FastDict.singleton moduleName

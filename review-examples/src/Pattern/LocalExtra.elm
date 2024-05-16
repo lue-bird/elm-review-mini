@@ -1,37 +1,40 @@
-module Pattern.LocalExtra exposing (listReferenceUseCounts, nodeVariables, referenceUseCounts)
+module Pattern.LocalExtra exposing (listReferenceUses, referenceUses, variables, variablesAndRanges)
 
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
+import Elm.Syntax.Range
 import FastDict
 import FastDict.LocalExtra
+import List.LocalExtra
+import Review exposing (fixReplaceRange)
 import Set exposing (Set)
 import Set.LocalExtra
 
 
-referenceUseCountsMerge :
-    FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-referenceUseCountsMerge a b =
-    FastDict.LocalExtra.unionWith (\aCount bCount -> aCount + bCount) a b
+referenceUsesMerge :
+    FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+referenceUsesMerge a b =
+    FastDict.LocalExtra.unionWith (\aRanges bRanges -> aRanges ++ bRanges) a b
 
 
-listReferenceUseCounts :
+listReferenceUses :
     List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-listReferenceUseCounts =
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+listReferenceUses =
     \patternNodeList ->
         patternNodeList
-            |> List.foldl (\sub -> referenceUseCountsMerge (sub |> referenceUseCounts)) FastDict.empty
+            |> List.foldl (\sub -> referenceUsesMerge (sub |> referenceUses)) FastDict.empty
 
 
-referenceUseCounts :
+referenceUses :
     Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-referenceUseCounts =
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+referenceUses =
     -- IGNORE TCO
-    \(Elm.Syntax.Node.Node _ pattern) ->
+    \(Elm.Syntax.Node.Node patternRange pattern) ->
         case pattern of
             Elm.Syntax.Pattern.AllPattern ->
                 FastDict.empty
@@ -61,80 +64,150 @@ referenceUseCounts =
                 FastDict.empty
 
             Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
-                inParens |> referenceUseCounts
+                inParens |> referenceUses
 
             Elm.Syntax.Pattern.AsPattern aliased _ ->
-                aliased |> referenceUseCounts
+                aliased |> referenceUses
 
             Elm.Syntax.Pattern.UnConsPattern head tail ->
-                referenceUseCountsMerge (tail |> referenceUseCounts) (head |> referenceUseCounts)
+                referenceUsesMerge (tail |> referenceUses) (head |> referenceUses)
 
             Elm.Syntax.Pattern.TuplePattern parts ->
-                parts |> listReferenceUseCounts
+                parts |> listReferenceUses
 
             Elm.Syntax.Pattern.ListPattern elements ->
-                elements |> listReferenceUseCounts
+                elements |> listReferenceUses
 
             Elm.Syntax.Pattern.NamedPattern fullyQualified arguments ->
                 arguments
-                    |> listReferenceUseCounts
-                    |> referenceUseCountsMerge
-                        (FastDict.singleton ( fullyQualified.moduleName, fullyQualified.name ) 1)
+                    |> listReferenceUses
+                    |> referenceUsesMerge
+                        (FastDict.singleton ( fullyQualified.moduleName, fullyQualified.name )
+                            [ { start = patternRange.start
+                              , end =
+                                    { row = patternRange.end.row
+                                    , column =
+                                        patternRange.start.column
+                                            + (( fullyQualified.moduleName, fullyQualified.name ) |> qualifiedToString |> String.length)
+                                    }
+                              }
+                            ]
+                        )
 
 
-{-| Recursively find all bindings in a pattern.
+qualifiedToString : ( Elm.Syntax.ModuleName.ModuleName, String ) -> String
+qualifiedToString =
+    \( qualification, unqualified ) ->
+        case qualification of
+            [] ->
+                unqualified
+
+            qualificationPart0 :: qualificationPart1Up ->
+                ((qualificationPart0 :: qualificationPart1Up) |> String.join ".")
+                    ++ "."
+                    ++ unqualified
+
+
+{-| Recursively find all bindings in the pattern
 -}
-nodeVariables : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> Set String
-nodeVariables =
-    \(Elm.Syntax.Node.Node _ pattern) -> pattern |> variables
-
-
-variables : Elm.Syntax.Pattern.Pattern -> Set String
+variables : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> Set String
 variables =
+    \patternNode -> patternNode |> variablesAndRanges |> List.LocalExtra.toSetMap (\variable -> variable.variableName)
+
+
+{-| Recursively find all bindings + ranges in the pattern
+-}
+variablesAndRanges :
+    Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
+    -> List { variableName : String, variableRange : Elm.Syntax.Range.Range, fixRange : Elm.Syntax.Range.Range, fixReplacement : String }
+variablesAndRanges =
     -- IGNORE TCO
-    \pattern ->
+    \(Elm.Syntax.Node.Node patternRange pattern) ->
         case pattern of
             Elm.Syntax.Pattern.VarPattern name ->
-                name |> Set.singleton
+                [ { variableName = name, variableRange = patternRange, fixRange = patternRange, fixReplacement = "_" } ]
 
-            Elm.Syntax.Pattern.AsPattern afterAsPattern (Elm.Syntax.Node.Node _ name) ->
-                Set.insert name (afterAsPattern |> nodeVariables)
+            Elm.Syntax.Pattern.AsPattern afterAsPattern (Elm.Syntax.Node.Node aliasNameRange name) ->
+                { variableName = name
+                , variableRange = aliasNameRange
+                , fixReplacement = ""
+                , fixRange = { start = afterAsPattern |> Elm.Syntax.Node.range |> .end, end = aliasNameRange.end }
+                }
+                    :: (afterAsPattern |> variablesAndRanges)
 
             Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
-                inParens |> nodeVariables
+                inParens |> variablesAndRanges
 
             Elm.Syntax.Pattern.ListPattern patterns ->
-                patterns |> Set.LocalExtra.unionFromListMap nodeVariables
+                patterns |> List.concatMap variablesAndRanges
 
             Elm.Syntax.Pattern.TuplePattern patterns ->
-                patterns |> Set.LocalExtra.unionFromListMap nodeVariables
+                patterns |> List.concatMap variablesAndRanges
 
-            Elm.Syntax.Pattern.RecordPattern patterns ->
-                patterns |> Set.LocalExtra.fromListMap (\(Elm.Syntax.Node.Node _ name) -> name)
+            Elm.Syntax.Pattern.RecordPattern fields ->
+                case fields of
+                    [] ->
+                        []
+
+                    [ Elm.Syntax.Node.Node onlyFieldRange onlyFieldName ] ->
+                        [ { variableName = onlyFieldName
+                          , variableRange = onlyFieldRange
+                          , fixReplacement = "_"
+                          , fixRange = patternRange
+                          }
+                        ]
+
+                    (Elm.Syntax.Node.Node field0Range field0Name) :: (Elm.Syntax.Node.Node field1Range field1Name) :: field2Up ->
+                        (Elm.Syntax.Node.Node field1Range field1Name :: field2Up)
+                            -- take ranges starting at previous comma
+                            |> List.foldl
+                                (\(Elm.Syntax.Node.Node fieldRange fieldName) soFar ->
+                                    { previousEnd = fieldRange.end
+                                    , variables =
+                                        soFar.variables
+                                            |> (::)
+                                                { variableName = fieldName
+                                                , variableRange = fieldRange
+                                                , fixRange =
+                                                    { start = soFar.previousEnd
+                                                    , end = fieldRange.end
+                                                    }
+                                                , fixReplacement = ""
+                                                }
+                                    }
+                                )
+                                { previousEnd = field0Range.end, variables = [] }
+                            |> .variables
+                            |> (::)
+                                { variableName = field0Name
+                                , variableRange = field0Range
+                                , fixRange = { start = field0Range.start, end = field1Range.start }
+                                , fixReplacement = ""
+                                }
 
             Elm.Syntax.Pattern.NamedPattern _ patterns ->
-                patterns |> Set.LocalExtra.unionFromListMap nodeVariables
+                patterns |> List.concatMap variablesAndRanges
 
             Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
-                Set.union (tailPattern |> nodeVariables) (headPattern |> nodeVariables)
+                (tailPattern |> variablesAndRanges) ++ (headPattern |> variablesAndRanges)
 
             Elm.Syntax.Pattern.AllPattern ->
-                Set.empty
+                []
 
             Elm.Syntax.Pattern.UnitPattern ->
-                Set.empty
+                []
 
             Elm.Syntax.Pattern.CharPattern _ ->
-                Set.empty
+                []
 
             Elm.Syntax.Pattern.StringPattern _ ->
-                Set.empty
+                []
 
             Elm.Syntax.Pattern.IntPattern _ ->
-                Set.empty
+                []
 
             Elm.Syntax.Pattern.HexPattern _ ->
-                Set.empty
+                []
 
             Elm.Syntax.Pattern.FloatPattern _ ->
-                Set.empty
+                []

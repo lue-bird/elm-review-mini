@@ -1,9 +1,10 @@
-module Declaration.LocalExtra exposing (listReferenceCountUses)
+module Declaration.LocalExtra exposing (referenceUses)
 
 import Elm.Syntax.Declaration
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
+import Elm.Syntax.Range
 import Expression.LocalExtra
 import FastDict
 import FastDict.LocalExtra
@@ -11,41 +12,6 @@ import Pattern.LocalExtra
 import Set exposing (Set)
 import Set.LocalExtra
 import Type.LocalExtra
-
-
-listReferenceUseCountsMerge :
-    List (FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int)
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-listReferenceUseCountsMerge =
-    \referenceUseCountsList ->
-        referenceUseCountsList
-            |> List.foldl (\sub -> referenceUseCountsMerge sub) FastDict.empty
-
-
-referenceUseCountsMerge :
-    FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-referenceUseCountsMerge a b =
-    FastDict.LocalExtra.unionWith (\aCount bCount -> aCount + bCount) a b
-
-
-listReferenceCountUses :
-    List (Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration)
-    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int
-listReferenceCountUses =
-    \declarations ->
-        let
-            declarationListNames : Set String
-            declarationListNames =
-                declarations |> Set.LocalExtra.unionFromListMap (\(Elm.Syntax.Node.Node _ declaration) -> declaration |> names)
-        in
-        declarations
-            |> List.map
-                (\(Elm.Syntax.Node.Node _ declaration) ->
-                    declaration |> referenceUseCountsWithBranchLocalVariables declarationListNames
-                )
-            |> listReferenceUseCountsMerge
 
 
 {-| Declared name (+ possible variant names)
@@ -81,10 +47,10 @@ names =
                 Set.empty
 
 
-referenceUseCountsWithBranchLocalVariables :
-    Set String
-    -> (Elm.Syntax.Declaration.Declaration -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) Int)
-referenceUseCountsWithBranchLocalVariables branchLocalVariables =
+referenceUses :
+    Elm.Syntax.Declaration.Declaration
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+referenceUses =
     \declaration ->
         case declaration of
             Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
@@ -102,30 +68,27 @@ referenceUseCountsWithBranchLocalVariables branchLocalVariables =
                     Just (Elm.Syntax.Node.Node _ signature) ->
                         signature
                             |> .typeAnnotation
-                            |> Type.LocalExtra.referenceUseCounts
+                            |> Type.LocalExtra.referenceUses
                 , functionDeclaration.declaration
                     |> Elm.Syntax.Node.value
                     |> .expression
-                    |> Expression.LocalExtra.referenceUseCountsWithBranchLocalVariables
-                        (Set.union branchLocalVariables
-                            (argumentPatterns |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.nodeVariables)
-                        )
+                    |> Expression.LocalExtra.referenceUsesIgnoringPatternVariables
+                        (argumentPatterns |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables)
                 , argumentPatterns
-                    |> Pattern.LocalExtra.listReferenceUseCounts
+                    |> Pattern.LocalExtra.listReferenceUses
                 ]
-                    |> listReferenceUseCountsMerge
+                    |> FastDict.LocalExtra.unionFromListWithMap identity (++)
 
             Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
-                typeAliasDeclaration.typeAnnotation |> Type.LocalExtra.referenceUseCounts
+                typeAliasDeclaration.typeAnnotation |> Type.LocalExtra.referenceUses
 
             Elm.Syntax.Declaration.CustomTypeDeclaration variantType ->
                 variantType.constructors
                     |> List.concatMap (\(Elm.Syntax.Node.Node _ variant) -> variant.arguments)
-                    |> List.map Type.LocalExtra.referenceUseCounts
-                    |> listReferenceUseCountsMerge
+                    |> FastDict.LocalExtra.unionFromListWithMap Type.LocalExtra.referenceUses (++)
 
             Elm.Syntax.Declaration.PortDeclaration signature ->
-                signature.typeAnnotation |> Type.LocalExtra.referenceUseCounts
+                signature.typeAnnotation |> Type.LocalExtra.referenceUses
 
             -- not supported
             Elm.Syntax.Declaration.InfixDeclaration _ ->
