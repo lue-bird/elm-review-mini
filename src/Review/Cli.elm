@@ -250,14 +250,9 @@ reactToEvent config event =
                                 , removedModulePaths = []
                                 }
                                     |> reviewRunList
-                                        (List.map2
-                                            (\review nextRun ->
-                                                { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
-                                                , run = nextRun
-                                                }
-                                            )
-                                            config.configuration.reviews
+                                        (List.map2 reviewWithRun
                                             havingRunReviewsPreviously.nextRuns
+                                            config.configuration.reviews
                                         )
 
                             maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
@@ -322,14 +317,9 @@ reactToEvent config event =
                                 , removedModulePaths = [ moduleRemoved.path ]
                                 }
                                     |> reviewRunList
-                                        (List.map2
-                                            (\review nextRun ->
-                                                { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
-                                                , run = nextRun
-                                                }
-                                            )
-                                            config.configuration.reviews
+                                        (List.map2 reviewWithRun
                                             havingRunReviewsPreviously.nextRuns
+                                            config.configuration.reviews
                                         )
 
                             maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
@@ -394,14 +384,9 @@ reactToEvent config event =
                                 , removedModulePaths = []
                                 }
                                     |> reviewRunList
-                                        (List.map2
-                                            (\review nextRun ->
-                                                { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
-                                                , run = nextRun
-                                                }
-                                            )
-                                            config.configuration.reviews
+                                        (List.map2 reviewWithRun
                                             havingRunReviewsPreviously.nextRuns
+                                            config.configuration.reviews
                                         )
 
                             maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
@@ -466,14 +451,9 @@ reactToEvent config event =
                                 , removedModulePaths = []
                                 }
                                     |> reviewRunList
-                                        (List.map2
-                                            (\review nextRun ->
-                                                { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
-                                                , run = nextRun
-                                                }
-                                            )
-                                            config.configuration.reviews
+                                        (List.map2 reviewWithRun
                                             havingRunReviewsPreviously.nextRuns
+                                            config.configuration.reviews
                                         )
 
                             maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
@@ -525,6 +505,14 @@ reactToEvent config event =
                     |> config.toJs
                     |> Cmd.map Basics.never
                 )
+
+
+reviewWithRun : Review.Run -> (Review -> Review)
+reviewWithRun nextRun =
+    \review ->
+        { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
+        , run = nextRun
+        }
 
 
 reviewRunList :
