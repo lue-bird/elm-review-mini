@@ -409,26 +409,26 @@ pluralizeErrors n =
 locationIsAmbiguousInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String -> List Int -> String
 locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
     failureMessage "AMBIGUOUS ERROR LOCATION"
-        ([ """Your test passes, but where the message appears is ambiguous.
+        ([ """The exact location where the error appears is ambiguous.
 
-You are looking for the following error message:
+You are looking for the error message:
 
   """
-         , wrapInQuotes error.message
+         , error.message
          , """
 
 and expecting to see it under:
 
   """
-         , formatSourceCode under
+         , under |> formatSourceCode
          , """
 
 I found """
-         , String.fromInt (List.length occurrencesInSourceCode)
+         , occurrencesInSourceCode |> List.length |> String.fromInt
          , """ locations where that code appeared. Please use
-`Review.Test.atExactly` to make the part you were targeting unambiguous.
+Review.Test.UnderExactly to make the range you were targeting unambiguous.
 
-Tip: I found them at:
+Tip: I found them starting at:
 """
          , listOccurrencesAsLocations sourceCode under occurrencesInSourceCode
          ]
