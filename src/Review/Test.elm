@@ -981,10 +981,10 @@ checkFixesAreCorrect source reviewError expectedError =
                         Expect.pass
 
                     else if removeWhitespace fixedSource == removeWhitespace expectedFixedSource then
-                        Expect.fail (Review.Test.FailureMessage.fixedCodeWhitespaceMismatch fixedSource expectedFixedSource reviewError)
+                        Expect.fail (Review.Test.FailureMessage.fixedSourceWhitespaceMismatch fixedSource expectedFixedSource reviewError)
 
                     else
-                        Expect.fail (Review.Test.FailureMessage.fixedCodeMismatch fixedSource expectedFixedSource reviewError)
+                        Expect.fail (Review.Test.FailureMessage.fixedSourceMismatch fixedSource expectedFixedSource reviewError)
 
                 Err Review.AfterFixIsUnchanged ->
                     Expect.fail (Review.Test.FailureMessage.unchangedSourceAfterFix reviewError)
