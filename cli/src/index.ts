@@ -136,51 +136,38 @@ export function programStart(elmPorts: ElmPorts) {
                     }
                 })
 
-                sourceDirectoryPaths
-                    .forEach(absoluteSourceDirectoryPath => {
-                        fs.watch(
-                            absoluteSourceDirectoryPath,
-                            { recursive: true, encoding: "utf8" },
-                            async (_event, fileName) => {
-                                if (fileName !== null) {
-                                    const fullPath = path.join(absoluteSourceDirectoryPath, fileName)
-                                    if (fs.existsSync(fullPath)) {
-                                        sendToElm({
-                                            tag: "ModuleAddedOrChanged",
-                                            value: {
-                                                path: path.relative(process.cwd(), fullPath),
-                                                source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
-                                            }
-                                        })
-                                    } else {
-                                        sendToElm({ tag: "ModuleRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
-                                    }
+                watchDirectories(
+                    sourceDirectoryPaths,
+                    {
+                        onAddOrChange: async (fullPath) => {
+                            sendToElm({
+                                tag: "ModuleAddedOrChanged",
+                                value: {
+                                    path: path.relative(process.cwd(), fullPath),
+                                    source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
                                 }
-                            }
-                        )
-                    })
-                extraDirectoryPaths.concat(extraFilePaths)
-                    .forEach(absoluteExtraDirectoryOrFilePath => {
-                        fs.watch(
-                            absoluteExtraDirectoryOrFilePath,
-                            { recursive: true, encoding: "utf8" },
-                            async (_event, fileName) => {
-                                if (fileName !== null) {
-                                    const fullPath = path.join(absoluteExtraDirectoryOrFilePath, fileName)
-                                    if (fs.existsSync(fullPath)) {
-                                        sendToElm({
-                                            tag: "ExtraFileAddedOrChanged",
-                                            value: {
-                                                path: path.relative(process.cwd(), fullPath),
-                                                source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
-                                            }
-                                        })
-                                    } else {
-                                        sendToElm({ tag: "ExtraFileRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
-                                    }
+                            })
+                        },
+                        onDelete: async (fullPath) => {
+                            sendToElm({ tag: "ModuleRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
+                        }
+                    }
+                )
+                watchDirectories(
+                    extraDirectoryPaths.concat(extraFilePaths),
+                    {
+                        onAddOrChange: async (fullPath) => {
+                            sendToElm({
+                                tag: "ExtraFileAddedOrChanged",
+                                value: {
+                                    path: path.relative(process.cwd(), fullPath),
+                                    source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
                                 }
-                            }
-                        )
+                            })
+                        },
+                        onDelete: async (fullPath) => {
+                            sendToElm({ tag: "ExtraFileRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
+                        }
                     })
                 break
             }
@@ -213,6 +200,37 @@ export function programStart(elmPorts: ElmPorts) {
             }
         }
     })
+}
+
+
+function watchDirectories(directoryPaths: string[], onEvent: { onDelete: (fullPath: string) => Promise<void>, onAddOrChange: (fullPath: string) => Promise<void> }) {
+    // most editors chunk up their file edits in 2, see
+    // https://stackoverflow.com/questions/12978924/fs-watch-fired-twice-when-i-change-the-watched-file
+    let debounced = true
+    directoryPaths
+        .forEach(directoryPath => {
+            fs.watch(
+                directoryPath,
+                { recursive: true, encoding: "utf8" },
+                async (_event, fileName) => {
+                    if (debounced) {
+                        debounced = false
+                        if (fileName !== null) {
+                            const currentTime = new Date()
+                            console.log(`\n\n\n---- files changed at ${currentTime.getHours()}:${currentTime.getMinutes()}:${currentTime.getSeconds()}, re-reviewing ----\n\n\n`)
+                            const fullPath = path.join(directoryPath, fileName)
+                            if (fs.existsSync(fullPath)) {
+                                await onEvent.onAddOrChange(fullPath)
+                            } else {
+                                await onEvent.onDelete(fullPath)
+                            }
+                        }
+                    } else {
+                        setTimeout(() => { debounced = true }, 100)
+                    }
+                }
+            )
+        })
 }
 
 
