@@ -8,7 +8,7 @@ import ModuleExposingIsExplicit
 import ModuleValueOrFunctionIsTypeAnnotated
 import DebugIsNotUsed
 import PatternVariableIsUsed
-import CommentDoesNotUseCertainWords
+import CommentDoesNotUseCertainMarks
 
 
 configuration : { extraPaths : List String, reviews : List Review.Review }
@@ -23,6 +23,6 @@ configuration =
         , LetValueOrFunctionIsTypeAnnotated.review
         , DebugIsNotUsed.review
         , PatternVariableIsUsed.review
-        , CommentDoesNotUseCertainWords.review [ "TODO" ]
+        , CommentDoesNotUseCertainMarks.review [ "TODO" ]
         ]
     }
