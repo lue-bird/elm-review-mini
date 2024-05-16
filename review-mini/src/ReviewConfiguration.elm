@@ -1,22 +1,28 @@
 module ReviewConfiguration exposing (configuration)
 
 import Review
-import ExposesAreUsed
+import ModuleAndExposesAreUsed
 import ImportExposingIsExplicit
 import LetValueOrFunctionIsTypeAnnotated
 import ModuleExposingIsExplicit
 import ModuleValueOrFunctionIsTypeAnnotated
+import DebugIsNotUsed
+import PatternVariableIsUsed
+import CommentDoesNotUseCertainWords
 
 
-configuration : { reviews : List Review.Review, extraPaths : List String }
+configuration : { extraPaths : List String, reviews : List Review.Review }
 configuration =
     { extraPaths =
         [ "README.md" ]
     , reviews =
         [ ImportExposingIsExplicit.review
         , ModuleExposingIsExplicit.review
-        , ExposesAreUsed.review
+        , ModuleAndExposesAreUsed.review
         , ModuleValueOrFunctionIsTypeAnnotated.review
         , LetValueOrFunctionIsTypeAnnotated.review
+        , DebugIsNotUsed.review
+        , PatternVariableIsUsed.review
+        , CommentDoesNotUseCertainWords.review [ "TODO" ]
         ]
     }

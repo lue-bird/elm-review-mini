@@ -1,6 +1,5 @@
 {
     "type": "module",
-    "dev-dependencies": {},
     "devDependencies": {
         "@lue-bird/elm-review-mini-cli": "file:cli"
     }

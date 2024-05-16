@@ -1,5 +1,6 @@
 module Tests exposing (tests)
 
+import CommentDoesNotUseCertainMarks
 import DebugIsNotUsed
 import ImportExposingIsExplicit
 import LetValueOrFunctionIsTypeAnnotated
@@ -24,6 +25,7 @@ tests =
         , moduleExposingIsExplicitTests
         , importExposingIsExplicitTests
         , debugIsNotUsedTests
+        , commentDoesNotUseCertainWordsTests
         ]
 
 
@@ -1374,6 +1376,303 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        ]
+
+
+commentDoesNotUseCertainWordsTests : Test
+commentDoesNotUseCertainWordsTests =
+    Test.describe "CommentDoesNotUseCertainWords"
+        [ Test.test "comments without marks are allowed"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (a)
+
+                            {-| module documentation
+                            -}
+
+                            import Json.Encode
+
+                            {-| port documentation
+                            -}
+                            port fromJs : (Json.Encode.Value -> event) -> Cmd event
+
+                            {-| value documentation
+                            -}
+                            a =
+                                -- single-line
+                                ""
+
+                            {-| function documentation
+                            -}
+                            b x =
+                                {- multi-line -}
+                                ""
+
+                            {-| type alias documentation
+                            -}
+                            type alias TypeAlias =
+                                String
+
+                            {-| choice type documentation
+                            -}
+                            type ChoiceType
+                                = A
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "single-line comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (a)
+
+                            a =
+                                -- single-line TODO
+                                ""
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "multi-line comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (a)
+                            
+                            a =
+                                {-
+                                  multi-line
+                                  TODO hey, listen!
+                                -}
+                                ""
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "module documentation comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (a)
+
+                            {-| module documentation
+                            TODO hey, listen!
+                            -}
+
+                            import Json.Encode
+                            
+                            a =
+                                ""
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "value documentation comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (a)
+
+                            {-| -}
+
+                            import Json.Encode
+                            
+                            {-| value documentation
+                            TODO hey, listen!
+                            -}
+                            a =
+                                ""
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "function documentation comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (a)
+
+                            {-| -}
+
+                            import Json.Encode
+                            
+                            {-| function documentation
+                            TODO hey, listen!
+                            -}
+                            a x =
+                                x
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "type alias documentation comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (A)
+
+                            {-| -}
+
+                            import Json.Encode
+                            
+                            {-| type alias documentation
+                            TODO hey, listen!
+                            -}
+                            type alias A =
+                                String
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "choice type documentation comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (A)
+
+                            {-| -}
+
+                            import Json.Encode
+                            
+                            {-| choice type documentation
+                            TODO hey, listen!
+                            -}
+                            type A
+                                = A
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
+                      , fixedSource = Nothing
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "port documentation comment with mark is reported"
+            (\() ->
+                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            port module A exposing (A)
+
+                            {-| -}
+
+                            import Json.Encode
+                            
+                            {-| port documentation
+                            hey, listen! TODO
+                            -}
+                            port fromJs : (Json.Encode.Value -> event) -> Cmd event
+                            """
+                      }
+                    ]
+                , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "comment uses TODO mark"
+                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , range = Review.Test.Under "TODO"
                       , fixedSource = Nothing
                       }
                     ]
