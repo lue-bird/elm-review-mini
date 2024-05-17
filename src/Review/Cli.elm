@@ -7,12 +7,12 @@ module Review.Cli exposing
 
 @docs program, Program
 
-You don't need to know more but here are the internal types if you're interested:
+If you experience a high memory footprint in a large project,
+please open an issue called "only ask for file sources to generate local error displays".
+
+You don't need to know more but below are the internal types if you're interested:
 
 @docs ProgramEvent, ProgramState
-
-If you experience a high memory footprint in a large project,
-please open an issue called "only ask for file sources to generate local error displays"
 
 -}
 
