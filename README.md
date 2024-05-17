@@ -29,8 +29,9 @@ see also ["when to enable a review"](#when-to-create-or-enable-a-review).
 
 You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example of a review that prevents a typo in a string that was made too often at your company:
 ```elm
-module StringDoesNotMisspellCompanyName exposing (review)
-
+module StringSpellsCompanyNameCorrectly exposing (review)
+```
+```elm
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
@@ -43,47 +44,61 @@ review =
             [ Review.inspectModule
                 (\moduleData ->
                     moduleData.syntax.declarations
-                        |> List.concatMap
-                            (\(Elm.Syntax.Node.Node _ declaration) ->
-                                case Elm.Syntax.Node.value declaration of
-                                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                        functionDeclaration.declaration
-                                            |> Elm.Syntax.Node.value
-                                            |> .expression
-                                            |> List.concatMap Review.expressionAllSubs
-
-                                    _ ->
-                                        []
-                            )
-                        |> List.filterMap
-                            (\expressionNode ->
-                                case expressionNode of
-                                    Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
-                                        if string |> String.contains "frits.com" then
-                                            { modulePath = moduleData.path, range = range } |> Just
-
-                                        else
-                                            Nothing
-
-                                    _ ->
-                                        Nothing
-                            )
+                        |> List.concatMap declarationToKnowledge
                 )
             ]
         , knowledgeMerge = \a b -> a ++ b
-        , report =
-            \stringsWithTypos ->
-                stringsWithTypos
-                    |> List.map
-                        (\misspelledName ->
-                            { target = Review.FileTargetModule misspelledName.modulePath
-                            , message = "Replace `frits.com` by `fruits.com`"
-                            , details = [ "This typo has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                            , range = misspelledName.range
-                            , fix = []
-                            }
-                        )
+        , report = report
         }
+
+type alias Knowledge =
+    List { modulePath : String, range : Elm.Syntax.Range.Range }
+
+declarationToKnowledge :
+    Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
+    -> Knowledge
+declarationToKnowledge =
+    \(Elm.Syntax.Node.Node _ declaration) ->
+        case Elm.Syntax.Node.value declaration of
+            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                functionDeclaration.declaration
+                    |> Elm.Syntax.Node.value
+                    |> .expression
+                    |> expressionToKnowledge
+
+            _ ->
+                []
+
+expressionToKnowledge :
+    Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+    -> Knowledge
+expressionToKnowledge =
+    \expressionNode ->
+        case expressionNode of
+            Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
+                if string |> String.contains "frits.com" then
+                    [ { modulePath = moduleData.path, range = range } ]
+
+                else
+                    []
+
+            nonStringExpressionNode ->
+                nonStringExpressionNode
+                    |> Review.expressionSubs
+                    |> List.concatMap expressionToKnowledge
+
+report : Knowledge -> Review.Error
+report stringsWithTypos =
+    stringsWithTypos
+        |> List.map
+            (\stringWithTypos ->
+                { target = Review.FileTargetModule stringWithTypos.modulePath
+                , message = "Replace `frits.com` by `fruits.com`"
+                , details = [ "This typo has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
+                , range = stringWithTypos.range
+                , fix = []
+                }
+            )
 ```
 
 ## when to create or enable a review
@@ -138,7 +153,7 @@ because code structures become static:
   - Keeping all the examples and tests up to date becomes daunting and somewhat draining, unexciting work
 
 As a consequence, these big projects as a whole are more likely kept running by only a single (amazing) person, which sadly also makes the risk of abandonment or bus factor increasingly _scary_.
-I know **I could neither maintain them well 🎈 nor would I be happy doing so**.
+I know **I could neither maintain them well [🎈](https://jfmengels.net/a-nice-round-ball/) nor would I be happy doing so**.
 I have no hopes that anyone else could either.
 
 I'd be horribly sad for a tool as great as `elm-review` to become stale,

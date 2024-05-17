@@ -4,9 +4,9 @@ module Review exposing
     , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
     , Error, elmJsonPath
     , SourceEdit(..), insertAt, removeRange, replaceRange
-    , expressionSubs, expressionFold
+    , expressionSubs, patternSubs, typeSubs
     , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
-    , sourceExtractInRange
+    , sourceExtractInRange, sourceRangesOf
     , packageElmJsonExposedModules
     , Inspect(..), Review, run, sourceApplyEdits, SourceEditError(..), Run(..)
     )
@@ -34,9 +34,29 @@ Collect knowledge from parts of the project.
 
 # convenience helpers
 
-@docs expressionSubs, expressionFold
+By only listing all immediate sub-parts of a piece of syntax you can choose to traverse it however you need to.
+E.g. to find all `as` pattern ranges
+
+    findAllAsPatternRanges :
+        Elm.Syntax.Node.Node ELm.Syntax.Pattern.Pattern
+        -> List ELm.Syntax.Range.Range
+    findAllAsPatternRanges =
+        \patternNode ->
+            (case patternNode of
+                Elm.Syntax.Node.Node asRange (Elm.Syntax.Pattern.AsPattern _ _) ->
+                    [ asRange ]
+
+                _ ->
+                    []
+            )
+                ++ (patternNode |> Review.patternSubs |> List.concatMap findAllAsPatternRanges)
+
+This fine control allows you to e.g. skip visiting certain parts that you already accounted for.
+
+@docs expressionSubs, patternSubs, typeSubs
+
 @docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
-@docs sourceExtractInRange
+@docs sourceExtractInRange, sourceRangesOf
 @docs packageElmJsonExposedModules
 
 
@@ -58,7 +78,9 @@ import Elm.Syntax.Infix
 import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
+import Elm.Syntax.Pattern
 import Elm.Syntax.Range
+import Elm.Syntax.TypeAnnotation
 import ElmCoreDependency
 import FastDict
 import FastDictLocalExtra
@@ -155,7 +177,7 @@ type Inspect knowledge
         (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module }
          -> knowledge
         )
-    | InspectElmJson (Elm.Project.Project -> knowledge)
+    | InspectElmJson ({ source : String, project : Elm.Project.Project } -> knowledge)
     | InspectExtraFile ({ path : String, source : String } -> knowledge)
     | InspectModule
         ({ syntax : Elm.Syntax.File.File, source : String, path : String }
@@ -273,14 +295,21 @@ An example review that forbids importing both `Element` (`elm-ui`) and
             }
 
 -}
-inspectModule : ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge) -> Inspect knowledge
+inspectModule :
+    ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
+    -> Inspect knowledge
 inspectModule moduleDataToKnowledge =
     InspectModule moduleDataToKnowledge
 
 
 {-| Collect knowledge from the [elm.json project config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project)
+
+You can use the raw source to [search for a section](#sourceRangesOf) you want to highlight in an [`Error`](#Error)
+
 -}
-inspectElmJson : (Elm.Project.Project -> knowledge) -> Inspect knowledge
+inspectElmJson :
+    ({ source : String, project : Elm.Project.Project } -> knowledge)
+    -> Inspect knowledge
 inspectElmJson moduleDataToKnowledge =
     InspectElmJson moduleDataToKnowledge
 
@@ -298,7 +327,9 @@ inspectExtraFile moduleDataToKnowledge =
 
 {-| Collect knowledge from all [project config and docs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/) the project directly depends on
 -}
-inspectDirectDependencies : (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge) -> Inspect knowledge
+inspectDirectDependencies :
+    (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
+    -> Inspect knowledge
 inspectDirectDependencies moduleDataToKnowledge =
     InspectDirectDependencies moduleDataToKnowledge
 
@@ -326,7 +357,7 @@ create review =
     let
         toKnowledges :
             { directDependenciesToKnowledge : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
-            , elmJsonToKnowledge : List (Elm.Project.Project -> knowledge)
+            , elmJsonToKnowledge : List ({ source : String, project : Elm.Project.Project } -> knowledge)
             , extraFileToKnowledge : List ({ path : String, source : String } -> knowledge)
             , moduleToKnowledge : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
             }
@@ -379,7 +410,7 @@ create review =
 
                                 Nothing ->
                                     toKnowledges.elmJsonToKnowledge
-                                        |> List.map (\f -> f project.elmJson.project)
+                                        |> List.map (\f -> f project.elmJson)
                                         |> knowledgesFoldToMaybe
 
                         directDependenciesKnowledgeAndCache : Maybe knowledge
@@ -532,7 +563,7 @@ inspectToToKnowledges :
     List (Inspect knowledge)
     ->
         { directDependenciesToKnowledge : List (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
-        , elmJsonToKnowledge : List (Elm.Project.Project -> knowledge)
+        , elmJsonToKnowledge : List ({ source : String, project : Elm.Project.Project } -> knowledge)
         , extraFileToKnowledge : List ({ path : String, source : String } -> knowledge)
         , moduleToKnowledge : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
         }
@@ -790,26 +821,7 @@ type alias Cache knowledge =
     }
 
 
-{-| Go through parent, then children and their children, depth-first and collect info along the way
--}
-expressionFold :
-    (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> (folded -> folded))
-    -> folded
-    ->
-        (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-         -> folded
-        )
-expressionFold reduce initialFolded =
-    \expressionNode ->
-        (expressionNode |> expressionSubs)
-            |> List.foldl
-                (\sub soFar ->
-                    sub |> expressionFold reduce soFar
-                )
-                (initialFolded |> reduce expressionNode)
-
-
-{-| In case you need the read the source in a range verbatim.
+{-| In case you need the read the source in a range as formatted by the user.
 This can be nice to keep the user's formatting if you just move code around
 -}
 sourceExtractInRange : Elm.Syntax.Range.Range -> (String -> String)
@@ -824,105 +836,232 @@ sourceExtractInRange range =
             |> Unicode.dropLeft (range.start.column - 1)
 
 
-{-| All surface-level child expressions
+{-| Find all occurrences of a given section in the source in the case you
+can't access or easily calculate the [range](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Range)
 -}
-expressionSubs : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression)
-expressionSubs node =
-    case Elm.Syntax.Node.value node of
-        Elm.Syntax.Expression.Application expressions ->
-            expressions
-
-        Elm.Syntax.Expression.ListExpr elements ->
-            elements
-
-        Elm.Syntax.Expression.RecordExpr fields ->
-            List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) fields
-
-        Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
-            List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) setters
-
-        Elm.Syntax.Expression.ParenthesizedExpression expr ->
-            [ expr ]
-
-        Elm.Syntax.Expression.OperatorApplication _ direction left right ->
-            case direction of
-                Elm.Syntax.Infix.Left ->
-                    [ left, right ]
-
-                Elm.Syntax.Infix.Right ->
-                    [ right, left ]
-
-                Elm.Syntax.Infix.Non ->
-                    [ left, right ]
-
-        Elm.Syntax.Expression.IfBlock cond then_ else_ ->
-            [ cond, then_, else_ ]
-
-        Elm.Syntax.Expression.LetExpression letIn ->
-            List.foldr
-                (\declaration soFar ->
-                    case Elm.Syntax.Node.value declaration of
-                        Elm.Syntax.Expression.LetFunction function ->
-                            (function.declaration
-                                |> Elm.Syntax.Node.value
-                                |> .expression
-                            )
-                                :: soFar
-
-                        Elm.Syntax.Expression.LetDestructuring _ expr ->
-                            expr :: soFar
+sourceRangesOf : String -> (String -> List Elm.Syntax.Range.Range)
+sourceRangesOf sectionToFind =
+    \source ->
+        let
+            sectionToFindLength : Int
+            sectionToFindLength =
+                sectionToFind |> Unicode.length
+        in
+        source
+            |> String.indexes sectionToFind
+            |> List.map
+                (\startOffset ->
+                    { start = startOffset |> sourceOffsetToLocationIn source
+                    , end = (startOffset + sectionToFindLength) |> sourceOffsetToLocationIn source
+                    }
                 )
-                [ letIn.expression ]
-                letIn.declarations
 
-        Elm.Syntax.Expression.CaseExpression caseOf ->
-            caseOf.expression
-                :: List.map (\( _, caseExpression ) -> caseExpression) caseOf.cases
 
-        Elm.Syntax.Expression.LambdaExpression lambda ->
-            [ lambda.expression ]
+sourceOffsetToLocationIn : String -> (Int -> Elm.Syntax.Range.Location)
+sourceOffsetToLocationIn source =
+    \sourceOffset ->
+        let
+            lines : List String
+            lines =
+                source |> String.lines
+        in
+        { row = (lines |> List.length) + 1
+        , column =
+            case lines |> ListLocalExtra.last of
+                Nothing ->
+                    1
 
-        Elm.Syntax.Expression.TupledExpression expressions ->
-            expressions
+                Just lastLine ->
+                    (lastLine |> Unicode.length) + 1
+        }
 
-        Elm.Syntax.Expression.Negation expr ->
-            [ expr ]
 
-        Elm.Syntax.Expression.RecordAccess expr _ ->
-            [ expr ]
+{-| All surface-level child [expression](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Expression)s
+-}
+expressionSubs :
+    Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression)
+expressionSubs =
+    \(Elm.Syntax.Node.Node _ expression) ->
+        case expression of
+            Elm.Syntax.Expression.Application expressions ->
+                expressions
 
-        Elm.Syntax.Expression.PrefixOperator _ ->
-            []
+            Elm.Syntax.Expression.ListExpr elements ->
+                elements
 
-        Elm.Syntax.Expression.Operator _ ->
-            []
+            Elm.Syntax.Expression.RecordExpr fields ->
+                List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) fields
 
-        Elm.Syntax.Expression.Integer _ ->
-            []
+            Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
+                List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) setters
 
-        Elm.Syntax.Expression.Hex _ ->
-            []
+            Elm.Syntax.Expression.ParenthesizedExpression expr ->
+                [ expr ]
 
-        Elm.Syntax.Expression.Floatable _ ->
-            []
+            Elm.Syntax.Expression.OperatorApplication _ direction left right ->
+                case direction of
+                    Elm.Syntax.Infix.Left ->
+                        [ left, right ]
 
-        Elm.Syntax.Expression.Literal _ ->
-            []
+                    Elm.Syntax.Infix.Right ->
+                        [ right, left ]
 
-        Elm.Syntax.Expression.CharLiteral _ ->
-            []
+                    Elm.Syntax.Infix.Non ->
+                        [ left, right ]
 
-        Elm.Syntax.Expression.UnitExpr ->
-            []
+            Elm.Syntax.Expression.IfBlock cond then_ else_ ->
+                [ cond, then_, else_ ]
 
-        Elm.Syntax.Expression.FunctionOrValue _ _ ->
-            []
+            Elm.Syntax.Expression.LetExpression letIn ->
+                List.foldr
+                    (\declaration soFar ->
+                        case Elm.Syntax.Node.value declaration of
+                            Elm.Syntax.Expression.LetFunction function ->
+                                (function.declaration
+                                    |> Elm.Syntax.Node.value
+                                    |> .expression
+                                )
+                                    :: soFar
 
-        Elm.Syntax.Expression.RecordAccessFunction _ ->
-            []
+                            Elm.Syntax.Expression.LetDestructuring _ expr ->
+                                expr :: soFar
+                    )
+                    [ letIn.expression ]
+                    letIn.declarations
 
-        Elm.Syntax.Expression.GLSLExpression _ ->
-            []
+            Elm.Syntax.Expression.CaseExpression caseOf ->
+                caseOf.expression
+                    :: List.map (\( _, caseExpression ) -> caseExpression) caseOf.cases
+
+            Elm.Syntax.Expression.LambdaExpression lambda ->
+                [ lambda.expression ]
+
+            Elm.Syntax.Expression.TupledExpression expressions ->
+                expressions
+
+            Elm.Syntax.Expression.Negation expr ->
+                [ expr ]
+
+            Elm.Syntax.Expression.RecordAccess expr _ ->
+                [ expr ]
+
+            Elm.Syntax.Expression.PrefixOperator _ ->
+                []
+
+            Elm.Syntax.Expression.Operator _ ->
+                []
+
+            Elm.Syntax.Expression.Integer _ ->
+                []
+
+            Elm.Syntax.Expression.Hex _ ->
+                []
+
+            Elm.Syntax.Expression.Floatable _ ->
+                []
+
+            Elm.Syntax.Expression.Literal _ ->
+                []
+
+            Elm.Syntax.Expression.CharLiteral _ ->
+                []
+
+            Elm.Syntax.Expression.UnitExpr ->
+                []
+
+            Elm.Syntax.Expression.FunctionOrValue _ _ ->
+                []
+
+            Elm.Syntax.Expression.RecordAccessFunction _ ->
+                []
+
+            Elm.Syntax.Expression.GLSLExpression _ ->
+                []
+
+
+{-| All surface-level child [pattern](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Pattern)s
+-}
+patternSubs :
+    Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+patternSubs =
+    \(Elm.Syntax.Node.Node _ pattern) ->
+        case pattern of
+            Elm.Syntax.Pattern.VarPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.AsPattern afterAsPattern _ ->
+                [ afterAsPattern ]
+
+            Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
+                [ inParens ]
+
+            Elm.Syntax.Pattern.ListPattern patterns ->
+                patterns
+
+            Elm.Syntax.Pattern.TuplePattern partPatterns ->
+                partPatterns
+
+            Elm.Syntax.Pattern.RecordPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.NamedPattern _ patterns ->
+                patterns
+
+            Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
+                [ headPattern, tailPattern ]
+
+            Elm.Syntax.Pattern.AllPattern ->
+                []
+
+            Elm.Syntax.Pattern.UnitPattern ->
+                []
+
+            Elm.Syntax.Pattern.CharPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.StringPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.IntPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.HexPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.FloatPattern _ ->
+                []
+
+
+{-| All surface-level child [type](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-TypeAnnotation)s
+-}
+typeSubs :
+    Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
+typeSubs =
+    \(Elm.Syntax.Node.Node _ type_) ->
+        case type_ of
+            Elm.Syntax.TypeAnnotation.GenericType _ ->
+                []
+
+            Elm.Syntax.TypeAnnotation.Typed _ variantValues ->
+                variantValues
+
+            Elm.Syntax.TypeAnnotation.Unit ->
+                []
+
+            Elm.Syntax.TypeAnnotation.Tupled parts ->
+                parts
+
+            Elm.Syntax.TypeAnnotation.Record fields ->
+                fields |> List.map (\(Elm.Syntax.Node.Node _ ( _, value )) -> value)
+
+            Elm.Syntax.TypeAnnotation.GenericRecord _ (Elm.Syntax.Node.Node _ fields) ->
+                fields |> List.map (\(Elm.Syntax.Node.Node _ ( _, value )) -> value)
+
+            Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation from to ->
+                [ from, to ]
 
 
 {-| The set of modules in [`Elm-Project.Exposed`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Exposed)
