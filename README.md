@@ -1,15 +1,14 @@
-> Status: unpublished, a few helpers still missing
+> Status: package and common reviews unpublished, a few helpers still missing
 
-elm-review-mini scans your [elm](https://elm-lang.org/) project to enforce conventions
-using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
-While heavily inspired by [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/), it has a much simpler API, much lighter internals (see also [the feeling section](#feelings)) but also almost no published reviews so far.
+Scan your [elm](https://elm-lang.org/) project to enforce conventions using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
+
+While heavily inspired by [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) it comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
 
 Use it in your project by adding this starter config with the CLI set up
 ```bash
 curl -L https://github.com/lue-bird/elm-review-mini-cli-starter/tarball/master review-mini | tar xz
 ```
-The created `review-mini/` is a self-contained elm application which means you can add new reviews with `elm install` just like any other elm project dependency.
-Then add the review in your `review-mini/src/ReviewConfiguration.elm`:
+The created `review-mini/` is an elm application like any other where you can add new reviews with `elm install`, then add them in your `review-mini/src/ReviewConfiguration.elm`:
 
 ```elm
 module ReviewConfiguration exposing (configuration)
@@ -17,8 +16,7 @@ module ReviewConfiguration exposing (configuration)
 import SomeConvention
 import Review
 
-
-configuration : { reviews : List Review.Review, extraPaths : List String }
+configuration : { extraPaths : List String, reviews : List Review.Review }
 configuration =
     { extraPaths = [ "README.md" ]
     , reviews =
@@ -27,13 +25,13 @@ configuration =
         ]
     }
 ```
+see also ["when to enable a review"](#when-to-create-or-enable-a-review).
 
-Discuss added reviews with your team, see ["when to enable a review"](#when-to-create-or-enable-a-review).
-
-You can also [create custom reviews](https://package.elm-lang.org/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example of a review that prevents a typo in a string that was made too often at your company:
+You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example of a review that prevents a typo in a string that was made too often at your company:
 ```elm
-module StringWithMisspelledCompanyNameForbid exposing (review)
+module StringDoesNotMisspellCompanyName exposing (review)
 
+import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
 import Review
@@ -110,13 +108,13 @@ When enabling this kind of review, make sure that the message it gives is helpfu
 
 When wondering whether to enable a review, here's a checklist
 
-  - [ ] I have had problems with the pattern I want to forbid
-  - [ ] I could not find a way to solve the problem by changing the API of the problematic code or introducing a new API
-  - [ ] If the review exists, I have read its documentation and the section about when not to enable the review, and it doesn't apply to my situation
-  - [ ] I have thought very hard about what the corner cases could be and what kind of patterns this would forbid that are actually okay, and they are acceptable
-  - [ ] I think the review explains well enough how to solve the issue, to make sure beginners are not blocked by it
-  - [ ] I have communicated with my teammates and they all agree to enforce the review
-  - [ ] I am ready to disable the review if it turns out to be more disturbing than helpful
+  - We had problems with the set of patterns we want to forbid
+  - We could not find a way to solve the problem by changing the API of the problematic code or introducing a new API
+  - If the review already exists, we have read its documentation and the section about when not to enable the review
+  - We have thought very hard about what the corner cases could be and what kind of patterns this would forbid that are actually acceptable
+  - We think the review explains well enough how to solve the issue, to make sure beginners are not annoyed by it
+  - I have communicated with my teammates and they all agree to enforce the review
+  - I am ready to disable the review if it turns out to be more disturbing than helpful
 
 ## What if I disagree with a review on a specific case in my code?
 
@@ -125,10 +123,7 @@ Similarly, it does not come with a system to suppress legacy issues as lower-pri
 
 Since you can't ignore errors, the burden is on the reviews to be of higher quality, **avoiding those with inherent exceptions or false positives**.
 
-However! You can [mark specific kinds of files (e.g. from vendored packages) as not relevant to a review, preventing errors to be reported for those](https://package.elm-lang.org/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
-
-It is a good fit if you wish for `elm-review-mini` to not report errors in vendored or generated code,
-or in files and directories that by the nature of the review should be exempted.
+You can however [mark specific kinds of files (e.g. from vendored packages or generated code) as not relevant to a review, preventing errors to be reported for those](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
 
 
 --------
@@ -142,11 +137,11 @@ because code structures become static:
   - Trying to make all those changes backwards-compatible introduces even more layers and wires everywhere
   - Keeping all the examples and tests up to date becomes daunting and somewhat draining, unexciting work
 
-I know I could neither maintain them well nor would I be happy doing so.
-And neither do I have hopes that anyone could.
-For big projects run by a single person, the bus factor becomes increasingly scary as well
-and I'd be horribly sad for a tool as great as `elm-review` to become stale/abandoned.
+As a consequence, these big projects as a whole are more likely kept running by only a single (amazing) person, which sadly also makes the risk of abandonment or bus factor increasingly _scary_.
+I know **I could neither maintain them well 🎈 nor would I be happy doing so**.
+I have no hopes that anyone else could either.
 
-I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things more rough for users (performance, convenience, even beginner friendliness!).
+I'd be horribly sad for a tool as great as `elm-review` to become stale,
+so I'll try hard to find any simplification or anything that reduces the covered area/responsibilities of the project, even if it makes things more rough for users (performance, convenience, even beginner friendliness!).
 You have been warned: all your favorite APIs and tool interactions might get canned.
 Most things that seem rather simple and super cool will sneakily demand "just this edge case as well". Wait a few years and we have elm-review all over again.
