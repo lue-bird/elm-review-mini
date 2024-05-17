@@ -1,8 +1,15 @@
-module Review.Cli exposing (program, Program, ProgramEvent(..), ProgramState(..))
+module Review.Cli exposing
+    ( program, Program
+    , ProgramEvent(..), ProgramState(..)
+    )
 
 {-| Run reviews from the terminal, re-running on file changes
 
-@docs program, Program, ProgramEvent, ProgramState
+@docs program, Program
+
+You don't need to know more but here are the internal types if you're interested:
+
+@docs ProgramEvent, ProgramState
 
 If you experience a high memory footprint in a large project,
 please open an issue called "only ask for file sources to generate local error displays"
@@ -11,16 +18,18 @@ please open an issue called "only ask for file sources to generate local error d
 
 import Ansi
 import Array exposing (Array)
+import Diff
 import Elm.Docs
 import Elm.Parser
 import Elm.Project
 import Elm.Syntax.File
 import Elm.Syntax.Range
 import FastDict
-import FastDictExtra
+import FastDictLocalExtra
 import Json.Decode
 import Json.Encode
 import Review exposing (Review)
+import Unicode
 
 
 {-| An elm worker produced by [`Review.Cli.Program`](Review-Cli#Program)
@@ -42,7 +51,7 @@ type ProgramState
                     { range : Elm.Syntax.Range.Range
                     , message : String
                     , details : List String
-                    , fix : List Review.Fix
+                    , fix : List { path : String, edits : List Review.SourceEdit }
                     }
                 )
         , elmJson : { source : String, project : Elm.Project.Project }
@@ -67,11 +76,11 @@ type ProgramEvent
     | JsonDecodingFailed Json.Decode.Error
 
 
-type alias ProjectFileError =
+type alias FileReviewError =
     { range : Elm.Syntax.Range.Range
     , message : String
     , details : List String
-    , fix : List Review.Fix
+    , fix : List { path : String, edits : List Review.SourceEdit }
     }
 
 
@@ -129,14 +138,14 @@ reactToEvent config event =
                     initialFilesByPath =
                         FastDict.union
                             (initialFiles.extraFiles
-                                |> FastDictExtra.fromListMap (\file -> { key = file.path, value = file.source })
+                                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
                             )
                             (initialFiles.modules
-                                |> FastDictExtra.fromListMap (\file -> { key = file.path, value = file.source })
+                                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
                             )
 
                     runResult :
-                        { errorsByPath : FastDict.Dict String (List ProjectFileError)
+                        { errorsByPath : FastDict.Dict String (List FileReviewError)
                         , nextRuns : List Review.Run
                         }
                     runResult =
@@ -238,7 +247,7 @@ reactToEvent config event =
                                     |> FastDict.insert moduleAddedOrChanged.path moduleAddedOrChanged.source
 
                             runResult :
-                                { errorsByPath : FastDict.Dict String (List ProjectFileError)
+                                { errorsByPath : FastDict.Dict String (List FileReviewError)
                                 , nextRuns : List Review.Run
                                 }
                             runResult =
@@ -305,7 +314,7 @@ reactToEvent config event =
                                     |> FastDict.remove moduleRemoved.path
 
                             runResult :
-                                { errorsByPath : FastDict.Dict String (List ProjectFileError)
+                                { errorsByPath : FastDict.Dict String (List FileReviewError)
                                 , nextRuns : List Review.Run
                                 }
                             runResult =
@@ -372,7 +381,7 @@ reactToEvent config event =
                                     |> FastDict.insert fileAddedOrChanged.path fileAddedOrChanged.source
 
                             runResult :
-                                { errorsByPath : FastDict.Dict String (List ProjectFileError)
+                                { errorsByPath : FastDict.Dict String (List FileReviewError)
                                 , nextRuns : List Review.Run
                                 }
                             runResult =
@@ -439,7 +448,7 @@ reactToEvent config event =
                                     |> FastDict.remove fileRemoved.path
 
                             runResult :
-                                { errorsByPath : FastDict.Dict String (List ProjectFileError)
+                                { errorsByPath : FastDict.Dict String (List FileReviewError)
                                 , nextRuns : List Review.Run
                                 }
                             runResult =
@@ -526,14 +535,14 @@ reviewRunList :
         , removedModulePaths : List String
         }
     ->
-        { errorsByPath : FastDict.Dict String (List ProjectFileError)
+        { errorsByPath : FastDict.Dict String (List FileReviewError)
         , nextRuns : List Review.Run
         }
 reviewRunList reviews project =
     let
         runResultsForReviews :
             List
-                { errorsByPath : FastDict.Dict String (List ProjectFileError)
+                { errorsByPath : FastDict.Dict String (List FileReviewError)
                 , nextRun : Review.Run
                 }
         runResultsForReviews =
@@ -543,7 +552,7 @@ reviewRunList reviews project =
         runResultsForReviews
             |> List.foldl
                 (\runResultForReview soFar ->
-                    FastDictExtra.unionWith (\new already -> new ++ already)
+                    FastDictLocalExtra.unionWith (\new already -> new ++ already)
                         runResultForReview.errorsByPath
                         soFar
                 )
@@ -554,22 +563,31 @@ reviewRunList reviews project =
 
 errorsByPathToNextFixableErrorOrAll :
     { elmJsonSource : String, filesByPath : FastDict.Dict String String }
-    -> FastDict.Dict String (List ProjectFileError)
+    -> FastDict.Dict String (List FileReviewError)
     -> Maybe NextFixableOrAllUnfixable
 errorsByPathToNextFixableErrorOrAll project =
     \errorsByPath ->
         let
+            sourceAtPath : String -> Maybe String
+            sourceAtPath path =
+                case path of
+                    "elmJson" ->
+                        project.elmJsonSource |> Just
+
+                    filePath ->
+                        project.filesByPath |> FastDict.get filePath
+
             nextFixableErrorOrAll :
                 { fixable :
                     Maybe
                         { source : String
-                        , fixedSource : String
+                        , fixedSources : List { path : String, fixedSource : String, originalSource : String }
                         , message : String
                         , details : List String
                         , range : Elm.Syntax.Range.Range
                         , path : String
                         }
-                , otherErrors : FastDict.Dict String (List ProjectFileError)
+                , otherErrors : FastDict.Dict String (List FileReviewError)
                 }
             nextFixableErrorOrAll =
                 errorsByPath
@@ -580,39 +598,25 @@ errorsByPathToNextFixableErrorOrAll project =
                                     { fixable :
                                         Maybe
                                             { source : String
-                                            , fixedSource : String
+                                            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
                                             , message : String
                                             , details : List String
                                             , range : Elm.Syntax.Range.Range
                                             , path : String
                                             }
-                                    , otherErrors : List ProjectFileError
+                                    , otherErrors : List FileReviewError
                                     }
                                 errorsFixableErrorOrAll =
                                     case soFar.fixable of
                                         Just soFarFix ->
-                                            { fixable = soFarFix |> Just
-                                            , otherErrors = errors
-                                            }
+                                            { fixable = soFarFix |> Just, otherErrors = errors }
 
                                         Nothing ->
-                                            let
-                                                maybeSourceToFix : Maybe String
-                                                maybeSourceToFix =
-                                                    case path of
-                                                        "elmJson" ->
-                                                            project.elmJsonSource |> Just
-
-                                                        filePath ->
-                                                            project.filesByPath |> FastDict.get filePath
-                                            in
-                                            case maybeSourceToFix of
+                                            case sourceAtPath path of
                                                 Nothing ->
-                                                    { fixable = Nothing
-                                                    , otherErrors = errors
-                                                    }
+                                                    { fixable = Nothing, otherErrors = [] }
 
-                                                Just sourceToFix ->
+                                                Just pathSource ->
                                                     errors
                                                         |> List.foldl
                                                             (\error errorsResultSoFar ->
@@ -622,16 +626,55 @@ errorsByPathToNextFixableErrorOrAll project =
                                                                         , otherErrors = errorsResultSoFar.otherErrors |> (::) error
                                                                         }
 
-                                                                    fix0 :: fix1Up ->
-                                                                        case sourceToFix |> Review.applyFix (fix0 :: fix1Up) of
-                                                                            Ok fixedSource ->
-                                                                                { fixable = { source = sourceToFix, fixedSource = fixedSource, message = error.message, details = error.details, range = error.range, path = path } |> Just
+                                                                    fileFix0 :: fileFix1Up ->
+                                                                        let
+                                                                            maybeFixedSources : Maybe (List { path : String, fixedSource : String, originalSource : String })
+                                                                            maybeFixedSources =
+                                                                                (fileFix0 :: fileFix1Up)
+                                                                                    |> List.foldl
+                                                                                        (\fileFix maybeFixedSourcesSoFar ->
+                                                                                            case maybeFixedSourcesSoFar of
+                                                                                                Nothing ->
+                                                                                                    Nothing
+
+                                                                                                Just soFarFixedSources ->
+                                                                                                    case sourceAtPath fileFix.path of
+                                                                                                        Nothing ->
+                                                                                                            Nothing
+
+                                                                                                        Just sourceToFix ->
+                                                                                                            case sourceToFix |> Review.sourceApplyEdits fileFix.edits of
+                                                                                                                Ok fixedSource ->
+                                                                                                                    soFarFixedSources
+                                                                                                                        |> (::)
+                                                                                                                            { path = fileFix.path
+                                                                                                                            , fixedSource = fixedSource
+                                                                                                                            , originalSource = sourceToFix
+                                                                                                                            }
+                                                                                                                        |> Just
+
+                                                                                                                Err _ ->
+                                                                                                                    Nothing
+                                                                                        )
+                                                                                        (Just [])
+                                                                        in
+                                                                        case maybeFixedSources of
+                                                                            Nothing ->
+                                                                                { fixable = Nothing
                                                                                 , otherErrors = errorsResultSoFar.otherErrors |> (::) error
                                                                                 }
 
-                                                                            Err _ ->
-                                                                                { fixable = Nothing
-                                                                                , otherErrors = errorsResultSoFar.otherErrors |> (::) error
+                                                                            Just fixedSources ->
+                                                                                { fixable =
+                                                                                    { source = pathSource
+                                                                                    , fixedSources = fixedSources
+                                                                                    , message = error.message
+                                                                                    , details = error.details
+                                                                                    , range = error.range
+                                                                                    , path = path
+                                                                                    }
+                                                                                        |> Just
+                                                                                , otherErrors = errorsResultSoFar.otherErrors
                                                                                 }
                                                             )
                                                             { fixable = Nothing
@@ -646,7 +689,7 @@ errorsByPathToNextFixableErrorOrAll project =
                         , otherErrors = FastDict.empty
                         }
         in
-        case ( nextFixableErrorOrAll.fixable, nextFixableErrorOrAll.otherErrors |> FastDictExtra.all (\_ errors -> errors |> List.isEmpty) ) of
+        case ( nextFixableErrorOrAll.fixable, nextFixableErrorOrAll.otherErrors |> FastDictLocalExtra.all (\_ errors -> errors |> List.isEmpty) ) of
             ( Nothing, True ) ->
                 Nothing
 
@@ -673,7 +716,7 @@ errorReceivedToJson projectSources =
                         Json.Encode.object
                             [ ( "display"
                               , allUnfixable
-                                    |> FastDictExtra.concatToListMap
+                                    |> FastDictLocalExtra.concatToListMap
                                         (\path errors ->
                                             let
                                                 pathSource : String
@@ -692,7 +735,7 @@ errorReceivedToJson projectSources =
                                                         , range = error.range
                                                         , message = error.message
                                                         , details = error.details
-                                                        , fix = error.fix
+                                                        , fixedSources = []
                                                         }
                                                             |> errorDisplay pathSource
                                                     )
@@ -709,7 +752,16 @@ errorReceivedToJson projectSources =
                             , ( "fix"
                               , Json.Encode.object
                                     [ ( "path", fixable.fixable.path |> Json.Encode.string )
-                                    , ( "fixedSource", fixable.fixable.fixedSource |> Json.Encode.string )
+                                    , ( "fixedSources"
+                                      , fixable.fixable.fixedSources
+                                            |> Json.Encode.list
+                                                (\fileFix ->
+                                                    Json.Encode.object
+                                                        [ ( "path", fileFix.path |> Json.Encode.string )
+                                                        , ( "source", fileFix.fixedSource |> Json.Encode.string )
+                                                        ]
+                                                )
+                                      )
                                     ]
                               )
                             ]
@@ -717,16 +769,26 @@ errorReceivedToJson projectSources =
             ]
 
 
-errorDisplay : String -> { error_ | path : String, range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
+errorDisplay :
+    String
+    ->
+        { error_
+            | path : String
+            , range : Elm.Syntax.Range.Range
+            , message : String
+            , details : List String
+            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
+        }
+    -> String
 errorDisplay source =
     \error ->
-        [ error.path
+        [ error.message |> Ansi.cyan |> Ansi.bold
+        , "  in "
+        , error.path
         , ":"
         , error.range.start.row |> String.fromInt
         , ":"
         , error.range.start.column |> String.fromInt
-        , "\n\n    "
-        , error.message
         , "\n\n"
         , codeExtract source error.range
             |> String.split "\n"
@@ -734,13 +796,46 @@ errorDisplay source =
             |> String.join "\n"
         , "\n\n"
         , error.details |> String.join "\n\n"
+        , case error.fixedSources of
+            [] ->
+                ""
+
+            fixedSource0 :: fixedSource1Up ->
+                "I can fix this for you by changing\n"
+                    ++ ((fixedSource0 :: fixedSource1Up)
+                            |> List.map
+                                (\fileFixedSource ->
+                                    [ "in "
+                                    , fileFixedSource.path
+                                    , "\n\n"
+                                    , sourceHighlightDifferentLines
+                                        fileFixedSource.originalSource
+                                        fileFixedSource.fixedSource
+                                    ]
+                                        |> String.concat
+                                )
+                            |> String.join "\n\n"
+                       )
         ]
             |> String.concat
 
 
-getIndexOfFirstNonSpace : String -> Int
-getIndexOfFirstNonSpace string =
-    (string |> String.length) - (string |> String.trimLeft |> String.length)
+sourceHighlightDifferentLines : String -> String -> String
+sourceHighlightDifferentLines aString bString =
+    Diff.diff (aString |> String.lines) (bString |> String.lines)
+        |> List.map
+            (\change ->
+                case change of
+                    Diff.NoChange str ->
+                        "|   " ++ str
+
+                    Diff.Added str ->
+                        Ansi.green ("|   " ++ str)
+
+                    Diff.Removed str ->
+                        Ansi.red ("|   " ++ str)
+            )
+        |> String.join "\n"
 
 
 codeExtract : String -> Elm.Syntax.Range.Range -> String
@@ -764,72 +859,45 @@ codeExtract source range =
             ""
 
         else
-            let
-                lineContent : String
-                lineContent =
-                    sourceLineAtRow (range.start.row - 1)
-            in
             [ sourceLineAtRow (range.start.row - 2)
-            , lineContent
-            , errorRangeUnderline { start = range.start.column, end = range.end.column, lineContent = lineContent }
+            , sourceLineAtRow (range.start.row - 1)
+                |> withErrorHighlightedRange { start = range.start.column, end = range.end.column }
             , sourceLineAtRow range.end.row
             ]
                 |> List.filter (\l -> not (l |> String.isEmpty))
                 |> String.join "\n"
 
     else
-        let
-            startLineNumber : Int
-            startLineNumber =
-                range.start.row - 1
-
-            startLineContent : String
-            startLineContent =
-                sourceLineAtRow startLineNumber
-
-            linesBetweenStartAndEnd : List Int
-            linesBetweenStartAndEnd =
-                List.range range.start.row (range.end.row - 2)
-
-            endLineContent : String
-            endLineContent =
-                sourceLineAtRow (range.end.row - 1)
-        in
-        [ [ sourceLineAtRow (startLineNumber - 1)
-          , startLineContent
-          , errorRangeUnderline
-                { start = range.start.column
-                , end = List.length (String.toList startLineContent) + 1
-                , lineContent = startLineContent
-                }
+        [ [ sourceLineAtRow (range.start.row - 2)
+          , let
+                startLineContent : String
+                startLineContent =
+                    sourceLineAtRow (range.start.row - 1)
+            in
+            startLineContent
+                |> withErrorHighlightedRange
+                    { start = range.start.column
+                    , end = (startLineContent |> Unicode.length) + 1
+                    }
           ]
             |> List.filter (\l -> not (l |> String.isEmpty))
             |> String.join "\n"
-        , linesBetweenStartAndEnd
+        , List.range range.start.row (range.end.row - 2)
             |> List.map
                 (\middleLine ->
-                    let
-                        line : String
-                        line =
-                            sourceLineAtRow middleLine
-                    in
-                    if String.isEmpty line then
-                        sourceLineAtRow middleLine
-
-                    else
-                        [ sourceLineAtRow middleLine
-                        , "\n"
-                        , errorUnderlineWholeLine line
-                        ]
-                            |> String.concat
+                    sourceLineAtRow middleLine |> Ansi.backgroundRed
                 )
             |> String.join "\n"
-        , [ endLineContent
-          , errorRangeUnderline
-                { start = getIndexOfFirstNonSpace endLineContent + 1
-                , end = range.end.column
-                , lineContent = endLineContent
-                }
+        , [ let
+                endLineContent : String
+                endLineContent =
+                    sourceLineAtRow (range.end.row - 1)
+            in
+            endLineContent
+                |> withErrorHighlightedRange
+                    { start = getIndexOfFirstNonSpace endLineContent + 1
+                    , end = range.end.column
+                    }
           , sourceLineAtRow range.end.row
           ]
             |> List.filter (\l -> not (l |> String.isEmpty))
@@ -838,50 +906,23 @@ codeExtract source range =
             |> String.join "\n"
 
 
-errorUnderlineWholeLine : String -> String
-errorUnderlineWholeLine line =
-    let
-        start : Int
-        start =
-            getIndexOfFirstNonSpace line
-
-        end : Int
-        end =
-            line |> String.length
-    in
-    String.repeat start " "
-        ++ (String.repeat (end - start) "^" |> Ansi.red)
+getIndexOfFirstNonSpace : String -> Int
+getIndexOfFirstNonSpace string =
+    (string |> String.length) - (string |> String.trimLeft |> String.length)
 
 
-errorRangeUnderline : { start : Int, end : Int, lineContent : String } -> String
-errorRangeUnderline toUnderline =
-    let
-        lineChars : List Char
-        lineChars =
-            String.toList toUnderline.lineContent
-
-        preText : List Char
-        preText =
-            List.take (toUnderline.start - 1) lineChars
-
-        unicodePreOffset : Int
-        unicodePreOffset =
-            String.length (String.fromList preText) - List.length preText
-
-        inText : List Char
-        inText =
-            lineChars
-                |> List.drop (toUnderline.start - 1)
-                |> List.take (toUnderline.end - toUnderline.start)
-
-        unicodeInOffset : Int
-        unicodeInOffset =
-            -- We want to show enough ^ characters to cover the whole underlined zone,
-            -- and for unicode characters that sometimes means 2 ^
-            String.length (String.fromList inText) - List.length inText
-    in
-    String.repeat (unicodePreOffset + toUnderline.start - 1) " "
-        ++ (String.repeat (unicodeInOffset + toUnderline.end - toUnderline.start) "^" |> Ansi.red)
+withErrorHighlightedRange : { start : Int, end : Int } -> (String -> String)
+withErrorHighlightedRange lineRange =
+    \lineContent ->
+        [ lineContent |> Unicode.left (lineRange.start - 1)
+        , lineContent
+            |> Unicode.dropLeft (lineRange.start - 1)
+            |> Unicode.left (lineRange.end - lineRange.start)
+            |> Ansi.backgroundRed
+        , lineContent
+            |> Unicode.dropLeft (lineRange.start - 1 + lineRange.end - lineRange.start)
+        ]
+            |> String.concat
 
 
 listen :
@@ -996,15 +1037,15 @@ moduleDataJsonDecoder =
 
 
 type NextFixableOrAllUnfixable
-    = AllUnfixable (FastDict.Dict String (List ProjectFileError))
+    = AllUnfixable (FastDict.Dict String (List FileReviewError))
     | Fixable
         { fixable :
             { source : String
-            , fixedSource : String
+            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
             , message : String
             , details : List String
             , range : Elm.Syntax.Range.Range
             , path : String
             }
-        , otherErrors : FastDict.Dict String (List ProjectFileError)
+        , otherErrors : FastDict.Dict String (List FileReviewError)
         }

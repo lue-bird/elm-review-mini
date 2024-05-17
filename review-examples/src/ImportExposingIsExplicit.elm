@@ -186,7 +186,11 @@ report knowledge =
                                 ]
                             , range = exposingEverythingInModule.dotsRange
                             , fix =
-                                [ Review.fixReplaceRange exposingEverythingInModule.dotsRange (exposesOfModule |> explicitExposesToString)
+                                [ { path = exposingEverythingInModule.containingModulePath
+                                  , edits =
+                                        [ Review.replaceRange exposingEverythingInModule.dotsRange (exposesOfModule |> explicitExposesToString)
+                                        ]
+                                  }
                                 ]
                             }
             )

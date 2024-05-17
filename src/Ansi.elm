@@ -1,6 +1,4 @@
-module Ansi exposing (backgroundRed, bold, cyan, red, yellow)
-
--- FONTS
+module Ansi exposing (backgroundRed, bold, cyan, green, red, yellow)
 
 
 bold : String -> String
@@ -8,23 +6,19 @@ bold text =
     String.concat [ "\u{001B}[1m", text, "\u{001B}[22m" ]
 
 
-
--- COLORS
-
-
 applyColor : String -> String -> String
 applyColor color string =
-    String.concat [ "\u{001B}[", color, "m", string, noColor ]
-
-
-noColor : String
-noColor =
-    "\u{001B}[39m"
+    String.concat [ "\u{001B}[", color, "m", string, "\u{001B}[39m" ]
 
 
 red : String -> String
 red =
     applyColor "31"
+
+
+green : String -> String
+green =
+    applyColor "32"
 
 
 yellow : String -> String
@@ -37,10 +31,6 @@ cyan =
     applyColor "36"
 
 
-
--- BACKGROUND COLORS
-
-
 backgroundRed : String -> String
 backgroundRed =
     applyBackgroundColor "41"
@@ -48,9 +38,4 @@ backgroundRed =
 
 applyBackgroundColor : String -> String -> String
 applyBackgroundColor color string =
-    String.concat [ "\u{001B}[", color, "m", string, noBackgroundColor ]
-
-
-noBackgroundColor : String
-noBackgroundColor =
-    "\u{001B}[0m"
+    String.concat [ "\u{001B}[", color, "m", string, "\u{001B}[0m" ]

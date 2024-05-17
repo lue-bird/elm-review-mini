@@ -7,7 +7,7 @@ import Elm.Syntax.Range
 import FastDict
 import FastDict.LocalExtra
 import List.LocalExtra
-import Review exposing (fixReplaceRange)
+import Review
 import Set exposing (Set)
 import Set.LocalExtra
 

@@ -34,7 +34,7 @@ moduleNameWithUnderscoreForbidTests =
     Test.describe "ModuleNameWithUnderscoreForbid"
         [ Test.test "single module without errors"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -51,7 +51,7 @@ moduleNameWithUnderscoreForbidTests =
             )
         , Test.test "single module with error"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A_.elm"
                       , source = """
@@ -67,7 +67,7 @@ moduleNameWithUnderscoreForbidTests =
                       , message = "module name contains _"
                       , details = [ "By convention, elm modules names use Pascal case (like `MyModuleName`). Please rename your module using this format." ]
                       , range = Review.Test.Under "A_"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -81,7 +81,7 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
     Test.describe "ModuleValueOrFunctionIsTypeAnnotated"
         [ Test.test "allows annotated value and function declaration and un-annotated let value and function declaration"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -111,7 +111,7 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
             )
         , Test.test "reports un-annotated value declaration"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -131,7 +131,7 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
                             , "Try adding a line a : ItsType above the declaration. If you don't know the type, you can start by using the \"infer type\" feature of your IDE or inserting the type like `Never` and letting the compiler fill you in on the details."
                             ]
                       , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 3, column = 1 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -145,7 +145,7 @@ letValueOrFunctionIsTypeAnnotatedTests =
     Test.describe "LetValueOrFunctionIsTypeAnnotated"
         [ Test.test "allows annotated and un-annotated module-level value and function declaration and annotated let value and function declaration"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -180,7 +180,7 @@ letValueOrFunctionIsTypeAnnotatedTests =
             )
         , Test.test "reports un-annotated let value declaration"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -204,7 +204,7 @@ letValueOrFunctionIsTypeAnnotatedTests =
                             , "Try adding a line b : ItsType above the declaration. If you don't know the type, you can start by using the \"infer type\" feature of your IDE or inserting the type like `Never` and letting the compiler fill you in on the details."
                             ]
                       , range = Review.Test.UnderExactly { section = "b", startingAt = { row = 5, column = 9 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -218,7 +218,7 @@ moduleExposingIsExplicitTests =
     Test.describe "ModuleExposingIsExplicit"
         [ Test.test "allows module exposing (value, function, type alias, choice type)"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -245,7 +245,7 @@ moduleExposingIsExplicitTests =
             )
         , Test.test "reports module exposing (..) with value, function, type alias, choice type"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -274,21 +274,25 @@ moduleExposingIsExplicitTests =
                             , "Try to explicitly pick the members you want to make public and put them where the .. is currently. To start with all the currently exposed members, accept the provided fix and then remove the undesired ones."
                             ]
                       , range = Review.Test.Under ".."
-                      , fixedSource = Just """
-                            module A exposing (Alias, Choice(..), function, value)
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (Alias, Choice(..), function, value)
 
-                            value =
-                                ""
-                            
-                            function () =
-                                value
-                            
-                            type Choice
-                                = Variant
-                            
-                            type alias Alias =
-                                String
-                            """
+                                    value =
+                                        ""
+                                    
+                                    function () =
+                                        value
+                                    
+                                    type Choice
+                                        = Variant
+                                    
+                                    type alias Alias =
+                                        String
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -302,7 +306,7 @@ importExposingIsExplicitTests =
     Test.describe "ImportExposingIsExplicit"
         [ Test.test "allows import exposing (value)"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -339,7 +343,7 @@ importExposingIsExplicitTests =
             )
         , Test.test "reports import exposing (..) with .. being from explicit exposing value, function, type alias, choice type"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -378,14 +382,18 @@ importExposingIsExplicitTests =
                             , "Try using qualified imports like ModuleName.member or if that becomes too inconvenient, explicitly list what exposes you want to import for use without qualification. To start by explicitly listing all of the current members, accept the automatic fix and clean up from there."
                             ]
                       , range = Review.Test.Under ".."
-                      , fixedSource = Just """
-                            module B exposing (b)
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module B exposing (b)
 
-                            import A exposing (Alias, Choice(..), function, value)
+                                    import A exposing (Alias, Choice(..), function, value)
 
-                            b =
-                                value
-                            """
+                                    b =
+                                        value
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -393,7 +401,7 @@ importExposingIsExplicitTests =
             )
         , Test.test "reports import exposing (..) with .. being from exposing everything being value, function, type alias, choice type"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -432,14 +440,18 @@ importExposingIsExplicitTests =
                             , "Try using qualified imports like ModuleName.member or if that becomes too inconvenient, explicitly list what exposes you want to import for use without qualification. To start by explicitly listing all of the current members, accept the automatic fix and clean up from there."
                             ]
                       , range = Review.Test.Under ".."
-                      , fixedSource = Just """
-                            module B exposing (b)
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module B exposing (b)
 
-                            import A exposing (Alias, Choice(..), function, value)
+                                    import A exposing (Alias, Choice(..), function, value)
 
-                            b =
-                                value
-                            """
+                                    b =
+                                        value
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -453,7 +465,7 @@ moduleAndExposesAreUsedTests =
     Test.describe "ModuleAndExposesAreUsed"
         [ Test.test "unused exposed value, usage fully qualified"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -488,13 +500,17 @@ If intended as a very generic utility, try moving it into a package
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
                       , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
-                      , fixedSource = Just """
-                            module A exposing (b)
-                            a =
-                                1
-                            b =
-                                2
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (b)
+                                    a =
+                                        1
+                                    b =
+                                        2
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -502,7 +518,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
         , Test.test "unused exposed value as the only expose"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -536,7 +552,7 @@ If intended as a very generic utility, try moving it into a package
 If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
                             ]
                       , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -544,7 +560,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
         , Test.test "unused exposed value, usage qualified by alias"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -579,13 +595,17 @@ If intended as a very generic utility, try moving it into a package
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
                       , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
-                      , fixedSource = Just """
-                            module A exposing (b)
-                            a =
-                                1
-                            b =
-                                2
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (b)
+                                    a =
+                                        1
+                                    b =
+                                        2
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -593,7 +613,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
         , Test.test "unused exposed value, usage by import exposing"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -628,13 +648,17 @@ If intended as a very generic utility, try moving it into a package
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
                       , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
-                      , fixedSource = Just """
-                            module A exposing (b)
-                            a =
-                                1
-                            b =
-                                2
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (b)
+                                    a =
+                                        1
+                                    b =
+                                        2
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -648,7 +672,7 @@ patternVariablesAreUsedTests =
     Test.describe "PatternVariableIsUsed"
         [ Test.test "used pattern variables are not reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -685,7 +709,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -702,12 +726,16 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a _ =
-                                ""
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a _ =
+                                        ""
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -715,7 +743,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable from single-field record is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -732,12 +760,16 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a _ =
-                                ""
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a _ =
+                                        ""
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -745,7 +777,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable as first from multi-field record is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -762,12 +794,16 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a { used } =
-                                used
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a { used } =
+                                        used
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -775,7 +811,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable as last from multi-field record is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -792,12 +828,16 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a { used } =
-                                used
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a { used } =
+                                        used
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -805,7 +845,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable from as is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -822,12 +862,16 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a (()) =
-                                ""
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a (()) =
+                                        ""
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -835,7 +879,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused lambda argument pattern variable is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -852,12 +896,16 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a =
-                                \\_ -> ""
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        \\_ -> ""
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -865,7 +913,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused case argument pattern variable is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -884,14 +932,18 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a =
-                                case () of
-                                    _ ->
-                                        ""
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        case () of
+                                            _ ->
+                                                ""
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -899,7 +951,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused let destructured argument pattern variable is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -920,16 +972,20 @@ patternVariablesAreUsedTests =
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                       , range = Review.Test.Under "unused"
-                      , fixedSource = Just """
-                            module A exposing (a)
-                            
-                            a =
-                                let
-                                    ( _, _ ) =
-                                        ( (), () )
-                                in
-                                ""
-                            """
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        let
+                                            ( _, _ ) =
+                                                ( (), () )
+                                        in
+                                        ""
+                                    """
+                              }
+                            ]
                       }
                     ]
                 }
@@ -943,7 +999,7 @@ debugIsNotUsedTests =
     Test.describe "DebugIsNotUsed"
         [ Test.test "using variables named log, toString, todo are allowed"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -966,7 +1022,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using log with import Debug exposing (log) and module-declared log is allowed"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -989,7 +1045,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using log with import Debug exposing (log) with alias and module-declared log is allowed"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1012,7 +1068,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using \"Debug.log\" though unambiguous import alias to a module different than Debug is allowed"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1041,7 +1097,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using Debug.todo from implicit import is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1060,7 +1116,7 @@ debugIsNotUsedTests =
                             [ "Debug.todo marks missing functionality which needs to be added gradually."
                             ]
                       , range = Review.Test.Under "Debug.todo"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1068,7 +1124,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using Debug.log from implicit import is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1090,7 +1146,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.Under "Debug.log"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1098,7 +1154,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using Debug.toString from implicit import is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1120,7 +1176,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.Under "Debug.toString"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1128,7 +1184,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using Debug.toString qualified by import alias is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1152,7 +1208,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.Under "Dbg.toString"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1160,7 +1216,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1184,7 +1240,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1192,7 +1248,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using qualified Debug.toString from explicit import exposing and import alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1216,7 +1272,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.Under "Dbg.toString"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1224,7 +1280,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from explicit import exposing with alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1248,7 +1304,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1256,7 +1312,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using qualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1280,7 +1336,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.Under "Debug.toString"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1288,7 +1344,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using qualified Debug.toString from explicit import exposing (..) and import alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1312,7 +1368,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.Under "Dbg.toString"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1320,7 +1376,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from import exposing (..) with alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1344,7 +1400,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1352,7 +1408,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from import exposing (..) without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1376,7 +1432,7 @@ It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
                       , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1390,7 +1446,7 @@ commentDoesNotUseCertainWordsTests =
     Test.describe "CommentDoesNotUseCertainWords"
         [ Test.test "comments without marks are allowed"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1436,7 +1492,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "single-line comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1454,7 +1510,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1462,7 +1518,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "multi-line comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1483,7 +1539,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1491,7 +1547,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "module documentation comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1514,7 +1570,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1522,7 +1578,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "value documentation comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1546,7 +1602,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1554,7 +1610,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "function documentation comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1578,7 +1634,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1586,7 +1642,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "type alias documentation comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1610,7 +1666,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1618,7 +1674,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "choice type documentation comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1642,7 +1698,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }
@@ -1650,7 +1706,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "port documentation comment with mark is reported"
             (\() ->
-                { projectConfig = Review.Test.applicationConfigAfterElmInit
+                { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1673,7 +1729,7 @@ commentDoesNotUseCertainWordsTests =
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
                       , range = Review.Test.Under "TODO"
-                      , fixedSource = Nothing
+                      , fixedFiles = []
                       }
                     ]
                 }

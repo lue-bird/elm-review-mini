@@ -1,4 +1,4 @@
-module ListExtra exposing (anyPair, consJust, elementAtIndex, headMap, last, lastMap)
+module ListLocalExtra exposing (anyPair, consJust, elementAtIndex, headMap, last, lastMap)
 
 
 last : List a -> Maybe a

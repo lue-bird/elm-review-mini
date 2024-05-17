@@ -138,7 +138,7 @@ review =
         }
 
 
-report : Knowledge -> List { path : String, range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
+report : Knowledge -> List Review.Error
 report knowledge =
     let
         allFullyQualifiedReferenceUseCounts : FastDict.Dict Elm.Syntax.ModuleName.ModuleName (FastDict.Dict ( List String, String ) Int)
@@ -260,8 +260,12 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                         ]
                                     , range = exposeRange
                                     , fix =
-                                        [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
-                                            (fixedExposes |> exposingToString)
+                                        [ { path = moduleKnowledge.exposes.path
+                                          , edits =
+                                                [ Review.replaceRange moduleKnowledge.exposes.exposingRange
+                                                    (fixedExposes |> exposingToString)
+                                                ]
+                                          }
                                         ]
                                     }
                                         |> Just
@@ -284,17 +288,21 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                     [ "Either use it or remove it from the exposing part of the module header which might reveal its declaration as unused." ]
                                 , range = typeExpose.range
                                 , fix =
-                                    [ Review.fixReplaceRange moduleKnowledge.exposes.exposingRange
-                                        (Set.union
-                                            (moduleKnowledge.exposes.exposedSimpleNames
-                                                |> FastDict.LocalExtra.keys
-                                            )
-                                            (moduleKnowledge.exposes.exposedTypesWithVariantNames
-                                                |> FastDict.LocalExtra.keys
-                                                |> Set.remove typeExposeUnqualified
-                                            )
-                                            |> exposingToString
-                                        )
+                                    [ { path = moduleKnowledge.exposes.path
+                                      , edits =
+                                            [ Review.replaceRange moduleKnowledge.exposes.exposingRange
+                                                (Set.union
+                                                    (moduleKnowledge.exposes.exposedSimpleNames
+                                                        |> FastDict.LocalExtra.keys
+                                                    )
+                                                    (moduleKnowledge.exposes.exposedTypesWithVariantNames
+                                                        |> FastDict.LocalExtra.keys
+                                                        |> Set.remove typeExposeUnqualified
+                                                    )
+                                                    |> exposingToString
+                                                )
+                                            ]
+                                      }
                                     ]
                                 }
                                     |> Just

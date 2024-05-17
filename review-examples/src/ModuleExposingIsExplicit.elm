@@ -111,12 +111,16 @@ report knowledge =
                     ]
                 , range = exposingEverythingInModule.dotsRange
                 , fix =
-                    [ Review.fixReplaceRange exposingEverythingInModule.dotsRange
-                        ({ choiceTypeNames = exposingEverythingInModule.choiceTypeNames
-                         , simpleNames = exposingEverythingInModule.simpleNames
-                         }
-                            |> explicitExposesToString
-                        )
+                    [ { path = modulePath
+                      , edits =
+                            [ Review.replaceRange exposingEverythingInModule.dotsRange
+                                ({ choiceTypeNames = exposingEverythingInModule.choiceTypeNames
+                                 , simpleNames = exposingEverythingInModule.simpleNames
+                                 }
+                                    |> explicitExposesToString
+                                )
+                            ]
+                      }
                     ]
                 }
             )

@@ -1,6 +1,6 @@
 module Review.Test exposing (run, applicationConfigAfterElmInit, ExpectedErrorRange(..))
 
-{-| Test your review using [`elm-test`](https://package.elm-lang.org/packages/elm-explorations/test/latest/).
+{-| Test your review using [`elm-test`](https://dark.elm.dmy.fr/packages/elm-explorations/test/latest/).
 
 Implementing a review works really well in a Test-Driven loop:
 
@@ -26,6 +26,8 @@ run your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
 -}
 
+import Ansi
+import Diff
 import Elm.Docs
 import Elm.Parser
 import Elm.Project
@@ -34,9 +36,10 @@ import Elm.Syntax.Range
 import ElmJson.LocalExtra
 import Expect
 import FastDict
+import FastDictLocalExtra
 import Json.Decode
+import ListLocalExtra
 import Review
-import Review.Test.FailureMessage
 import Set exposing (Set)
 
 
@@ -102,13 +105,7 @@ type alias ReviewResult =
         (List
             { path : String
             , source : String
-            , errors :
-                List
-                    { range : Elm.Syntax.Range.Range
-                    , message : String
-                    , details : List String
-                    , fix : List Review.Fix
-                    }
+            , errors : List FileReviewError
             }
         )
 
@@ -116,23 +113,17 @@ type alias ReviewResult =
 type alias SuccessfulRunResult =
     { path : String
     , source : String
-    , errors :
-        List
-            { range : Elm.Syntax.Range.Range
-            , message : String
-            , details : List String
-            , fix : List Review.Fix
-            }
+    , errors : List FileReviewError
     }
 
 
 {-| An expectation that an error with this shape will be reported.
 -}
-type alias ExpectedError =
+type alias ExpectedFileError =
     { message : String
     , details : List String
     , range : ExpectedErrorRange
-    , fixedSource : Maybe String
+    , fixedFiles : List { path : String, source : String }
     }
 
 
@@ -163,7 +154,7 @@ with your provided expected errors.
         describe "The.Review.You.Want.To.Test"
             [ test "should report ... when ..."
                 (\() ->
-                    { projectConfig = Review.Test.applicationConfigAfterElmInit
+                    { projectConfiguration = Review.Test.applicationConfigAfterElmInit
                     , files =
                         [ { path = "src/A/B.elm"
                           , source = """
@@ -189,7 +180,7 @@ with your provided expected errors.
                           , message = "message"
                           , details = [ "details" ]
                           , range = Review.Test.Under "where it's located"
-                          , fixedSource = Nothing
+                          , fixedFiles = []
                           }
                         ]
                     }
@@ -220,7 +211,7 @@ or want to add dependencies (elm/core is automatically part of every tested proj
                                 """
                           }
                         ]
-                    , projectConfig =
+                    , projectConfiguration =
                         { elmJson = """
                             {
                                 "type": "application",
@@ -251,12 +242,15 @@ or want to add dependencies (elm/core is automatically part of every tested proj
                           , message = "Remove the use of `Debug` before shipping to production"
                           , details = [ "Compiling elm code in optimized mode does not allow these helpers." ]
                           , range = Review.Test.Under "Debug.log"
-                          , fixedSource =
-                              Just """
-                                  module A exposing (a)
-                                  a =
-                                      "message"
-                                  """
+                          , fixedFiles =
+                              [ { path = "src/A.elm"
+                                , source = """
+                                    module A exposing (a)
+                                    a =
+                                        "message"
+                                    """
+                                }
+                              ]
                           }
                         ]
                     }
@@ -268,7 +262,7 @@ or want to add dependencies (elm/core is automatically part of every tested proj
 -}
 run :
     { files : List { path : String, source : String }
-    , projectConfig :
+    , projectConfiguration :
         { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
     , review : Review.Review
     , expectedErrors :
@@ -277,7 +271,7 @@ run :
             , message : String
             , details : List String
             , range : ExpectedErrorRange
-            , fixedSource : Maybe String
+            , fixedFiles : List { path : String, source : String }
             }
     }
     -> Expect.Expectation
@@ -285,11 +279,11 @@ run config =
     let
         elmJsonSourceNormal : String
         elmJsonSourceNormal =
-            config.projectConfig.elmJson |> multiLineStringNormalize
+            config.projectConfiguration.elmJson |> multiLineStringNormalize
     in
     case elmJsonSourceNormal |> Json.Decode.decodeString Elm.Project.decoder of
         Err elmJsonParseError ->
-            [ elmJsonParseError |> Review.Test.FailureMessage.elmJsonParsingFailure ] |> expectationsViolated
+            [ elmJsonParseError |> elmJsonParsingFailure ] |> expectationsViolated
 
         Ok elmJsonProject ->
             let
@@ -299,7 +293,7 @@ run config =
                         |> List.map
                             (\file -> { path = file.path, source = file.source |> multiLineStringNormalize })
 
-                expectedErrorsWithNormalizedFixedSource : List { path : String, errors : List { message : String, details : List String, range : ExpectedErrorRange, fixedSource : Maybe String } }
+                expectedErrorsWithNormalizedFixedSource : List { path : String, errors : List ExpectedFileError }
                 expectedErrorsWithNormalizedFixedSource =
                     config.expectedErrors
                         |> List.foldl
@@ -312,7 +306,14 @@ run config =
                                                     { message = error.message
                                                     , details = error.details
                                                     , range = error.range
-                                                    , fixedSource = error.fixedSource |> Maybe.map multiLineStringNormalize
+                                                    , fixedFiles =
+                                                        error.fixedFiles
+                                                            |> List.map
+                                                                (\fixedFile ->
+                                                                    { path = fixedFile.path
+                                                                    , source = fixedFile.source |> multiLineStringNormalize
+                                                                    }
+                                                                )
                                                     }
                                                 |> Just
                                         )
@@ -323,12 +324,19 @@ run config =
             in
             case expectedErrorsWithNormalizedFixedSource |> invalidExpectedErrorsIn { files = filesWithNormalSource, project = elmJsonProject } of
                 [] ->
+                    let
+                        normalSourceByPath : FastDict.Dict String String
+                        normalSourceByPath =
+                            filesWithNormalSource
+                                |> FastDictLocalExtra.fromListMap
+                                    (\file -> { key = file.path, value = file.source })
+                    in
                     toReviewResult config.review
                         { files = filesWithNormalSource
-                        , directDependencies = config.projectConfig.directDependencies
+                        , directDependencies = config.projectConfiguration.directDependencies
                         , elmJson = { source = elmJsonSourceNormal, project = elmJsonProject }
                         }
-                        |> expectErrors expectedErrorsWithNormalizedFixedSource
+                        |> expectErrors normalSourceByPath expectedErrorsWithNormalizedFixedSource
 
                 error0 :: error1Up ->
                     (error0 :: error1Up) |> expectationsViolated
@@ -445,7 +453,7 @@ toReviewResult review project =
     case moduleParseResults of
         Err modulesThatFailedToParse ->
             modulesThatFailedToParse
-                |> List.map Review.Test.FailureMessage.moduleParsingFailure
+                |> List.map moduleFailedToParse
                 |> Err
 
         Ok modulesParsed ->
@@ -472,19 +480,19 @@ toReviewResult review project =
 
                                     ( Ok _, Err docsJsonParseError ) ->
                                         { parsed = Nothing
-                                        , errors = [ Review.Test.FailureMessage.dependencyDocsJsonParsingFailure docsJsonParseError ]
+                                        , errors = [ dependencyDocsJsonParsingFailure docsJsonParseError ]
                                         }
 
                                     ( Err elmJsonParseError, Ok _ ) ->
                                         { parsed = Nothing
-                                        , errors = [ Review.Test.FailureMessage.dependencyElmJsonParsingFailure elmJsonParseError ]
+                                        , errors = [ dependencyElmJsonParsingFailure elmJsonParseError ]
                                         }
 
                                     ( Err elmJsonParseError, Err docsJsonParseError ) ->
                                         { parsed = Nothing
                                         , errors =
-                                            [ Review.Test.FailureMessage.dependencyDocsJsonParsingFailure docsJsonParseError
-                                            , Review.Test.FailureMessage.dependencyElmJsonParsingFailure elmJsonParseError
+                                            [ dependencyDocsJsonParsingFailure docsJsonParseError
+                                            , dependencyElmJsonParsingFailure elmJsonParseError
                                             ]
                                         }
                             )
@@ -496,7 +504,7 @@ toReviewResult review project =
 
                 [] ->
                     let
-                        runErrorsByPath : FastDict.Dict String (List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix })
+                        runErrorsByPath : FastDict.Dict String (List FileReviewError)
                         runErrorsByPath =
                             { elmJson = project.elmJson
                             , directDependencies =
@@ -552,11 +560,52 @@ toReviewResult review project =
                     fileErrors |> Ok
 
 
+failureMessage : String -> String -> String
+failureMessage title content =
+    [ title |> Ansi.bold |> Ansi.red, "\n\n", content ] |> String.concat
+
+
+moduleFailedToParse : { path : String } -> String
+moduleFailedToParse file =
+    failureMessage "MODULE FAILED TO PARSE"
+        ([ """I could not parse the provided elm module source code at path """
+         , file.path
+         , "\n\n"
+         , """Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)"""
+         ]
+            |> String.concat
+        )
+
+
+dependencyElmJsonParsingFailure : Json.Decode.Error -> String
+dependencyElmJsonParsingFailure jsonDecodeError =
+    failureMessage "DEPENDENCY ELM.JSON FAILED TO PARSE"
+        ([ """I could not parse a provided dependency elm.json source: """
+         , jsonDecodeError |> Json.Decode.errorToString
+         , "\n\n"
+         , """Hint: Maybe you copy pasted the wrong file?"""
+         ]
+            |> String.concat
+        )
+
+
+dependencyDocsJsonParsingFailure : Json.Decode.Error -> String
+dependencyDocsJsonParsingFailure jsonDecodeError =
+    failureMessage "DEPENDENCY DOCS.JSON FAILED TO PARSE"
+        ([ """I could not parse a provided dependency docs.json source: """
+         , jsonDecodeError |> Json.Decode.errorToString
+         , "\n\n"
+         , """Hint: Maybe you copy pasted the wrong file?"""
+         ]
+            |> String.concat
+        )
+
+
 invalidExpectedErrorsIn :
     { files : List { path : String, source : String }
     , project : Elm.Project.Project
     }
-    -> (List { path : String, errors : List ExpectedError } -> List String)
+    -> (List { path : String, errors : List ExpectedFileError } -> List String)
 invalidExpectedErrorsIn project =
     \expectedErrors ->
         let
@@ -589,7 +638,7 @@ invalidExpectedErrorsIn project =
                         Nothing
 
                     else
-                        Review.Test.FailureMessage.unknownFilesInExpectedErrors expectedErrorsAtPath.path
+                        unknownFilesInExpectedErrors expectedErrorsAtPath.path
                             |> Just
                 )
         , expectedErrors
@@ -602,48 +651,46 @@ invalidExpectedErrorsIn project =
                         _ ->
                             []
                 )
-            |> List.filterMap
+            |> List.concatMap
                 (\expectedError ->
-                    case expectedError.fixedSource of
-                        Nothing ->
-                            Nothing
+                    expectedError.fixedFiles
+                        |> List.filterMap
+                            (\fixedFile ->
+                                case fixedFile.source |> Json.Decode.decodeString Elm.Project.decoder of
+                                    Ok _ ->
+                                        Nothing
 
-                        Just fixedSource ->
-                            case fixedSource |> Json.Decode.decodeString Elm.Project.decoder of
-                                Ok _ ->
-                                    Nothing
-
-                                Err jsonDecodeError ->
-                                    Review.Test.FailureMessage.elmJsonFixedSourceParsingFailure
-                                        jsonDecodeError
-                                        { message = expectedError.message, details = expectedError.details }
-                                        |> Just
+                                    Err jsonDecodeError ->
+                                        elmJsonFixedSourceParsingFailure
+                                            jsonDecodeError
+                                            { message = expectedError.message, details = expectedError.details }
+                                            |> Just
+                            )
                 )
         , expectedErrors
             |> List.concatMap
                 (\expectedFileErrors ->
                     if modulePaths |> Set.member expectedFileErrors.path then
                         expectedFileErrors.errors
-                            |> List.filterMap
+                            |> List.concatMap
                                 (\expectedError ->
-                                    case expectedError.fixedSource of
-                                        Nothing ->
-                                            Nothing
+                                    expectedError.fixedFiles
+                                        |> List.filterMap
+                                            (\fixedFile ->
+                                                case fixedFile.source |> Elm.Parser.parseToFile of
+                                                    Ok _ ->
+                                                        Nothing
 
-                                        Just fixedSource ->
-                                            case fixedSource |> Elm.Parser.parseToFile of
-                                                Ok _ ->
-                                                    Nothing
-
-                                                Err _ ->
-                                                    Review.Test.FailureMessage.moduleFixedSourceParsingFailure
-                                                        { path = expectedFileErrors.path
-                                                        , errorInfo =
-                                                            { message = expectedError.message
-                                                            , details = expectedError.details
+                                                    Err _ ->
+                                                        moduleFixedSourceParsingFailure
+                                                            { path = expectedFileErrors.path
+                                                            , errorInfo =
+                                                                { message = expectedError.message
+                                                                , details = expectedError.details
+                                                                }
                                                             }
-                                                        }
-                                                        |> Just
+                                                            |> Just
+                                            )
                                 )
 
                     else
@@ -653,112 +700,148 @@ invalidExpectedErrorsIn project =
             |> List.concat
 
 
-expectErrors : List { path : String, errors : List ExpectedError } -> (ReviewResult -> Expect.Expectation)
-expectErrors expectationsList reviewResult =
-    case reviewResult of
-        Err errors ->
-            expectationsViolated errors
+elmJsonFixedSourceParsingFailure : Json.Decode.Error -> { message : String, details : List String } -> String
+elmJsonFixedSourceParsingFailure decodeError errorInfo =
+    failureMessage "EXPECTED FIXED ELM.JSON FAILED TO PARSE"
+        ([ """I could not decode the expected fixed elm.json for the error with the message \""""
+         , errorInfo.message
+         , """" because """
+         , decodeError |> Json.Decode.errorToString
+         ]
+            |> String.concat
+        )
 
-        Ok runResults ->
-            let
-                expectations : FastDict.Dict String (List ExpectedError)
-                expectations =
-                    expectationsList
-                        |> List.foldl
-                            (\fileExpectation soFar ->
-                                case fileExpectation.errors of
-                                    [] ->
-                                        soFar
 
-                                    error0 :: errors1Up ->
-                                        soFar |> FastDict.insert fileExpectation.path (error0 :: errors1Up)
-                            )
-                            FastDict.empty
-            in
-            case runResults of
-                [] ->
-                    if expectations |> FastDict.isEmpty then
-                        Expect.pass
+moduleFixedSourceParsingFailure : { path : String, errorInfo : { message : String, details : List String } } -> String
+moduleFixedSourceParsingFailure info =
+    failureMessage "EXPECTED FIXED MODULE SOURCE CODE PARSING ERROR"
+        ([ "I could not parse the provided expected fixed elm module source code at path "
+         , info.path
+         , " for the error with the message \""
+         , info.errorInfo.message
+         , "\""
+         , "\n\n"
+         , """Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)"""
+         ]
+            |> String.concat
+        )
 
-                    else
-                        Expect.fail Review.Test.FailureMessage.expectedErrorsButFoundNone
 
-                runResult0 :: runResult1Up ->
-                    Expect.all
-                        (List.map
+unknownFilesInExpectedErrors : String -> String
+unknownFilesInExpectedErrors path =
+    failureMessage "EXPECTED ERROR USES UNKNOWN PATH"
+        ([ """I expected errors for the file at path """
+         , path
+         , """ but I couldn't find an entry with its source in the test files field with that path."""
+         ]
+            |> String.concat
+        )
+
+
+expectErrors : FastDict.Dict String String -> List { path : String, errors : List ExpectedFileError } -> (ReviewResult -> Expect.Expectation)
+expectErrors sourceByPath expectationsList =
+    \reviewResult ->
+        case reviewResult of
+            Err errors ->
+                expectationsViolated errors
+
+            Ok runResults ->
+                let
+                    expectations : FastDict.Dict String (List ExpectedFileError)
+                    expectations =
+                        expectationsList
+                            |> List.foldl
+                                (\fileExpectation soFar ->
+                                    case fileExpectation.errors of
+                                        [] ->
+                                            soFar
+
+                                        error0 :: errors1Up ->
+                                            soFar |> FastDict.insert fileExpectation.path (error0 :: errors1Up)
+                                )
+                                FastDict.empty
+                in
+                Expect.all
+                    (runResults
+                        |> List.map
                             (\runResult () ->
-                                let
-                                    expectedErrorsForFile : List ExpectedError
-                                    expectedErrorsForFile =
+                                checkAllErrorsMatch
+                                    { sourceByPath = sourceByPath
+                                    , runResult = runResult
+                                    , unorderedExpectedErrors =
                                         expectations
                                             |> FastDict.get runResult.path
                                             |> Maybe.withDefault []
-                                in
-                                case expectedErrorsForFile of
-                                    [] ->
-                                        case runResult.errors of
-                                            [] ->
-                                                Expect.pass
-
-                                            actualError0 :: actualError1Up ->
-                                                Expect.fail
-                                                    (Review.Test.FailureMessage.didNotExpectErrors runResult.path
-                                                        (actualError0 :: actualError1Up)
-                                                    )
-
-                                    expectedError0 :: expectedError1Up ->
-                                        checkAllErrorsMatch runResult (expectedError0 :: expectedError1Up)
+                                    }
                             )
-                            (runResult0 :: runResult1Up)
-                        )
-                        ()
+                    )
+                    ()
 
 
-checkAllErrorsMatch : SuccessfulRunResult -> List ExpectedError -> Expect.Expectation
-checkAllErrorsMatch runResult unorderedExpectedErrors =
+checkAllErrorsMatch :
+    { sourceByPath : FastDict.Dict String String
+    , runResult : SuccessfulRunResult
+    , unorderedExpectedErrors : List ExpectedFileError
+    }
+    -> Expect.Expectation
+checkAllErrorsMatch toCheck =
     let
-        ( expectedErrors, reviewErrors ) =
+        errorsOrdered : { expected : List ExpectedFileError, reviewErrors : List FileReviewError }
+        errorsOrdered =
             reorderErrors
-                runResult.source
-                { expectedErrors = unorderedExpectedErrors
-                , reviewErrors = runResult.errors
+                { source = toCheck.runResult.source
+                , expectedErrors = toCheck.unorderedExpectedErrors
+                , reviewErrors = toCheck.runResult.errors
                 , pairs = []
                 , expectedErrorsWithNoMatch = []
                 }
     in
-    checkErrorsMatch runResult
-        expectedErrors
-        (List.length expectedErrors)
-        reviewErrors
+    checkErrorsMatch
+        { sourceByPath = toCheck.sourceByPath
+        , runResult = toCheck.runResult
+        , expected = errorsOrdered.expected
+        , reviewErrors = errorsOrdered.reviewErrors
+        }
 
 
-reorderErrors : String -> ReorderState -> ( List ExpectedError, List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } )
-reorderErrors source reorderState =
+reorderErrors :
+    { source : String
+    , expectedErrors : List ExpectedFileError
+    , reviewErrors : List FileReviewError
+    , pairs : List { expected : ExpectedFileError, reviewError : FileReviewError }
+    , expectedErrorsWithNoMatch : List ExpectedFileError
+    }
+    -> { expected : List ExpectedFileError, reviewErrors : List FileReviewError }
+reorderErrors reorderState =
     case reorderState.expectedErrors of
         [] ->
-            ( List.reverse (reorderState.expectedErrorsWithNoMatch ++ List.map Tuple.first reorderState.pairs)
-            , List.reverse (reorderState.reviewErrors ++ List.map Tuple.second reorderState.pairs)
-            )
+            { expected =
+                (reorderState.expectedErrorsWithNoMatch ++ (reorderState.pairs |> List.map .expected))
+                    |> List.reverse
+            , reviewErrors =
+                (reorderState.reviewErrors ++ (reorderState.pairs |> List.map .reviewError))
+                    |> List.reverse
+            }
 
         expectedError :: restOfExpectedErrors ->
-            case findBestMatchingReviewError source expectedError reorderState.reviewErrors { error = Nothing, confidenceLevel = 0 } of
+            case findBestMatchingReviewError { source = reorderState.source, expected = expectedError, reviewErrorsRemaining = reorderState.reviewErrors, bestMatchError = Nothing, bestMatchConfidenceLevel = 0 } of
                 Just reviewError ->
-                    reorderErrors source
+                    reorderErrors
                         { reorderState
-                            | pairs = ( expectedError, reviewError ) :: reorderState.pairs
+                            | pairs = { expected = expectedError, reviewError = reviewError } :: reorderState.pairs
                             , reviewErrors = listRemoveFirstMember reviewError reorderState.reviewErrors
                             , expectedErrors = restOfExpectedErrors
                         }
 
                 Nothing ->
-                    reorderErrors source
+                    reorderErrors
                         { reorderState
                             | expectedErrorsWithNoMatch = expectedError :: reorderState.expectedErrorsWithNoMatch
                             , expectedErrors = restOfExpectedErrors
                         }
 
 
-listRemoveFirstMember : a -> List a -> List a
+listRemoveFirstMember : a -> (List a -> List a)
 listRemoveFirstMember elementToRemove list =
     -- IGNORE TCO
     case list of
@@ -773,54 +856,53 @@ listRemoveFirstMember elementToRemove list =
                 head :: listRemoveFirstMember elementToRemove tail
 
 
-findBestMatchingReviewError : String -> ExpectedError -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> { error : Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }, confidenceLevel : Int } -> Maybe { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
-findBestMatchingReviewError source expectedErrorDetails reviewErrors bestMatch =
-    case reviewErrors of
+findBestMatchingReviewError : { source : String, expected : ExpectedFileError, reviewErrorsRemaining : List FileReviewError, bestMatchError : Maybe FileReviewError, bestMatchConfidenceLevel : Int } -> Maybe FileReviewError
+findBestMatchingReviewError matchInfo =
+    case matchInfo.reviewErrorsRemaining of
         [] ->
-            bestMatch.error
+            matchInfo.bestMatchError
 
         reviewError :: restOfReviewErrors ->
             let
                 confidenceLevel : Int
                 confidenceLevel =
-                    matchingConfidenceLevel source expectedErrorDetails reviewError
+                    matchingConfidenceLevel matchInfo.source matchInfo.expected reviewError
             in
-            if confidenceLevel > bestMatch.confidenceLevel then
+            if confidenceLevel > matchInfo.bestMatchConfidenceLevel then
                 findBestMatchingReviewError
-                    source
-                    expectedErrorDetails
-                    restOfReviewErrors
-                    { error = Just reviewError, confidenceLevel = confidenceLevel }
+                    { source = matchInfo.source
+                    , expected = matchInfo.expected
+                    , reviewErrorsRemaining = restOfReviewErrors
+                    , bestMatchError = Just reviewError
+                    , bestMatchConfidenceLevel = confidenceLevel
+                    }
 
             else
                 findBestMatchingReviewError
-                    source
-                    expectedErrorDetails
-                    restOfReviewErrors
-                    bestMatch
+                    { source = matchInfo.source
+                    , expected = matchInfo.expected
+                    , reviewErrorsRemaining = restOfReviewErrors
+                    , bestMatchError = matchInfo.bestMatchError
+                    , bestMatchConfidenceLevel = matchInfo.bestMatchConfidenceLevel
+                    }
 
 
-matchingConfidenceLevel : String -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Int
+matchingConfidenceLevel : String -> ExpectedFileError -> FileReviewError -> Int
 matchingConfidenceLevel source expectedErrorDetails reviewError =
-    if expectedErrorDetails.message /= .message reviewError then
+    if expectedErrorDetails.message /= reviewError.message then
         0
 
     else
-        let
-            sourceInErrorRange : String
-            sourceInErrorRange =
-                source |> Review.sourceExtractInRange reviewError.range
-        in
         case expectedErrorDetails.range of
             Under under ->
-                if sourceInErrorRange /= under then
+                if (source |> Review.sourceExtractInRange reviewError.range) /= under then
                     1
 
                 else
                     2
 
             UnderExactly underExactly ->
-                if sourceInErrorRange /= underExactly.section then
+                if (source |> Review.sourceExtractInRange reviewError.range) /= underExactly.section then
                     1
 
                 else if underExactly.startingAt /= reviewError.range.start then
@@ -830,101 +912,135 @@ matchingConfidenceLevel source expectedErrorDetails reviewError =
                     3
 
 
-expectedErrorForMessage : ExpectedError -> { message : String, details : List String, under : String }
-expectedErrorForMessage =
-    \expectedError ->
-        { message = expectedError.message
-        , details = expectedError.details
-        , under = expectedError.range |> expectedErrorRangeSection
-        }
-
-
-expectedErrorRangeSection : ExpectedErrorRange -> String
-expectedErrorRangeSection =
-    \expectedErrorRange ->
-        case expectedErrorRange of
-            Under str ->
-                str
-
-            UnderExactly underExactly ->
-                underExactly.section
-
-
-checkErrorsMatch : SuccessfulRunResult -> List ExpectedError -> Int -> List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Expect.Expectation
-checkErrorsMatch runResult expectedErrors expectedNumberOfErrors errors =
+checkErrorsMatch :
+    { sourceByPath : FastDict.Dict String String
+    , runResult : SuccessfulRunResult
+    , expected : List ExpectedFileError
+    , reviewErrors : List FileReviewError
+    }
+    -> Expect.Expectation
+checkErrorsMatch toCheckForMatchingErrors =
     -- IGNORE TCO
-    case ( expectedErrors, errors ) of
+    case ( toCheckForMatchingErrors.expected, toCheckForMatchingErrors.reviewErrors ) of
         ( [], [] ) ->
             Expect.pass
 
         ( [], error :: restOfErrors ) ->
-            Review.Test.FailureMessage.tooManyErrors runResult.path (error :: restOfErrors)
+            tooManyErrors
+                toCheckForMatchingErrors.runResult.path
+                (error :: restOfErrors)
                 |> Expect.fail
 
         ( expected :: restOfExpectedErrors, [] ) ->
             (expected :: restOfExpectedErrors)
                 |> List.map expectedErrorForMessage
-                |> Review.Test.FailureMessage.tooFewErrors runResult.path expectedNumberOfErrors
+                |> tooFewErrors toCheckForMatchingErrors.runResult.path
                 |> Expect.fail
 
-        ( expected :: restOfExpectedErrors, error :: restOfErrors ) ->
+        ( expected :: restOfExpectedErrors, reviewError :: restOfErrors ) ->
             Expect.all
-                [ \() -> checkErrorsMatch runResult restOfExpectedErrors expectedNumberOfErrors restOfErrors
-                , \() -> checkErrorMatch runResult.source expected error
+                [ \() ->
+                    checkErrorsMatch
+                        { sourceByPath = toCheckForMatchingErrors.sourceByPath
+                        , runResult = toCheckForMatchingErrors.runResult
+                        , expected = restOfExpectedErrors
+                        , reviewErrors = restOfErrors
+                        }
+                , \() ->
+                    reviewError.message
+                        |> Expect.equal expected.message
+                        |> Expect.onFail
+                            (messageMismatch
+                                (expectedErrorForMessage expected)
+                                reviewError
+                            )
+                , \() ->
+                    checkMessageAppearsUnder
+                        { source = toCheckForMatchingErrors.runResult.source
+                        , reviewError = reviewError
+                        , expected = expected
+                        }
+                , checkDetailsAreCorrect reviewError expected
+                , \() ->
+                    checkFixesAreCorrect
+                        { sourceByPath = toCheckForMatchingErrors.sourceByPath
+                        , reviewError = reviewError
+                        , expected = expected
+                        }
                 ]
                 ()
 
 
-checkErrorMatch : String -> ExpectedError -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> Expect.Expectation
-checkErrorMatch source expectedError error =
-    Expect.all
-        [ \() ->
-            error.message
-                |> Expect.equal expectedError.message
-                |> Expect.onFail
-                    (Review.Test.FailureMessage.messageMismatch
-                        (expectedErrorForMessage expectedError)
-                        error
-                    )
-        , checkMessageAppearsUnder source error expectedError
-        , checkDetailsAreCorrect error expectedError
-        , \() -> checkFixesAreCorrect source error expectedError
-        ]
-        ()
+expectedErrorForMessage :
+    { error_
+        | message : String
+        , details : List String
+        , range : ExpectedErrorRange
+    }
+    -> { message : String, details : List String, under : String }
+expectedErrorForMessage =
+    \expectedError ->
+        { message = expectedError.message
+        , details = expectedError.details
+        , under =
+            case expectedError.range of
+                Under section ->
+                    section
+
+                UnderExactly underExactly ->
+                    underExactly.section
+        }
 
 
-checkMessageAppearsUnder : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> ExpectedError -> (() -> Expect.Expectation)
-checkMessageAppearsUnder source error expectedError =
+checkMessageAppearsUnder :
+    { source : String, reviewError : FileReviewError, expected : ExpectedFileError }
+    -> Expect.Expectation
+checkMessageAppearsUnder toCheck =
     let
-        codeAtLocation : String
-        codeAtLocation =
-            source |> Review.sourceExtractInRange error.range
+        errorSourceInRange : String
+        errorSourceInRange =
+            toCheck.source |> Review.sourceExtractInRange toCheck.reviewError.range
     in
-    case expectedError.range of
+    case toCheck.expected.range of
         Under under ->
             Expect.all
                 [ \() ->
-                    codeAtLocation
+                    errorSourceInRange
                         |> Expect.equal under
-                        |> Expect.onFail (Review.Test.FailureMessage.underMismatch error { under = under, codeAtLocation = codeAtLocation })
+                        |> Expect.onFail
+                            (underMismatch
+                                toCheck.reviewError
+                                { under = under, errorSourceInRange = errorSourceInRange }
+                            )
                 , \() ->
-                    expectUnambiguousLocationInSourceCode source error under
+                    case toCheck.source |> String.indexes under of
+                        [ _ ] ->
+                            Expect.pass
+
+                        occurrencesInSourceCode ->
+                            Expect.fail
+                                (locationIsAmbiguousInSourceCode toCheck.source
+                                    toCheck.reviewError
+                                    under
+                                    occurrencesInSourceCode
+                                )
                 ]
+                ()
 
         UnderExactly underExactly ->
             Expect.all
                 [ \() ->
-                    codeAtLocation
+                    errorSourceInRange
                         |> Expect.equal underExactly.section
                         |> Expect.onFail
-                            (Review.Test.FailureMessage.underMismatch error
-                                { under = underExactly.section, codeAtLocation = codeAtLocation }
+                            (underMismatch toCheck.reviewError
+                                { under = underExactly.section, errorSourceInRange = errorSourceInRange }
                             )
                 , \() ->
-                    error.range.start
+                    toCheck.reviewError.range.start
                         |> Expect.equal underExactly.startingAt
                         |> Expect.onFail
-                            (Review.Test.FailureMessage.wrongLocation error
+                            (wrongLocation toCheck.reviewError
                                 { start = underExactly.startingAt
                                 , end =
                                     { row = underExactly.startingAt.row
@@ -934,63 +1050,281 @@ checkMessageAppearsUnder source error expectedError =
                                 underExactly.section
                             )
                 ]
+                ()
 
 
-expectUnambiguousLocationInSourceCode : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> String -> Expect.Expectation
-expectUnambiguousLocationInSourceCode sourceCode error under =
-    case String.indexes under sourceCode of
-        [ _ ] ->
-            Expect.pass
+formatSourceCodeWithFormatter : (List String -> List String) -> List String -> String
+formatSourceCodeWithFormatter formatter lines =
+    if List.length lines == 1 then
+        formatter lines
+            |> String.join "\n"
 
-        occurrencesInSourceCode ->
-            Expect.fail (Review.Test.FailureMessage.locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode)
+    else
+        formatter lines
+            |> List.map
+                (\str ->
+                    case str of
+                        "" ->
+                            ""
+
+                        nonBlankLine ->
+                            "    " ++ nonBlankLine
+                )
+            |> String.join "\n"
 
 
-checkDetailsAreCorrect : { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> ExpectedError -> (() -> Expect.Expectation)
+formatSourceCode : String -> String
+formatSourceCode string =
+    formatSourceCodeWithFormatter identity (string |> String.lines)
+
+
+underMismatch : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> { under : String, errorSourceInRange : String } -> String
+underMismatch error range =
+    failureMessage "ERROR LOCATION DOESN'T MATCH"
+        ([ """I found an error with the message
+
+  """
+         , error.message
+         , """
+
+and I was expecting it to be under
+
+  """
+         , range.under |> formatSourceCode
+         , """
+
+but I found it under
+
+  """
+         , range.errorSourceInRange |> formatSourceCode
+         , """
+
+Hint: Maybe you're passing the range of a wrong node to the review error?"""
+         ]
+            |> String.concat
+        )
+
+
+locationToCodeString : Elm.Syntax.Range.Location -> String
+locationToCodeString =
+    \location ->
+        [ "{ row = "
+        , String.fromInt location.row
+        , ", column = "
+        , String.fromInt location.column
+        , " }"
+        ]
+            |> String.concat
+
+
+wrongLocation : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> Elm.Syntax.Range.Range -> String -> String
+wrongLocation error range under =
+    failureMessage "ERROR LOCATION DOESN'T MATCH"
+        ([ """I was looking for the error with the message
+
+  """
+         , error.message
+         , """
+
+under the code
+
+  """
+         , under |> formatSourceCode
+         , """
+
+and I found it, but the exact location you specified is not the one I found.
+
+I was expecting the error at
+
+  """
+         , range.start |> locationToCodeString
+         , """
+
+but I found it at
+
+  """
+         , error.range.start |> locationToCodeString
+         ]
+            |> String.concat
+        )
+
+
+locationIsAmbiguousInSourceCode : String -> { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String -> List Int -> String
+locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
+    failureMessage "EXPECTED ERROR LOCATION IS AMBIGUOUS"
+        ([ """The exact location where the error appears is ambiguous.
+
+You are looking for the error message
+
+  """
+         , error.message
+         , """
+
+and expecting to see it under
+
+  """
+         , under |> formatSourceCode
+         , """
+
+I found """
+         , occurrencesInSourceCode |> List.length |> String.fromInt
+         , """ locations where that code appeared. Switch from Review.Test.Under to
+Review.Test.UnderExactly to make the range you were targeting unambiguous.
+
+Tip: I found them starting at:
+"""
+         , occurrencesInSourceCode
+            |> List.map
+                (\occurrence ->
+                    "  - "
+                        ++ (occurrence
+                                |> startingLocationInSource sourceCode
+                                |> locationToCodeString
+                           )
+                )
+            |> String.join "\n"
+         ]
+            |> String.concat
+        )
+
+
+startingLocationInSource : String -> Int -> Elm.Syntax.Range.Location
+startingLocationInSource sourceCode position =
+    let
+        linesBeforeAndIncludingPosition : List String
+        linesBeforeAndIncludingPosition =
+            sourceCode
+                |> String.slice 0 position
+                |> String.lines
+    in
+    { row = linesBeforeAndIncludingPosition |> List.length
+    , column =
+        (linesBeforeAndIncludingPosition
+            |> ListLocalExtra.last
+            |> Maybe.withDefault ""
+            |> String.length
+        )
+            + 1
+    }
+
+
+checkDetailsAreCorrect : FileReviewError -> ExpectedFileError -> (() -> Expect.Expectation)
 checkDetailsAreCorrect error expectedError =
     Expect.all
         [ \() ->
             List.isEmpty error.details
                 |> Expect.equal False
-                |> Expect.onFail (Review.Test.FailureMessage.emptyDetails (.message error))
+                |> Expect.onFail (emptyDetails (.message error))
         , \() ->
             error.details
                 |> Expect.equal expectedError.details
-                |> Expect.onFail (Review.Test.FailureMessage.unexpectedDetails expectedError.details error)
+                |> Expect.onFail (unexpectedDetails expectedError.details error)
         ]
 
 
-checkFixesAreCorrect : String -> { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } -> ExpectedError -> Expect.Expectation
-checkFixesAreCorrect source reviewError expectedError =
-    case ( expectedError.fixedSource, reviewError.fix ) of
-        ( Nothing, [] ) ->
-            Expect.pass
+unexpectedDetails : List String -> { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
+unexpectedDetails expectedDetails error =
+    failureMessage "ERROR DETAILS DON'T MATCH"
+        ([ """I found an error for a file with the message
 
-        ( Just _, [] ) ->
-            Review.Test.FailureMessage.missingFixes (expectedErrorForMessage expectedError)
-                |> Expect.fail
+  """
+         , error.message
+         , """
 
-        ( Nothing, _ :: _ ) ->
-            Review.Test.FailureMessage.unexpectedFixes reviewError
-                |> Expect.fail
+and I was expecting its details to be
 
-        ( Just expectedFixedSource, fix0 :: fix1Up ) ->
-            case Review.applyFix (fix0 :: fix1Up) source of
-                Ok fixedSource ->
-                    if fixedSource == expectedFixedSource then
-                        Expect.pass
+  """
+         , expectedDetails |> List.map (\paragraph -> "  " ++ paragraph) |> String.join "\n\n"
+         , """
 
-                    else if removeWhitespace fixedSource == removeWhitespace expectedFixedSource then
-                        Expect.fail (Review.Test.FailureMessage.fixedSourceWhitespaceMismatch fixedSource expectedFixedSource reviewError)
+but I found the details
 
-                    else
-                        Expect.fail (Review.Test.FailureMessage.fixedSourceMismatch fixedSource expectedFixedSource reviewError)
+  """
+         , error.details |> List.map (\paragraph -> "  " ++ paragraph) |> String.join "\n\n"
+         ]
+            |> String.concat
+        )
 
-                Err Review.AfterFixIsUnchanged ->
-                    Expect.fail (Review.Test.FailureMessage.unchangedSourceAfterFix reviewError)
 
-                Err Review.FixHasCollisionsInRanges ->
-                    Expect.fail (Review.Test.FailureMessage.hasCollisionsInFixRanges reviewError)
+emptyDetails : String -> String
+emptyDetails errorMessage =
+    failureMessage "ERROR DETAILS ARE EMPTY"
+        ([ """I found an error with the message
+
+  """
+         , errorMessage
+         , """
+
+but its details were empty. Having details will
+help the user who encounters the problem by for example
+  - explaining what the problem is
+  - explaining the reasoning behind the problem
+  - giving suggestions on how to solve the problem or alternatives"""
+         ]
+            |> String.concat
+        )
+
+
+checkFixesAreCorrect :
+    { sourceByPath : FastDict.Dict String String, reviewError : FileReviewError, expected : ExpectedFileError }
+    -> Expect.Expectation
+checkFixesAreCorrect toCheck =
+    let
+        expectedFixedSourcedByPath : FastDict.Dict String String
+        expectedFixedSourcedByPath =
+            toCheck.expected.fixedFiles
+                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
+
+        reviewSourceEditsByPath : FastDict.Dict String (List Review.SourceEdit)
+        reviewSourceEditsByPath =
+            toCheck.reviewError.fix
+                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.edits })
+    in
+    FastDict.merge
+        (\path _ -> (::) (missingSourceEditsForFile path toCheck.expected))
+        (\path expectedFixedSource reviewEdits ->
+            ListLocalExtra.consJust
+                (checkFileFixesAreCorrect
+                    toCheck.expected
+                    (toCheck.sourceByPath |> FastDict.get path |> Maybe.withDefault "")
+                    expectedFixedSource
+                    reviewEdits
+                )
+        )
+        (\path _ -> (::) (unexpectedEditsToFile path toCheck.expected))
+        expectedFixedSourcedByPath
+        reviewSourceEditsByPath
+        []
+        |> expectationsViolated
+
+
+checkFileFixesAreCorrect :
+    { expectedError_
+        | range : ExpectedErrorRange
+        , message : String
+        , details : List String
+    }
+    -> String
+    -> String
+    -> List Review.SourceEdit
+    -> Maybe String
+checkFileFixesAreCorrect expectedError source expectedFixedSource reviewErrorEdits =
+    case Review.sourceApplyEdits reviewErrorEdits source of
+        Ok fixedSource ->
+            if fixedSource == expectedFixedSource then
+                Nothing
+
+            else if removeWhitespace fixedSource == removeWhitespace expectedFixedSource then
+                Just (fixedSourceWhitespaceMismatch fixedSource expectedFixedSource expectedError)
+
+            else
+                Just (fixedSourceMismatch fixedSource expectedFixedSource expectedError)
+
+        Err Review.AfterFixIsUnchanged ->
+            Just (unchangedSourceAfterFix expectedError)
+
+        Err Review.FixHasCollisionsInRanges ->
+            Just (hasCollisionsInFixRanges expectedError)
 
 
 removeWhitespace : String -> String
@@ -998,9 +1332,285 @@ removeWhitespace =
     \string -> string |> String.replace " " "" |> String.replace "\n" ""
 
 
-type alias ReorderState =
-    { expectedErrors : List ExpectedError
-    , reviewErrors : List { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix }
-    , pairs : List ( ExpectedError, { range : Elm.Syntax.Range.Range, message : String, details : List String, fix : List Review.Fix } )
-    , expectedErrorsWithNoMatch : List ExpectedError
+fixedSourceMismatch : String -> String -> { error_ | message : String, details : List String } -> String
+fixedSourceMismatch resultingSource expectedSource error =
+    failureMessage "FIXED SOURCE DOESN'T MATCH"
+        ([ """I found a different fixed source code than expected for the error with the message:
+
+  """
+         , error.message
+         , """
+
+after the fixes have been applied, I expected the source to be
+
+  """
+         , formatSourceCode expectedSource
+         , """
+
+but I found the source
+
+  """
+         , formatSourceCode resultingSource
+         ]
+            |> String.concat
+        )
+
+
+fixedSourceWhitespaceMismatch : String -> String -> { error_ | message : String, details : List String } -> String
+fixedSourceWhitespaceMismatch resultingSource expectedSource error =
+    let
+        ( expected, resulting ) =
+            highlightDifferencesInSourceCodes ( resultingSource, expectedSource )
+    in
+    failureMessage "FIXED SOURCE DOESN'T MATCH WHITESPACE"
+        ([ """I found a different fixed source than expected for the error with the message
+
+  """
+         , error.message
+         , """
+
+The problem is related to """
+         , "whitespace" |> Ansi.bold |> Ansi.yellow
+         , """.
+after the fixes have been applied, I expected the source to be
+
+  """
+         , expected
+         , """
+
+but I found the source
+
+  """
+         , resulting
+         ]
+            |> String.concat
+        )
+
+
+highlightDifferencesInSourceCodes : ( String, String ) -> ( String, String )
+highlightDifferencesInSourceCodes ( a, b ) =
+    let
+        ( resA, resB ) =
+            highlightWhiteSpaceDifferences ( a, b )
+    in
+    ( formatSourceCodeWithFormatter replaceWhitespace (resA |> String.lines)
+    , formatSourceCodeWithFormatter replaceWhitespace (resB |> String.lines)
+    )
+
+
+highlightWhiteSpaceDifferences : ( String, String ) -> ( String, String )
+highlightWhiteSpaceDifferences ( aString, bString ) =
+    Diff.diff (aString |> String.toList) (bString |> String.toList)
+        |> List.foldl
+            (\change ( a, b ) ->
+                case change of
+                    Diff.NoChange str ->
+                        ( a ++ String.fromChar str, b ++ String.fromChar str )
+
+                    Diff.Added '\n' ->
+                        ( [ a, Ansi.backgroundRed "↵", "\n" ] |> String.concat, b )
+
+                    Diff.Added str ->
+                        ( a ++ Ansi.backgroundRed (String.fromChar str), b )
+
+                    Diff.Removed '\n' ->
+                        ( a, [ b, Ansi.backgroundRed "↵", "\n" ] |> String.concat )
+
+                    Diff.Removed str ->
+                        ( a, b ++ Ansi.backgroundRed (String.fromChar str) )
+            )
+            ( "", "" )
+
+
+replaceWhitespace : List String -> List String
+replaceWhitespace lines =
+    lines
+        |> List.map (String.replace " " (Ansi.cyan "·"))
+        |> String.join (Ansi.cyan "\n")
+        |> String.split "\n"
+
+
+unchangedSourceAfterFix : { error_ | message : String, details : List String } -> String
+unchangedSourceAfterFix error =
+    failureMessage "APPLYING THE EDITS DID NOT CHANGE THE SOURCE"
+        ([ """After applying the fixes provided by the error with the message
+
+  """
+         , error.message
+         , """
+
+I expected the fix to make some changes to the source, but it resulted
+in the same source as before the fixes.
+
+This is problematic because I will tell the user that this rule provides an
+automatic fix, but I will have to disappoint them when I later find out it
+doesn't do anything."""
+         ]
+            |> String.concat
+        )
+
+
+hasCollisionsInFixRanges : { error_ | message : String, details : List String } -> String
+hasCollisionsInFixRanges error =
+    failureMessage "SOURCE EDIT RANGES COLLIDE"
+        ([ """I got something unexpected when applying the fixes provided by the error
+with the message
+
+  """
+         , error.message
+         , """
+
+I found that some fixes were targeting (partially or completely) the same
+section of code. The problem with that is that I can't determine which fix
+to apply first, and the result will be different and potentially invalid
+based on the order in which I apply these fixes.
+
+For this reason, I require that the ranges (for replacing and removing) and
+the positions (for inserting) of every fix to be mutually exclusive.
+
+Hint: Maybe you duplicated a fix, or you targeted the wrong node for one
+of your fixes."""
+         ]
+            |> String.concat
+        )
+
+
+missingSourceEditsForFile : String -> { error_ | message : String, details : List String } -> String
+missingSourceEditsForFile path expectedError =
+    failureMessage "FIX IS MISSING EDITS TO FILE"
+        ([ """The error with the message
+
+  """
+         , expectedError.message
+         , """
+
+did not provide edits as a fix for the file """
+         , path
+         , """ which was expected."""
+         ]
+            |> String.concat
+        )
+
+
+unexpectedEditsToFile : String -> { error_ | message : String, details : List String } -> String
+unexpectedEditsToFile path error =
+    failureMessage "SOURCE EDITS TO FILE NOT EXPECTED"
+        ([ """The error with the message
+
+  """
+         , error.message
+         , """
+
+provided a fix with source edits for the file """
+         , path
+         , """ for which you expected no edits.
+
+To expect edits, add an entry { path = \""""
+         , path
+         , """", source = ..your expected changed source.. } to your error's fixedFiles field."""
+         ]
+            |> String.concat
+        )
+
+
+messageMismatch : { expectedError_ | message : String, details : List String } -> { error_ | message : String, details : List String } -> String
+messageMismatch expectedError reviewError =
+    failureMessage "ERROR MESSAGE DOESN'T MATCH"
+        ([ """I was looking for the error with the message
+
+  """
+         , expectedError.message
+         , """
+
+but I found the error message
+
+  """
+         , reviewError.message
+         ]
+            |> String.concat
+        )
+
+
+tooFewErrors : String -> List { message : String, details : List String, under : String } -> String
+tooFewErrors path missingExpectedErrors =
+    failureMessage "TOO FEW ERRORS"
+        ([ "I expected to see more errors for the file at path "
+         , path
+         , """.
+Here are those I could not find:
+
+"""
+         , missingExpectedErrors
+            |> List.map (\expectedError -> "  - " ++ expectedError.message)
+            |> String.join "\n"
+         ]
+            |> String.concat
+        )
+
+
+tooManyErrors : String -> List { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
+tooManyErrors moduleName extraErrors =
+    let
+        errorCount : Int
+        errorCount =
+            extraErrors |> List.length
+    in
+    failureMessage "TOO MANY ERRORS"
+        ([ "I found "
+         , errorCount |> String.fromInt
+         , " "
+         , pluralizeErrors errorCount
+         , " too many for module "
+         , moduleName
+         , ":\n\n"
+         , extraErrors
+            |> List.map
+                (\error ->
+                    [ "  - ", error.message, "\n    at ", rangeToCodeString error.range ] |> String.concat
+                )
+            |> String.join "\n"
+         ]
+            |> String.concat
+        )
+
+
+rangeToCodeString : Elm.Syntax.Range.Range -> String
+rangeToCodeString =
+    \range ->
+        [ "{ start = "
+        , range.start |> locationToCodeString
+        , ", end = "
+        , range.end |> locationToCodeString
+        , " }"
+        ]
+            |> String.concat
+
+
+pluralizeErrors : Int -> String
+pluralizeErrors n =
+    case n of
+        1 ->
+            "error"
+
+        _ ->
+            "errors"
+
+
+elmJsonParsingFailure : Json.Decode.Error -> String
+elmJsonParsingFailure decodeError =
+    failureMessage "ELM.JSON FAILED TO PARSE"
+        ([ """I could not decode the provided elm.json because """
+         , decodeError |> Json.Decode.errorToString
+         , "\n\n"
+         , """Hint: Try to start with a working elm.json from one of your projects and add dependencies from there"""
+         ]
+            |> String.concat
+        )
+
+
+type alias FileReviewError =
+    { range : Elm.Syntax.Range.Range
+    , message : String
+    , details : List String
+    , fix : List { path : String, edits : List Review.SourceEdit }
     }

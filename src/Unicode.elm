@@ -1,9 +1,6 @@
-module Unicode exposing (dropLeft, left)
+module Unicode exposing (dropLeft, left, length)
 
 {-| String functions that consider Unicode characters as a single characters, unlike `elm/core`'s `String` type.
-
-@docs dropLeft, left
-
 -}
 
 
@@ -21,3 +18,8 @@ left n string =
         |> String.toList
         |> List.take n
         |> String.fromList
+
+
+length : String -> Int
+length =
+    \string -> string |> String.toList |> List.length

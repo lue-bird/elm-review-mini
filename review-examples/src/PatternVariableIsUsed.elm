@@ -399,9 +399,13 @@ report knowledge =
                 , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
                 , range = unusedPatternVariable.variableRange
                 , fix =
-                    [ Review.fixReplaceRange
-                        unusedPatternVariable.fixRange
-                        unusedPatternVariable.fixReplacement
+                    [ { path = unusedPatternVariable.modulePath
+                      , edits =
+                            [ Review.replaceRange
+                                unusedPatternVariable.fixRange
+                                unusedPatternVariable.fixReplacement
+                            ]
+                      }
                     ]
                 }
             )

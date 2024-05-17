@@ -1,4 +1,4 @@
-module FastDictExtra exposing (all, concatToListMap, fromListMap, justsMap, unionWith)
+module FastDictLocalExtra exposing (all, concatToListMap, fromListMap, unionWith)
 
 import FastDict
 
@@ -57,21 +57,3 @@ all isOkay =
         (\state ->
             isOkay state.key state.value && state.left () && state.right ()
         )
-
-
-justsMap :
-    (comparableKey -> value -> Maybe valueMapped)
-    -> (FastDict.Dict comparableKey value -> FastDict.Dict comparableKey valueMapped)
-justsMap keyValueToMaybeElement =
-    \fastDict ->
-        fastDict
-            |> FastDict.foldl
-                (\key value soFar ->
-                    case keyValueToMaybeElement key value of
-                        Nothing ->
-                            soFar
-
-                        Just element ->
-                            soFar |> FastDict.insert key element
-                )
-                FastDict.empty

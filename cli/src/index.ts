@@ -178,10 +178,15 @@ export function programStart(elmPorts: ElmPorts) {
                         input: process.stdin,
                         output: process.stdout,
                     })
-                    readLineInterface.question("apply → y, reject → n")
+                    readLineInterface.question("To apply these edits, type y. To reject, type n")
                         .then(async (response) => {
                             if (response === "y") {
-                                await fs.promises.writeFile(fromElm.value.fix.path, fromElm.value.fix.fixedSource)
+                                await Promise.all(
+                                    fromElm.value.fix.fixedSources
+                                        .map((fileFix: { path: string, source: string }) => {
+                                            return fs.promises.writeFile(fileFix.path, fileFix.source)
+                                        })
+                                )
                                 console.log("Ok. I applied the fix.")
                             } else {
                                 console.log("Ok. I didn't change anything.")
@@ -217,7 +222,8 @@ function watchDirectories(directoryPaths: string[], onEvent: { onDelete: (fullPa
                         debounced = false
                         if (fileName !== null) {
                             const currentTime = new Date()
-                            console.log(`\n\n\n---- files changed at ${currentTime.getHours()}:${currentTime.getMinutes()}:${currentTime.getSeconds()}, re-reviewing ----\n\n\n`)
+                            console.log(`\n\n\n------ files changed at ${currentTime.getHours()}:${currentTime.getMinutes()}:${currentTime.getSeconds()}, reviewing again\n\n\n`)
+                            console.clear()
                             const fullPath = path.join(directoryPath, fileName)
                             if (fs.existsSync(fullPath)) {
                                 await onEvent.onAddOrChange(fullPath)
