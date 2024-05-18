@@ -1,4 +1,4 @@
-module FastDict.LocalExtra exposing (firstJustMap, justsToListMap, justsToSetMap, keys, toListMap, unionFromListMap, unionFromListWithMap, unionToSetMap, unionWith)
+module FastDict.LocalExtra exposing (excludeKeys, firstJustMap, justsToListMap, justsToSetMap, keys, toListMap, unionFromListMap, unionFromListWithMap, unionToSetMap, unionWith)
 
 import FastDict
 import Set exposing (Set)

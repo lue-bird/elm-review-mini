@@ -1,4 +1,4 @@
-module Pattern.LocalExtra exposing (listReferenceUses, referenceUses, variables, variablesAndRanges)
+module Pattern.LocalExtra exposing (identifierUses, listIdentifierUses, variables, variablesAndRanges)
 
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
@@ -12,27 +12,27 @@ import Set exposing (Set)
 import Set.LocalExtra
 
 
-referenceUsesMerge :
+identifierUsesMerge :
     FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-referenceUsesMerge a b =
+identifierUsesMerge a b =
     FastDict.LocalExtra.unionWith (\aRanges bRanges -> aRanges ++ bRanges) a b
 
 
-listReferenceUses :
+listIdentifierUses :
     List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-listReferenceUses =
+listIdentifierUses =
     \patternNodeList ->
         patternNodeList
-            |> List.foldl (\sub -> referenceUsesMerge (sub |> referenceUses)) FastDict.empty
+            |> List.foldl (\sub -> identifierUsesMerge (sub |> identifierUses)) FastDict.empty
 
 
-referenceUses :
+identifierUses :
     Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-referenceUses =
+identifierUses =
     -- IGNORE TCO
     \(Elm.Syntax.Node.Node patternRange pattern) ->
         case pattern of
@@ -64,24 +64,24 @@ referenceUses =
                 FastDict.empty
 
             Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
-                inParens |> referenceUses
+                inParens |> identifierUses
 
             Elm.Syntax.Pattern.AsPattern aliased _ ->
-                aliased |> referenceUses
+                aliased |> identifierUses
 
             Elm.Syntax.Pattern.UnConsPattern head tail ->
-                referenceUsesMerge (tail |> referenceUses) (head |> referenceUses)
+                identifierUsesMerge (tail |> identifierUses) (head |> identifierUses)
 
             Elm.Syntax.Pattern.TuplePattern parts ->
-                parts |> listReferenceUses
+                parts |> listIdentifierUses
 
             Elm.Syntax.Pattern.ListPattern elements ->
-                elements |> listReferenceUses
+                elements |> listIdentifierUses
 
             Elm.Syntax.Pattern.NamedPattern fullyQualified arguments ->
                 arguments
-                    |> listReferenceUses
-                    |> referenceUsesMerge
+                    |> listIdentifierUses
+                    |> identifierUsesMerge
                         (FastDict.singleton ( fullyQualified.moduleName, fullyQualified.name )
                             [ { start = patternRange.start
                               , end =

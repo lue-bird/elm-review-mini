@@ -1,4 +1,4 @@
-module Declaration.LocalExtra exposing (referenceUses)
+module Declaration.LocalExtra exposing (identifierUses)
 
 import Elm.Syntax.Declaration
 import Elm.Syntax.ModuleName
@@ -47,10 +47,10 @@ names =
                 Set.empty
 
 
-referenceUses :
+identifierUses :
     Elm.Syntax.Declaration.Declaration
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-referenceUses =
+identifierUses =
     \declaration ->
         case declaration of
             Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
@@ -68,27 +68,31 @@ referenceUses =
                     Just (Elm.Syntax.Node.Node _ signature) ->
                         signature
                             |> .typeAnnotation
-                            |> Type.LocalExtra.referenceUses
+                            |> Type.LocalExtra.identifierUses
                 , functionDeclaration.declaration
                     |> Elm.Syntax.Node.value
                     |> .expression
-                    |> Expression.LocalExtra.referenceUsesIgnoringPatternVariables
-                        (argumentPatterns |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables)
+                    |> Expression.LocalExtra.identifiers
+                    |> FastDict.LocalExtra.excludeKeys
+                        (argumentPatterns
+                            |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
+                            |> Set.map (\unqualified -> ( [], unqualified ))
+                        )
                 , argumentPatterns
-                    |> Pattern.LocalExtra.listReferenceUses
+                    |> Pattern.LocalExtra.listIdentifierUses
                 ]
                     |> FastDict.LocalExtra.unionFromListWithMap identity (++)
 
             Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
-                typeAliasDeclaration.typeAnnotation |> Type.LocalExtra.referenceUses
+                typeAliasDeclaration.typeAnnotation |> Type.LocalExtra.identifierUses
 
             Elm.Syntax.Declaration.CustomTypeDeclaration variantType ->
                 variantType.constructors
                     |> List.concatMap (\(Elm.Syntax.Node.Node _ variant) -> variant.arguments)
-                    |> FastDict.LocalExtra.unionFromListWithMap Type.LocalExtra.referenceUses (++)
+                    |> FastDict.LocalExtra.unionFromListWithMap Type.LocalExtra.identifierUses (++)
 
             Elm.Syntax.Declaration.PortDeclaration signature ->
-                signature.typeAnnotation |> Type.LocalExtra.referenceUses
+                signature.typeAnnotation |> Type.LocalExtra.identifierUses
 
             -- not supported
             Elm.Syntax.Declaration.InfixDeclaration _ ->

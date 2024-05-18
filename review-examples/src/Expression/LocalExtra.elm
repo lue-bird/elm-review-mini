@@ -1,4 +1,4 @@
-module Expression.LocalExtra exposing (referenceUsesIgnoringPatternVariables)
+module Expression.LocalExtra exposing (identifiers)
 
 import Elm.Syntax.Expression
 import Elm.Syntax.ModuleName
@@ -13,53 +13,42 @@ import Set.LocalExtra
 import Type.LocalExtra
 
 
-referenceUsesIgnoringPatternVariables :
-    Set String
-    ->
-        (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-         -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-        )
-referenceUsesIgnoringPatternVariables branchLocalVariables =
+identifiers :
+    Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+identifiers =
     -- IGNORE TCO
     \(Elm.Syntax.Node.Node expressionRange expression) ->
         case expression of
             Elm.Syntax.Expression.FunctionOrValue qualification unqualifiedName ->
-                case qualification of
-                    [] ->
-                        if branchLocalVariables |> Set.member unqualifiedName then
-                            FastDict.empty
-
-                        else
-                            FastDict.singleton ( [], unqualifiedName ) [ expressionRange ]
-
-                    qualificationPart0 :: qualificationPart1Up ->
-                        FastDict.singleton ( qualificationPart0 :: qualificationPart1Up, unqualifiedName )
-                            [ expressionRange ]
+                FastDict.singleton ( qualification, unqualifiedName ) [ expressionRange ]
 
             Elm.Syntax.Expression.LambdaExpression lambda ->
                 FastDict.LocalExtra.unionWith (++)
-                    (lambda.args |> Pattern.LocalExtra.listReferenceUses)
+                    (lambda.args |> Pattern.LocalExtra.listIdentifierUses)
                     (lambda.expression
-                        |> referenceUsesIgnoringPatternVariables
-                            (Set.union branchLocalVariables
-                                (lambda.args
-                                    |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
-                                )
+                        |> identifiers
+                        |> FastDict.LocalExtra.excludeKeys
+                            (lambda.args
+                                |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
+                                |> Set.map (\variable -> ( [], variable ))
                             )
                     )
 
             Elm.Syntax.Expression.CaseExpression caseOf ->
                 FastDict.LocalExtra.unionWith (++)
-                    (caseOf.expression |> referenceUsesIgnoringPatternVariables branchLocalVariables)
+                    (caseOf.expression |> identifiers)
                     (caseOf.cases
                         |> FastDict.LocalExtra.unionFromListWithMap
                             (\( patternNode, caseExpressionNode ) ->
                                 FastDict.LocalExtra.unionWith (++)
-                                    (patternNode |> Pattern.LocalExtra.referenceUses)
+                                    (patternNode |> Pattern.LocalExtra.identifierUses)
                                     (caseExpressionNode
-                                        |> referenceUsesIgnoringPatternVariables
-                                            (Set.union branchLocalVariables
-                                                (patternNode |> Pattern.LocalExtra.variables)
+                                        |> identifiers
+                                        |> FastDict.LocalExtra.excludeKeys
+                                            (patternNode
+                                                |> Pattern.LocalExtra.variables
+                                                |> Set.map (\variable -> ( [], variable ))
                                             )
                                     )
                             )
@@ -70,29 +59,34 @@ referenceUsesIgnoringPatternVariables branchLocalVariables =
                 let
                     variablesForWholeLetIn : Set String
                     variablesForWholeLetIn =
-                        Set.union branchLocalVariables
-                            (letIn.declarations
-                                |> Set.LocalExtra.unionFromListMap
-                                    (\(Elm.Syntax.Node.Node _ letDeclaration) ->
-                                        case letDeclaration of
-                                            Elm.Syntax.Expression.LetFunction letFunction ->
-                                                letFunction.declaration
-                                                    |> Elm.Syntax.Node.value
-                                                    |> .name
-                                                    |> Elm.Syntax.Node.value
-                                                    |> Set.singleton
+                        letIn.declarations
+                            |> Set.LocalExtra.unionFromListMap
+                                (\(Elm.Syntax.Node.Node _ letDeclaration) ->
+                                    case letDeclaration of
+                                        Elm.Syntax.Expression.LetFunction letFunction ->
+                                            letFunction.declaration
+                                                |> Elm.Syntax.Node.value
+                                                |> .name
+                                                |> Elm.Syntax.Node.value
+                                                |> Set.singleton
 
-                                            Elm.Syntax.Expression.LetDestructuring patternNode _ ->
-                                                patternNode |> Pattern.LocalExtra.variables
-                                    )
-                            )
+                                        Elm.Syntax.Expression.LetDestructuring patternNode _ ->
+                                            patternNode |> Pattern.LocalExtra.variables
+                                )
                 in
                 FastDict.LocalExtra.unionWith (++)
-                    (letIn.expression |> referenceUsesIgnoringPatternVariables variablesForWholeLetIn)
+                    (letIn.expression
+                        |> identifiers
+                        |> FastDict.LocalExtra.excludeKeys
+                            (variablesForWholeLetIn |> Set.map (\variable -> ( [], variable )))
+                    )
                     (letIn.declarations
                         |> FastDict.LocalExtra.unionFromListWithMap
                             (\(Elm.Syntax.Node.Node _ letDeclaration) ->
-                                letDeclaration |> letDeclarationReferencesWithBranchLocalVariables variablesForWholeLetIn
+                                letDeclaration
+                                    |> letDeclarationIdentifiers
+                                    |> FastDict.LocalExtra.excludeKeys
+                                        (variablesForWholeLetIn |> Set.map (\variable -> ( [], variable )))
                             )
                             (++)
                     )
@@ -102,23 +96,20 @@ referenceUsesIgnoringPatternVariables branchLocalVariables =
                     |> Elm.Syntax.Node.Node expressionRange
                     |> Review.expressionSubs
                     |> FastDict.LocalExtra.unionFromListWithMap
-                        (referenceUsesIgnoringPatternVariables branchLocalVariables)
+                        identifiers
                         (++)
 
 
-letDeclarationReferencesWithBranchLocalVariables :
-    Set String
-    ->
-        (Elm.Syntax.Expression.LetDeclaration
-         -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-        )
-letDeclarationReferencesWithBranchLocalVariables branchLocalVariables =
+letDeclarationIdentifiers :
+    Elm.Syntax.Expression.LetDeclaration
+    -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+letDeclarationIdentifiers =
     \letDeclaration ->
         case letDeclaration of
             Elm.Syntax.Expression.LetDestructuring patternNode destructuredExpressionNode ->
                 FastDict.LocalExtra.unionWith (++)
-                    (patternNode |> Pattern.LocalExtra.referenceUses)
-                    (destructuredExpressionNode |> referenceUsesIgnoringPatternVariables branchLocalVariables)
+                    (patternNode |> Pattern.LocalExtra.identifierUses)
+                    (destructuredExpressionNode |> identifiers)
 
             Elm.Syntax.Expression.LetFunction letValueOrFunctionDeclaration ->
                 [ case letValueOrFunctionDeclaration.signature of
@@ -127,20 +118,20 @@ letDeclarationReferencesWithBranchLocalVariables branchLocalVariables =
 
                     Just (Elm.Syntax.Node.Node _ signature) ->
                         signature.typeAnnotation
-                            |> Type.LocalExtra.referenceUses
+                            |> Type.LocalExtra.identifierUses
                 , letValueOrFunctionDeclaration.declaration
                     |> Elm.Syntax.Node.value
                     |> .arguments
-                    |> Pattern.LocalExtra.listReferenceUses
+                    |> Pattern.LocalExtra.listIdentifierUses
                 , (letValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value |> .expression)
-                    |> referenceUsesIgnoringPatternVariables
-                        (Set.union branchLocalVariables
-                            (letValueOrFunctionDeclaration.declaration
-                                |> Elm.Syntax.Node.value
-                                |> .arguments
-                                |> Set.LocalExtra.unionFromListMap
-                                    (\patternNode -> patternNode |> Pattern.LocalExtra.variables)
-                            )
+                    |> identifiers
+                    |> FastDict.LocalExtra.excludeKeys
+                        (letValueOrFunctionDeclaration.declaration
+                            |> Elm.Syntax.Node.value
+                            |> .arguments
+                            |> Set.LocalExtra.unionFromListMap
+                                (\patternNode -> patternNode |> Pattern.LocalExtra.variables)
+                            |> Set.map (\variable -> ( [], variable ))
                         )
                 ]
                     |> FastDict.LocalExtra.unionFromListWithMap identity (++)

@@ -1,4 +1,4 @@
-module Type.LocalExtra exposing (referenceUses)
+module Type.LocalExtra exposing (identifierUses)
 
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
@@ -16,10 +16,10 @@ referenceUsesMerge a b =
     FastDict.LocalExtra.unionWith (\aRanges bRanges -> aRanges ++ bRanges) a b
 
 
-referenceUses :
+identifierUses :
     Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-referenceUses =
+identifierUses =
     \(Elm.Syntax.Node.Node _ type_) ->
         case type_ of
             Elm.Syntax.TypeAnnotation.GenericType _ ->
@@ -29,7 +29,7 @@ referenceUses =
                 FastDict.empty
 
             Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation input output ->
-                referenceUsesMerge (input |> referenceUses) (output |> referenceUses)
+                referenceUsesMerge (input |> identifierUses) (output |> identifierUses)
 
             Elm.Syntax.TypeAnnotation.Tupled parts ->
                 parts |> listReferenceUses
@@ -53,4 +53,4 @@ listReferenceUses :
 listReferenceUses =
     \patternNodeList ->
         patternNodeList
-            |> List.foldl (\sub -> referenceUsesMerge (sub |> referenceUses)) FastDict.empty
+            |> List.foldl (\sub -> referenceUsesMerge (sub |> identifierUses)) FastDict.empty

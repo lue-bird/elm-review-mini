@@ -105,7 +105,7 @@ review =
                                 |> FastDict.LocalExtra.unionFromListWithMap
                                     (\(Elm.Syntax.Node.Node _ declaration) ->
                                         declaration
-                                            |> Declaration.LocalExtra.referenceUses
+                                            |> Declaration.LocalExtra.identifierUses
                                             |> FastDict.map (\_ ranges -> ranges |> List.length)
                                     )
                                     (+)

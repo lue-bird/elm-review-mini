@@ -171,8 +171,11 @@ moduleDataToKnowledge moduleData =
                                 valueOrFunctionDeclaration.declaration
                                     |> Elm.Syntax.Node.value
                                     |> .expression
-                                    |> Expression.LocalExtra.referenceUsesIgnoringPatternVariables
-                                        moduleDeclaredValueOrFunctionNames
+                                    |> Expression.LocalExtra.identifiers
+                                    |> FastDict.LocalExtra.excludeKeys
+                                        (moduleDeclaredValueOrFunctionNames
+                                            |> Set.map (\unqualified -> ( [], unqualified ))
+                                        )
 
                             _ ->
                                 FastDict.empty
