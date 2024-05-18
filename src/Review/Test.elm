@@ -1,6 +1,6 @@
 module Review.Test exposing (run, applicationConfigurationMinimal, ExpectedErrorRange(..))
 
-{-| Test your review using [`elm-test`](https://dark.elm.dmy.fr/packages/elm-explorations/test/latest/).
+{-| Test your review using [`elm-explorations/test`](https://dark.elm.dmy.fr/packages/elm-explorations/test/latest/).
 
 Implementing a review works really well in a Test-Driven loop:
 
@@ -1515,7 +1515,7 @@ unexpectedEditsToFile path error =
 
 provided a fix with source edits for the file at path """
          , path
-         , """ for which you expected no edits.
+         , """ for which I expected no edits.
 
 To expect edits, add an entry { path = \""""
          , path
