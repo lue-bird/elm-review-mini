@@ -8,7 +8,7 @@ Use it in your project by adding this starter config with the CLI set up
 ```bash
 curl -L https://github.com/lue-bird/elm-review-mini-cli-starter/tarball/master review-mini | tar xz
 ```
-The created `review-mini/` is an elm application like any other where you can add new reviews with `elm install`, then add them in your `review-mini/src/ReviewConfiguration.elm`:
+The created `review-mini/` is a regular elm application where you can add new reviews with `elm install`, then add them in your `review-mini/src/ReviewConfiguration.elm`:
 
 ```elm
 module ReviewConfiguration exposing (configuration)
@@ -27,9 +27,11 @@ configuration =
 ```
 see also ["when to enable a review"](#when-to-create-or-enable-a-review).
 
-You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example of a review that fixes a typo in a string that was made too often at your company:
+You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example:
 ```elm
 module StringSpellsCompanyNameCorrectly exposing (review)
+
+{-| Fix a typo in a string that was made too often. -}
 ```
 ```elm
 import Elm.Syntax.Declaration
@@ -44,7 +46,7 @@ review =
         { inspect =
             [ Review.inspectModule
                 (\moduleData ->
-                    { stringsWithTypos =
+                    { typosInStrings =
                         moduleData.syntax.declarations
                             |> List.concatMap declarationToTyposInStrings
                             |> List.map
@@ -61,7 +63,7 @@ review =
         }
 
 type alias Knowledge =
-    { stringsWithTypos :
+    { typosInStrings :
         List { modulePath : String, range : Elm.Syntax.Range.Range }
     }
 
@@ -98,13 +100,11 @@ expressionToTyposInStrings =
 
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge
 knowledgeMerge a b =
-    { stringsWithTypos =
-        a.stringsWithTypos ++ b.stringsWithTypos
-    }
+    { typosInStrings = a.typosInStrings ++ b.typosInStrings }
 
 report : Knowledge -> List Review.Error
 report knowledge =
-    knowledge.stringsWithTypos
+    knowledge.typosInStrings
         |> List.map
             (\stringWithTypos ->
                 { path = stringWithTypos.modulePath
@@ -152,9 +152,11 @@ A new review can often turn out to be a nuisance to someone, sometimes in ways y
 If a developer disagrees with a review, they may try to circumvent it, resulting in code that is even more error prone than the pattern that was originally forbidden.
 So the value provided by the review should be much greater than the trouble it causes, and if you find that a review doesn't live up to this, consider disabling it.
 
-Review reviews are most useful when some pattern must never appear in the code.
-It gets less useful when a pattern is allowed to appear in certain cases, as there is [no good solution for handling exceptions to reviews](#what-if-i-disagree-with-a-review-on-a-specific-case-in-my-code).
-If you really need to make exceptions, they must be written in the review itself, or the review should be configurable.
+Reviews are most useful when some concretely defined bad pattern must _never_ appear in the code and less useful when a pattern is _sometimes_ allowed to appear on a case-by-case basis (false positives). There is _no way to locally ignore specific review errors_, see ["How disable comments make static analysis tools worse" by Jeroen Engels](https://jfmengels.net/disable-comments/)
+and similarly, there is no way to suppress legacy issues as lower-priority because in my opinion even these should always be visible as a (longer term) project checklist.
+
+You can however [configure file paths (e.g. from vendored packages or generated code) for which no errors will be reported](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
+If you really need to make exceptions, which you most likely won't, the review should be configurable or detecting exception marks like `-- @allow-non-tco` must be written in the review itself.
 
 Raise the bar for inclusion even higher for reviews that enforce a certain **coding style** or suggest simplifications to your code.
 For example: If a record contains only one field, then I could suggest not using a record
@@ -175,15 +177,13 @@ When wondering whether to enable a review, here's a checklist
   - I have communicated with my teammates and they all agree to enforce the review
   - I am ready to disable the review if it turns out to be more disturbing than helpful
 
-## What if I disagree with a review on a specific case in my code?
+## current rough spots of elm-review-mini
 
-`elm-review-mini` does not provide a way to disable errors on a case-by-case basis like a lot of static analysis tools do, see ["How disable comments make static analysis tools worse" by Jeroen Engels](https://jfmengels.net/disable-comments/).
-Similarly, it does not come with a system to suppress legacy issues as lower-priority because in my opinion even these should always be visible as a (longer term) project checklist.
-
-Since you can't ignore errors, the burden is on the reviews to be of higher quality, **avoiding those with inherent exceptions or false positives**.
-
-You can however [mark specific kinds of files (e.g. from vendored packages or generated code) as not relevant to a review, preventing errors to be reported for those](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
-
+  - no LSP integration (shouldn't be too hard as it's similar to elm-review)
+  - no ecosystem
+  - finding the module origin of any used identifiers in the code is pretty manual and therefore error prone
+    (requires storing exposes of each module, getting all declaration names in the current module, keeping track of bindings available in the current branch)
+  - the problem you encountered. Please [open an issue](https://github.com/lue-bird/elm-review-mini/issues) <3
 
 --------
 
