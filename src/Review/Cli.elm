@@ -103,6 +103,241 @@ program config =
         }
 
 
+eventToSendToJsToJson : EventToSendToJs -> Json.Encode.Value
+eventToSendToJsToJson =
+    \eventToBeSentToJs ->
+        case eventToBeSentToJs of
+            InitialFilesRequested initialFileRequest ->
+                Json.Encode.object
+                    [ ( "tag", "InitialFilesRequested" |> Json.Encode.string )
+                    , ( "value"
+                      , Json.Encode.object
+                            [ ( "extraPaths"
+                              , initialFileRequest.extraPaths |> Json.Encode.list Json.Encode.string
+                              )
+                            ]
+                      )
+                    ]
+
+            ErrorsReceived errorsToSend ->
+                Json.Encode.object
+                    [ ( "tag", "ErrorsReceived" |> Json.Encode.string )
+                    , ( "value"
+                      , case errorsToSend.errors of
+                            AllUnfixable allUnfixable ->
+                                Json.Encode.object
+                                    [ ( "display"
+                                      , allUnfixable
+                                            |> FastDictLocalExtra.concatToListMap
+                                                (\path errors ->
+                                                    let
+                                                        pathSource : String
+                                                        pathSource =
+                                                            errorsToSend.projectFilesByPath |> FastDict.get path |> Maybe.withDefault ""
+                                                    in
+                                                    errors
+                                                        |> List.map
+                                                            (\error ->
+                                                                { path = path
+                                                                , range = error.range
+                                                                , message = error.message
+                                                                , details = error.details
+                                                                , fixedSources = []
+                                                                }
+                                                                    |> errorDisplay pathSource
+                                                            )
+                                                )
+                                            |> String.join "\n\n\n"
+                                            |> Json.Encode.string
+                                      )
+                                    , ( "fix", Json.Encode.null )
+                                    ]
+
+                            Fixable fixable ->
+                                Json.Encode.object
+                                    [ ( "display", fixable.fixable |> errorDisplay fixable.fixable.source |> Json.Encode.string )
+                                    , ( "fix"
+                                      , Json.Encode.object
+                                            [ ( "path", fixable.fixable.path |> Json.Encode.string )
+                                            , ( "fixedSources"
+                                              , fixable.fixable.fixedSources
+                                                    |> Json.Encode.list
+                                                        (\fileFix ->
+                                                            Json.Encode.object
+                                                                [ ( "path", fileFix.path |> Json.Encode.string )
+                                                                , ( "source", fileFix.fixedSource |> Json.Encode.string )
+                                                                ]
+                                                        )
+                                              )
+                                            ]
+                                      )
+                                    ]
+                      )
+                    ]
+
+            ProblemEncountered problem ->
+                Json.Encode.object
+                    [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
+                    , ( "value", problem |> Json.Encode.string )
+                    ]
+
+
+errorDisplay :
+    String
+    ->
+        { error_
+            | path : String
+            , range : Elm.Syntax.Range.Range
+            , message : String
+            , details : List String
+            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
+        }
+    -> String
+errorDisplay source =
+    \error ->
+        [ error.message |> Ansi.cyan |> Ansi.bold
+        , "  in "
+        , error.path
+        , ":"
+        , error.range.start.row |> String.fromInt
+        , ":"
+        , error.range.start.column |> String.fromInt
+        , "\n\n"
+        , codeExtract source error.range
+            |> String.split "\n"
+            |> List.map (\line -> "|   " ++ line)
+            |> String.join "\n"
+        , "\n\n"
+        , error.details |> String.join "\n\n"
+        , case error.fixedSources of
+            [] ->
+                ""
+
+            fixedSource0 :: fixedSource1Up ->
+                "I can fix this for you by changing\n"
+                    ++ ((fixedSource0 :: fixedSource1Up)
+                            |> List.map
+                                (\fileFixedSource ->
+                                    [ "in "
+                                    , fileFixedSource.path
+                                    , "\n\n"
+                                    , sourceHighlightDifferentLines
+                                        fileFixedSource.originalSource
+                                        fileFixedSource.fixedSource
+                                    ]
+                                        |> String.concat
+                                )
+                            |> String.join "\n\n"
+                       )
+        ]
+            |> String.concat
+
+
+sourceHighlightDifferentLines : String -> String -> String
+sourceHighlightDifferentLines aString bString =
+    Diff.diff (aString |> String.lines) (bString |> String.lines)
+        |> List.map
+            (\change ->
+                case change of
+                    Diff.NoChange str ->
+                        "|   " ++ str
+
+                    Diff.Added str ->
+                        Ansi.green ("|   " ++ str)
+
+                    Diff.Removed str ->
+                        Ansi.red ("|   " ++ str)
+            )
+        |> String.join "\n"
+
+
+codeExtract : String -> Elm.Syntax.Range.Range -> String
+codeExtract source range =
+    let
+        sourceLines : Array String
+        sourceLines =
+            source |> String.lines |> Array.fromList
+
+        sourceLineAtRow : Int -> String
+        sourceLineAtRow rowIndex =
+            case sourceLines |> Array.get rowIndex of
+                Just line ->
+                    line |> String.trimRight
+
+                Nothing ->
+                    ""
+    in
+    if range.start.row == range.end.row then
+        if range.start.column == range.end.column then
+            ""
+
+        else
+            [ sourceLineAtRow (range.start.row - 2)
+            , sourceLineAtRow (range.start.row - 1)
+                |> withErrorHighlightedRange { start = range.start.column, end = range.end.column }
+            , sourceLineAtRow range.end.row
+            ]
+                |> List.filter (\l -> not (l |> String.isEmpty))
+                |> String.join "\n"
+
+    else
+        [ [ sourceLineAtRow (range.start.row - 2)
+          , let
+                startLineContent : String
+                startLineContent =
+                    sourceLineAtRow (range.start.row - 1)
+            in
+            startLineContent
+                |> withErrorHighlightedRange
+                    { start = range.start.column
+                    , end = (startLineContent |> Unicode.length) + 1
+                    }
+          ]
+            |> List.filter (\l -> not (l |> String.isEmpty))
+            |> String.join "\n"
+        , List.range range.start.row (range.end.row - 2)
+            |> List.map
+                (\middleLine ->
+                    sourceLineAtRow middleLine |> Ansi.backgroundRed
+                )
+            |> String.join "\n"
+        , [ let
+                endLineContent : String
+                endLineContent =
+                    sourceLineAtRow (range.end.row - 1)
+            in
+            endLineContent
+                |> withErrorHighlightedRange
+                    { start = getIndexOfFirstNonSpace endLineContent + 1
+                    , end = range.end.column
+                    }
+          , sourceLineAtRow range.end.row
+          ]
+            |> List.filter (\l -> not (l |> String.isEmpty))
+            |> String.join "\n"
+        ]
+            |> String.join "\n"
+
+
+getIndexOfFirstNonSpace : String -> Int
+getIndexOfFirstNonSpace string =
+    (string |> String.length) - (string |> String.trimLeft |> String.length)
+
+
+withErrorHighlightedRange : { start : Int, end : Int } -> (String -> String)
+withErrorHighlightedRange lineRange =
+    \lineContent ->
+        [ lineContent |> Unicode.left (lineRange.start - 1)
+        , lineContent
+            |> Unicode.dropLeft (lineRange.start - 1)
+            |> Unicode.left (lineRange.end - lineRange.start)
+            |> Ansi.backgroundRed
+        , lineContent
+            |> Unicode.dropLeft (lineRange.start - 1 + lineRange.end - lineRange.start)
+        ]
+            |> String.concat
+
+
 initialStateAndCommand :
     { toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
@@ -111,13 +346,8 @@ initialStateAndCommand :
     -> ( ProgramState, Cmd never_ )
 initialStateAndCommand config =
     ( WaitingForInitialFiles
-    , Json.Encode.object
-        [ ( "tag", "InitialFilesRequested" |> Json.Encode.string )
-        , ( "value"
-          , Json.Encode.object
-                [ ( "extraPaths", config.configuration.extraPaths |> Json.Encode.list Json.Encode.string ) ]
-          )
-        ]
+    , InitialFilesRequested { extraPaths = config.configuration.extraPaths }
+        |> eventToSendToJsToJson
         |> config.toJs
         |> Cmd.map Basics.never
     )
@@ -207,11 +437,13 @@ reactToEvent config event =
                                 Cmd.none
 
                             Just nextFixableErrorOrAllUnfixable ->
-                                nextFixableErrorOrAllUnfixable
-                                    |> errorReceivedToJson
-                                        { elmJsonSource = initialFiles.elmJson.source
-                                        , filesByPath = initialFilesByPath
-                                        }
+                                ErrorsReceived
+                                    { projectFilesByPath =
+                                        initialFilesByPath
+                                            |> FastDict.insert "elm.json" initialFiles.elmJson.source
+                                    , errors = nextFixableErrorOrAllUnfixable
+                                    }
+                                    |> eventToSendToJsToJson
                                     |> config.toJs
                                     |> Cmd.map Basics.never
                         )
@@ -246,11 +478,13 @@ reactToEvent config event =
                                 Cmd.none
 
                             Just nextFixableErrorOrAllUnfixable ->
-                                nextFixableErrorOrAllUnfixable
-                                    |> errorReceivedToJson
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = havingRunReviewsPreviously.filesByPath
-                                        }
+                                ErrorsReceived
+                                    { projectFilesByPath =
+                                        havingRunReviewsPreviously.filesByPath
+                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                    , errors = nextFixableErrorOrAllUnfixable
+                                    }
+                                    |> eventToSendToJsToJson
                                     |> config.toJs
                                     |> Cmd.map Basics.never
                         )
@@ -333,11 +567,13 @@ reactToEvent config event =
                                         Cmd.none
 
                                     Just nextFixableErrorOrAllUnfixable ->
-                                        nextFixableErrorOrAllUnfixable
-                                            |> errorReceivedToJson
-                                                { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                                , filesByPath = filesByPathWithAddedOrChanged
-                                                }
+                                        ErrorsReceived
+                                            { projectFilesByPath =
+                                                filesByPathWithAddedOrChanged
+                                                    |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                            , errors = nextFixableErrorOrAllUnfixable
+                                            }
+                                            |> eventToSendToJsToJson
                                             |> config.toJs
                                             |> Cmd.map Basics.never
                                 )
@@ -400,11 +636,13 @@ reactToEvent config event =
                                 Cmd.none
 
                             Just nextFixableErrorOrAllUnfixable ->
-                                nextFixableErrorOrAllUnfixable
-                                    |> errorReceivedToJson
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithRemoved
-                                        }
+                                ErrorsReceived
+                                    { projectFilesByPath =
+                                        filesByPathWithRemoved
+                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                    , errors = nextFixableErrorOrAllUnfixable
+                                    }
+                                    |> eventToSendToJsToJson
                                     |> config.toJs
                                     |> Cmd.map Basics.never
                         )
@@ -467,11 +705,13 @@ reactToEvent config event =
                                 Cmd.none
 
                             Just nextFixableErrorOrAllUnfixable ->
-                                nextFixableErrorOrAllUnfixable
-                                    |> errorReceivedToJson
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithAddedOrChanged
-                                        }
+                                ErrorsReceived
+                                    { projectFilesByPath =
+                                        filesByPathWithAddedOrChanged
+                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                    , errors = nextFixableErrorOrAllUnfixable
+                                    }
+                                    |> eventToSendToJsToJson
                                     |> config.toJs
                                     |> Cmd.map Basics.never
                         )
@@ -534,11 +774,13 @@ reactToEvent config event =
                                 Cmd.none
 
                             Just nextFixableErrorOrAllUnfixable ->
-                                nextFixableErrorOrAllUnfixable
-                                    |> errorReceivedToJson
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithRemoved
-                                        }
+                                ErrorsReceived
+                                    { projectFilesByPath =
+                                        filesByPathWithRemoved
+                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                    , errors = nextFixableErrorOrAllUnfixable
+                                    }
+                                    |> eventToSendToJsToJson
                                     |> config.toJs
                                     |> Cmd.map Basics.never
                         )
@@ -548,14 +790,11 @@ reactToEvent config event =
 
             JsEventJsonFailedToDecode jsonDecodeError ->
                 ( state
-                , Json.Encode.object
-                    [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
-                    , ( "value"
-                      , "bug: failed to decode json event from the js CLI"
-                            ++ (jsonDecodeError |> Json.Decode.errorToString)
-                            |> Json.Encode.string
-                      )
-                    ]
+                , ProblemEncountered
+                    ("bug: failed to decode json event from the js CLI"
+                        ++ (jsonDecodeError |> Json.Decode.errorToString)
+                    )
+                    |> eventToSendToJsToJson
                     |> config.toJs
                     |> Cmd.map Basics.never
                 )
@@ -747,229 +986,6 @@ errorsByPathToNextFixableErrorOrAll project =
                     |> Just
 
 
-errorReceivedToJson :
-    { elmJsonSource : String, filesByPath : FastDict.Dict String String }
-    -> NextFixableOrAllUnfixable
-    -> Json.Encode.Value
-errorReceivedToJson projectSources =
-    \nextFixableOrAllUnfixable ->
-        Json.Encode.object
-            [ ( "tag", "ErrorsReceived" |> Json.Encode.string )
-            , ( "value"
-              , case nextFixableOrAllUnfixable of
-                    AllUnfixable allUnfixable ->
-                        Json.Encode.object
-                            [ ( "display"
-                              , allUnfixable
-                                    |> FastDictLocalExtra.concatToListMap
-                                        (\path errors ->
-                                            let
-                                                pathSource : String
-                                                pathSource =
-                                                    case path of
-                                                        "elm.json" ->
-                                                            projectSources.elmJsonSource
-
-                                                        filePath ->
-                                                            projectSources.filesByPath |> FastDict.get filePath |> Maybe.withDefault ""
-                                            in
-                                            errors
-                                                |> List.map
-                                                    (\error ->
-                                                        { path = path
-                                                        , range = error.range
-                                                        , message = error.message
-                                                        , details = error.details
-                                                        , fixedSources = []
-                                                        }
-                                                            |> errorDisplay pathSource
-                                                    )
-                                        )
-                                    |> String.join "\n\n\n"
-                                    |> Json.Encode.string
-                              )
-                            , ( "fix", Json.Encode.null )
-                            ]
-
-                    Fixable fixable ->
-                        Json.Encode.object
-                            [ ( "display", fixable.fixable |> errorDisplay fixable.fixable.source |> Json.Encode.string )
-                            , ( "fix"
-                              , Json.Encode.object
-                                    [ ( "path", fixable.fixable.path |> Json.Encode.string )
-                                    , ( "fixedSources"
-                                      , fixable.fixable.fixedSources
-                                            |> Json.Encode.list
-                                                (\fileFix ->
-                                                    Json.Encode.object
-                                                        [ ( "path", fileFix.path |> Json.Encode.string )
-                                                        , ( "source", fileFix.fixedSource |> Json.Encode.string )
-                                                        ]
-                                                )
-                                      )
-                                    ]
-                              )
-                            ]
-              )
-            ]
-
-
-errorDisplay :
-    String
-    ->
-        { error_
-            | path : String
-            , range : Elm.Syntax.Range.Range
-            , message : String
-            , details : List String
-            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
-        }
-    -> String
-errorDisplay source =
-    \error ->
-        [ error.message |> Ansi.cyan |> Ansi.bold
-        , "  in "
-        , error.path
-        , ":"
-        , error.range.start.row |> String.fromInt
-        , ":"
-        , error.range.start.column |> String.fromInt
-        , "\n\n"
-        , codeExtract source error.range
-            |> String.split "\n"
-            |> List.map (\line -> "|   " ++ line)
-            |> String.join "\n"
-        , "\n\n"
-        , error.details |> String.join "\n\n"
-        , case error.fixedSources of
-            [] ->
-                ""
-
-            fixedSource0 :: fixedSource1Up ->
-                "I can fix this for you by changing\n"
-                    ++ ((fixedSource0 :: fixedSource1Up)
-                            |> List.map
-                                (\fileFixedSource ->
-                                    [ "in "
-                                    , fileFixedSource.path
-                                    , "\n\n"
-                                    , sourceHighlightDifferentLines
-                                        fileFixedSource.originalSource
-                                        fileFixedSource.fixedSource
-                                    ]
-                                        |> String.concat
-                                )
-                            |> String.join "\n\n"
-                       )
-        ]
-            |> String.concat
-
-
-sourceHighlightDifferentLines : String -> String -> String
-sourceHighlightDifferentLines aString bString =
-    Diff.diff (aString |> String.lines) (bString |> String.lines)
-        |> List.map
-            (\change ->
-                case change of
-                    Diff.NoChange str ->
-                        "|   " ++ str
-
-                    Diff.Added str ->
-                        Ansi.green ("|   " ++ str)
-
-                    Diff.Removed str ->
-                        Ansi.red ("|   " ++ str)
-            )
-        |> String.join "\n"
-
-
-codeExtract : String -> Elm.Syntax.Range.Range -> String
-codeExtract source range =
-    let
-        sourceLines : Array String
-        sourceLines =
-            source |> String.lines |> Array.fromList
-
-        sourceLineAtRow : Int -> String
-        sourceLineAtRow rowIndex =
-            case sourceLines |> Array.get rowIndex of
-                Just line ->
-                    line |> String.trimRight
-
-                Nothing ->
-                    ""
-    in
-    if range.start.row == range.end.row then
-        if range.start.column == range.end.column then
-            ""
-
-        else
-            [ sourceLineAtRow (range.start.row - 2)
-            , sourceLineAtRow (range.start.row - 1)
-                |> withErrorHighlightedRange { start = range.start.column, end = range.end.column }
-            , sourceLineAtRow range.end.row
-            ]
-                |> List.filter (\l -> not (l |> String.isEmpty))
-                |> String.join "\n"
-
-    else
-        [ [ sourceLineAtRow (range.start.row - 2)
-          , let
-                startLineContent : String
-                startLineContent =
-                    sourceLineAtRow (range.start.row - 1)
-            in
-            startLineContent
-                |> withErrorHighlightedRange
-                    { start = range.start.column
-                    , end = (startLineContent |> Unicode.length) + 1
-                    }
-          ]
-            |> List.filter (\l -> not (l |> String.isEmpty))
-            |> String.join "\n"
-        , List.range range.start.row (range.end.row - 2)
-            |> List.map
-                (\middleLine ->
-                    sourceLineAtRow middleLine |> Ansi.backgroundRed
-                )
-            |> String.join "\n"
-        , [ let
-                endLineContent : String
-                endLineContent =
-                    sourceLineAtRow (range.end.row - 1)
-            in
-            endLineContent
-                |> withErrorHighlightedRange
-                    { start = getIndexOfFirstNonSpace endLineContent + 1
-                    , end = range.end.column
-                    }
-          , sourceLineAtRow range.end.row
-          ]
-            |> List.filter (\l -> not (l |> String.isEmpty))
-            |> String.join "\n"
-        ]
-            |> String.join "\n"
-
-
-getIndexOfFirstNonSpace : String -> Int
-getIndexOfFirstNonSpace string =
-    (string |> String.length) - (string |> String.trimLeft |> String.length)
-
-
-withErrorHighlightedRange : { start : Int, end : Int } -> (String -> String)
-withErrorHighlightedRange lineRange =
-    \lineContent ->
-        [ lineContent |> Unicode.left (lineRange.start - 1)
-        , lineContent
-            |> Unicode.dropLeft (lineRange.start - 1)
-            |> Unicode.left (lineRange.end - lineRange.start)
-            |> Ansi.backgroundRed
-        , lineContent
-            |> Unicode.dropLeft (lineRange.start - 1 + lineRange.end - lineRange.start)
-        ]
-            |> String.concat
-
-
 moduleFileToWithParsedSyntax : { source : String, path : String } -> Result () { path : String, source : String, syntax : Elm.Syntax.File.File }
 moduleFileToWithParsedSyntax =
     \moduleFile ->
@@ -1114,6 +1130,15 @@ eventJsonDecoder =
                             Json.Decode.fail ("unknown js message tag " ++ unknownTag)
                     )
             )
+
+
+type EventToSendToJs
+    = InitialFilesRequested { extraPaths : List String }
+    | ErrorsReceived
+        { projectFilesByPath : FastDict.Dict String String
+        , errors : NextFixableOrAllUnfixable
+        }
+    | ProblemEncountered String
 
 
 type NextFixableOrAllUnfixable
