@@ -196,8 +196,8 @@ export function programStart(elmPorts: ElmPorts) {
                 }
                 break
             }
-            case "JsonDecodingFailed": {
-                console.log("an event from js to elm failed to decode: " + fromElm.value)
+            case "ProblemEncountered": {
+                console.log(fromElm.value)
                 break
             }
             default: {

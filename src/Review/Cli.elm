@@ -3,7 +3,7 @@ module Review.Cli exposing
     , ProgramEvent(..), ProgramState(..)
     )
 
-{-| Run reviews from the terminal, re-running on file changes
+{-|
 
 @docs program, Program
 
@@ -66,14 +66,14 @@ type ProgramEvent
         { elmJson : { source : String, project : Elm.Project.Project }
         , directDependencies : List { elmJson : Elm.Project.Project, docsJson : List Elm.Docs.Module }
         , extraFiles : List { path : String, source : String }
-        , modules : List { path : String, source : String, syntax : Elm.Syntax.File.File }
+        , modules : List { path : String, source : String }
         }
-    | ModuleAddedOrChanged { path : String, source : String, syntax : Elm.Syntax.File.File }
+    | ModuleAddedOrChanged { path : String, source : String }
     | ModuleRemoved { path : String }
     | ExtraFileAddedOrChanged { path : String, source : String }
     | ExtraFileRemoved { path : String }
     | ErrorFixRejected
-    | JsonDecodingFailed Json.Decode.Error
+    | JsEventJsonFailedToDecode Json.Decode.Error
 
 
 type alias FileReviewError =
@@ -84,8 +84,9 @@ type alias FileReviewError =
     }
 
 
-{-| A node.js CLI program.
-Start initializing one as showcased in [elm-review-mini-cli-starter](https://github.com/lue-bird/elm-review-mini-cli-starter)
+{-| Run reviews, re-running on file changes.
+To be used from a node.js CLI program
+as showcased in [elm-review-mini-cli-starter](https://github.com/lue-bird/elm-review-mini-cli-starter)
 -}
 program :
     { toJs : Json.Encode.Value -> Cmd Never
@@ -133,67 +134,87 @@ reactToEvent config event =
     \state ->
         case event of
             InitialFilesReceived initialFiles ->
-                let
-                    initialFilesByPath : FastDict.Dict String String
-                    initialFilesByPath =
-                        FastDict.union
-                            (initialFiles.extraFiles
-                                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
-                            )
-                            (initialFiles.modules
-                                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
-                            )
-
-                    runResult :
-                        { errorsByPath : FastDict.Dict String (List FileReviewError)
-                        , nextRuns : List Review.Run
-                        }
-                    runResult =
-                        { addedOrChangedModules = initialFiles.modules
-                        , addedOrChangedExtraFiles = initialFiles.extraFiles
-                        , directDependencies = initialFiles.directDependencies
-                        , elmJson = initialFiles.elmJson
-                        , removedExtraFilePaths = []
-                        , removedModulePaths = []
-                        }
-                            |> reviewRunList config.configuration.reviews
-
-                    maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                    maybeNextFixableErrorOrAllUnfixable =
-                        runResult.errorsByPath
-                            |> errorsByPathToNextFixableErrorOrAll
-                                { elmJsonSource = initialFiles.elmJson.source
-                                , filesByPath = initialFilesByPath
-                                }
-                in
-                ( HavingRunReviewsPreviously
-                    { nextRuns = runResult.nextRuns
-                    , availableErrorsOnReject =
-                        case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                FastDict.empty
-
-                            Just (AllUnfixable _) ->
-                                FastDict.empty
-
-                            Just (Fixable nextFixable) ->
-                                nextFixable.otherErrors
-                    , elmJson = initialFiles.elmJson
-                    , filesByPath = initialFilesByPath
-                    }
-                , case maybeNextFixableErrorOrAllUnfixable of
-                    Nothing ->
-                        Cmd.none
-
-                    Just nextFixableErrorOrAllUnfixable ->
-                        nextFixableErrorOrAllUnfixable
-                            |> errorReceivedToJson
-                                { elmJsonSource = initialFiles.elmJson.source
-                                , filesByPath = initialFilesByPath
-                                }
+                case initialFiles.modules |> allModuleFilesToWithParsedSyntax of
+                    Err pathsThatFailedToParse ->
+                        ( state
+                        , Json.Encode.object
+                            [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
+                            , ( "value"
+                              , ([ "module(s) at path(s) "
+                                 , pathsThatFailedToParse |> String.join " and "
+                                 , " failed to parse"
+                                 ]
+                                    |> String.concat
+                                )
+                                    |> Json.Encode.string
+                              )
+                            ]
                             |> config.toJs
                             |> Cmd.map Basics.never
-                )
+                        )
+
+                    Ok modules ->
+                        let
+                            initialFilesByPath : FastDict.Dict String String
+                            initialFilesByPath =
+                                FastDict.union
+                                    (initialFiles.extraFiles
+                                        |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
+                                    )
+                                    (initialFiles.modules
+                                        |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
+                                    )
+
+                            runResult :
+                                { errorsByPath : FastDict.Dict String (List FileReviewError)
+                                , nextRuns : List Review.Run
+                                }
+                            runResult =
+                                { addedOrChangedModules = modules
+                                , addedOrChangedExtraFiles = initialFiles.extraFiles
+                                , directDependencies = initialFiles.directDependencies
+                                , elmJson = initialFiles.elmJson
+                                , removedExtraFilePaths = []
+                                , removedModulePaths = []
+                                }
+                                    |> reviewRunList config.configuration.reviews
+
+                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                            maybeNextFixableErrorOrAllUnfixable =
+                                runResult.errorsByPath
+                                    |> errorsByPathToNextFixableErrorOrAll
+                                        { elmJsonSource = initialFiles.elmJson.source
+                                        , filesByPath = initialFilesByPath
+                                        }
+                        in
+                        ( HavingRunReviewsPreviously
+                            { nextRuns = runResult.nextRuns
+                            , availableErrorsOnReject =
+                                case maybeNextFixableErrorOrAllUnfixable of
+                                    Nothing ->
+                                        FastDict.empty
+
+                                    Just (AllUnfixable _) ->
+                                        FastDict.empty
+
+                                    Just (Fixable nextFixable) ->
+                                        nextFixable.otherErrors
+                            , elmJson = initialFiles.elmJson
+                            , filesByPath = initialFilesByPath
+                            }
+                        , case maybeNextFixableErrorOrAllUnfixable of
+                            Nothing ->
+                                Cmd.none
+
+                            Just nextFixableErrorOrAllUnfixable ->
+                                nextFixableErrorOrAllUnfixable
+                                    |> errorReceivedToJson
+                                        { elmJsonSource = initialFiles.elmJson.source
+                                        , filesByPath = initialFilesByPath
+                                        }
+                                    |> config.toJs
+                                    |> Cmd.map Basics.never
+                        )
 
             ErrorFixRejected ->
                 case state of
@@ -237,69 +258,89 @@ reactToEvent config event =
                     unexpectedState ->
                         ( unexpectedState, Cmd.none )
 
-            ModuleAddedOrChanged moduleAddedOrChanged ->
+            ModuleAddedOrChanged moduleAddedOrChangedPathAndSource ->
                 case state of
                     HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                        let
-                            filesByPathWithAddedOrChanged : FastDict.Dict String String
-                            filesByPathWithAddedOrChanged =
-                                havingRunReviewsPreviously.filesByPath
-                                    |> FastDict.insert moduleAddedOrChanged.path moduleAddedOrChanged.source
-
-                            runResult :
-                                { errorsByPath : FastDict.Dict String (List FileReviewError)
-                                , nextRuns : List Review.Run
-                                }
-                            runResult =
-                                { addedOrChangedExtraFiles = []
-                                , addedOrChangedModules = [ moduleAddedOrChanged ]
-                                , directDependencies = []
-                                , elmJson = havingRunReviewsPreviously.elmJson
-                                , removedExtraFilePaths = []
-                                , removedModulePaths = []
-                                }
-                                    |> reviewRunList
-                                        (List.map2 reviewWithRun
-                                            havingRunReviewsPreviously.nextRuns
-                                            config.configuration.reviews
+                        case moduleAddedOrChangedPathAndSource |> moduleFileToWithParsedSyntax of
+                            Err () ->
+                                ( HavingRunReviewsPreviously havingRunReviewsPreviously
+                                , Json.Encode.object
+                                    [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
+                                    , ( "value"
+                                      , ([ "module at path "
+                                         , moduleAddedOrChangedPathAndSource.path
+                                         , " failed to parse"
+                                         ]
+                                            |> String.concat
                                         )
-
-                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                            maybeNextFixableErrorOrAllUnfixable =
-                                runResult.errorsByPath
-                                    |> errorsByPathToNextFixableErrorOrAll
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithAddedOrChanged
-                                        }
-                        in
-                        ( HavingRunReviewsPreviously
-                            { nextRuns = runResult.nextRuns
-                            , availableErrorsOnReject =
-                                case maybeNextFixableErrorOrAllUnfixable of
-                                    Nothing ->
-                                        FastDict.empty
-
-                                    Just (AllUnfixable _) ->
-                                        FastDict.empty
-
-                                    Just (Fixable nextFixable) ->
-                                        nextFixable.otherErrors
-                            , elmJson = havingRunReviewsPreviously.elmJson
-                            , filesByPath = filesByPathWithAddedOrChanged
-                            }
-                        , case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                Cmd.none
-
-                            Just nextFixableErrorOrAllUnfixable ->
-                                nextFixableErrorOrAllUnfixable
-                                    |> errorReceivedToJson
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithAddedOrChanged
-                                        }
+                                            |> Json.Encode.string
+                                      )
+                                    ]
                                     |> config.toJs
                                     |> Cmd.map Basics.never
-                        )
+                                )
+
+                            Ok moduleAddedOrChanged ->
+                                let
+                                    filesByPathWithAddedOrChanged : FastDict.Dict String String
+                                    filesByPathWithAddedOrChanged =
+                                        havingRunReviewsPreviously.filesByPath
+                                            |> FastDict.insert moduleAddedOrChanged.path moduleAddedOrChanged.source
+
+                                    runResult :
+                                        { errorsByPath : FastDict.Dict String (List FileReviewError)
+                                        , nextRuns : List Review.Run
+                                        }
+                                    runResult =
+                                        { addedOrChangedExtraFiles = []
+                                        , addedOrChangedModules = [ moduleAddedOrChanged ]
+                                        , directDependencies = []
+                                        , elmJson = havingRunReviewsPreviously.elmJson
+                                        , removedExtraFilePaths = []
+                                        , removedModulePaths = []
+                                        }
+                                            |> reviewRunList
+                                                (List.map2 reviewWithRun
+                                                    havingRunReviewsPreviously.nextRuns
+                                                    config.configuration.reviews
+                                                )
+
+                                    maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                                    maybeNextFixableErrorOrAllUnfixable =
+                                        runResult.errorsByPath
+                                            |> errorsByPathToNextFixableErrorOrAll
+                                                { elmJsonSource = havingRunReviewsPreviously.elmJson.source
+                                                , filesByPath = filesByPathWithAddedOrChanged
+                                                }
+                                in
+                                ( HavingRunReviewsPreviously
+                                    { nextRuns = runResult.nextRuns
+                                    , availableErrorsOnReject =
+                                        case maybeNextFixableErrorOrAllUnfixable of
+                                            Nothing ->
+                                                FastDict.empty
+
+                                            Just (AllUnfixable _) ->
+                                                FastDict.empty
+
+                                            Just (Fixable nextFixable) ->
+                                                nextFixable.otherErrors
+                                    , elmJson = havingRunReviewsPreviously.elmJson
+                                    , filesByPath = filesByPathWithAddedOrChanged
+                                    }
+                                , case maybeNextFixableErrorOrAllUnfixable of
+                                    Nothing ->
+                                        Cmd.none
+
+                                    Just nextFixableErrorOrAllUnfixable ->
+                                        nextFixableErrorOrAllUnfixable
+                                            |> errorReceivedToJson
+                                                { elmJsonSource = havingRunReviewsPreviously.elmJson.source
+                                                , filesByPath = filesByPathWithAddedOrChanged
+                                                }
+                                            |> config.toJs
+                                            |> Cmd.map Basics.never
+                                )
 
                     unexpectedState ->
                         ( unexpectedState, Cmd.none )
@@ -505,11 +546,15 @@ reactToEvent config event =
                     unexpectedState ->
                         ( unexpectedState, Cmd.none )
 
-            JsonDecodingFailed decodeError ->
+            JsEventJsonFailedToDecode jsonDecodeError ->
                 ( state
                 , Json.Encode.object
-                    [ ( "tag", "JsonDecodingFailed" |> Json.Encode.string )
-                    , ( "value", decodeError |> Json.Decode.errorToString |> Json.Encode.string )
+                    [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
+                    , ( "value"
+                      , "bug: failed to decode json event from the js CLI"
+                            ++ (jsonDecodeError |> Json.Decode.errorToString)
+                            |> Json.Encode.string
+                      )
                     ]
                     |> config.toJs
                     |> Cmd.map Basics.never
@@ -925,6 +970,48 @@ withErrorHighlightedRange lineRange =
             |> String.concat
 
 
+moduleFileToWithParsedSyntax : { source : String, path : String } -> Result () { path : String, source : String, syntax : Elm.Syntax.File.File }
+moduleFileToWithParsedSyntax =
+    \moduleFile ->
+        case moduleFile.source |> Elm.Parser.parseToFile of
+            Err _ ->
+                Err ()
+
+            Ok syntax ->
+                { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
+                    |> Ok
+
+
+allModuleFilesToWithParsedSyntax :
+    List { source : String, path : String }
+    -> Result (List String) (List { path : String, source : String, syntax : Elm.Syntax.File.File })
+allModuleFilesToWithParsedSyntax =
+    \moduleFiles ->
+        moduleFiles
+            |> List.foldl
+                (\moduleFile soFar ->
+                    case moduleFile.source |> Elm.Parser.parseToFile of
+                        Err _ ->
+                            case soFar of
+                                Ok _ ->
+                                    Err [ moduleFile.path ]
+
+                                Err soFarErrorPaths ->
+                                    Err (soFarErrorPaths |> (::) moduleFile.path)
+
+                        Ok syntax ->
+                            case soFar of
+                                Err soFarErrorPaths ->
+                                    Err soFarErrorPaths
+
+                                Ok soFarWithParsedSyntax ->
+                                    soFarWithParsedSyntax
+                                        |> (::) { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
+                                        |> Ok
+                )
+                ([] |> Ok)
+
+
 listen :
     { toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
@@ -937,7 +1024,7 @@ listen config =
             (\fromJs ->
                 case fromJs |> Json.Decode.decodeValue eventJsonDecoder of
                     Err decodeError ->
-                        JsonDecodingFailed decodeError
+                        JsEventJsonFailedToDecode decodeError
 
                     Ok event ->
                         event
@@ -977,7 +1064,13 @@ eventJsonDecoder =
                                     )
                                 )
                                 (Json.Decode.field "modules"
-                                    (Json.Decode.list moduleDataJsonDecoder)
+                                    (Json.Decode.list
+                                        (Json.Decode.map2
+                                            (\path source -> { path = path, source = source })
+                                            (Json.Decode.field "path" Json.Decode.string)
+                                            (Json.Decode.field "source" Json.Decode.string)
+                                        )
+                                    )
                                 )
                                 (Json.Decode.field "extraFiles"
                                     (Json.Decode.list
@@ -990,7 +1083,12 @@ eventJsonDecoder =
                                 )
 
                         "ModuleAddedOrChanged" ->
-                            Json.Decode.map ModuleAddedOrChanged moduleDataJsonDecoder
+                            Json.Decode.map ModuleAddedOrChanged
+                                (Json.Decode.map2
+                                    (\path source -> { path = path, source = source })
+                                    (Json.Decode.field "path" Json.Decode.string)
+                                    (Json.Decode.field "source" Json.Decode.string)
+                                )
 
                         "ModuleRemoved" ->
                             Json.Decode.map
@@ -1015,24 +1113,6 @@ eventJsonDecoder =
                         unknownTag ->
                             Json.Decode.fail ("unknown js message tag " ++ unknownTag)
                     )
-            )
-
-
-moduleDataJsonDecoder : Json.Decode.Decoder { path : String, source : String, syntax : Elm.Syntax.File.File }
-moduleDataJsonDecoder =
-    Json.Decode.map2
-        (\path source -> { path = path, source = source })
-        (Json.Decode.field "path" Json.Decode.string)
-        (Json.Decode.field "source" Json.Decode.string)
-        |> Json.Decode.andThen
-            (\moduleFile ->
-                case moduleFile.source |> Elm.Parser.parseToFile of
-                    Err _ ->
-                        Json.Decode.fail "module parsing failed"
-
-                    Ok syntax ->
-                        { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
-                            |> Json.Decode.succeed
             )
 
 
