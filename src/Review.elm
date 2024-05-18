@@ -4,7 +4,7 @@ module Review exposing
     , inspectElmJson, inspectDirectDependencies, inspectExtraFile, inspectModule
     , Error, elmJsonPath
     , SourceEdit(..), insertAt, removeRange, replaceRange
-    , expressionSubs, patternSubs, typeSubs
+    , expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
     , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
     , sourceExtractInRange, sourceRangesOf
     , packageElmJsonExposedModules
@@ -31,6 +31,11 @@ Collect knowledge from parts of the project.
 @docs Error, elmJsonPath
 @docs SourceEdit, insertAt, removeRange, replaceRange
 
+If you want to insert
+bigger pieces of dynamic elm code,
+I recommend either using [`the-sett/elm-syntax-dsl`](https://dark.elm.dmy.fr/packages/the-sett/elm-syntax-dsl/latest/)
+or [`mdgriffith/elm-codegen`](https://dark.elm.dmy.fr/packages/mdgriffith/elm-codegen/latest/)
+
 
 # convenience helpers
 
@@ -53,7 +58,7 @@ E.g. to find all `as` pattern ranges
 
 This fine control allows you to e.g. skip visiting certain parts that you already accounted for.
 
-@docs expressionSubs, patternSubs, typeSubs
+@docs expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
 
 @docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
 @docs sourceExtractInRange, sourceRangesOf
@@ -711,6 +716,8 @@ ignoreErrorsForPathsWhere filterOut =
 
 
 {-| Review a given project and return the errors reported by the given [`Review`](#Review).
+The provided errors are provided as a [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/)
+just because well.. it's a bit faster.
 
     import Review
     import SomeConvention
@@ -876,7 +883,11 @@ sourceOffsetToLocationIn source =
         }
 
 
-{-| All surface-level child [expression](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Expression)s
+{-| All surface-level child [expression](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Expression)s.
+
+If you also want to record the newly available variables by child expression,
+use [`expressionSubsWithBindings`](#expressionSubsWithBindings)
+
 -}
 expressionSubs :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
@@ -977,6 +988,224 @@ expressionSubs =
                 []
 
             Elm.Syntax.Expression.GLSLExpression _ ->
+                []
+
+
+withoutBindings :
+    Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+    ->
+        { expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+        , bindings : List String
+        }
+withoutBindings =
+    \expressionNode ->
+        { expressionNode = expressionNode, bindings = [] }
+
+
+{-| Like [`expressionSubs`](#expressionSubs)
+with additional info about newly available variables from patterns and let declared value/function names
+which can be used to for example disambiguate variables you plan to introduce yourself through a fix
+-}
+expressionSubsWithBindings :
+    Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+    ->
+        List
+            { expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+            , bindings : List String
+            }
+expressionSubsWithBindings =
+    \(Elm.Syntax.Node.Node _ expression) ->
+        case expression of
+            Elm.Syntax.Expression.Application expressions ->
+                expressions |> List.map withoutBindings
+
+            Elm.Syntax.Expression.ListExpr elements ->
+                elements |> List.map withoutBindings
+
+            Elm.Syntax.Expression.RecordExpr fields ->
+                fields
+                    |> List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr |> withoutBindings)
+
+            Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
+                setters
+                    |> List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr |> withoutBindings)
+
+            Elm.Syntax.Expression.ParenthesizedExpression expr ->
+                [ expr |> withoutBindings ]
+
+            Elm.Syntax.Expression.OperatorApplication _ _ left right ->
+                [ left |> withoutBindings, right |> withoutBindings ]
+
+            Elm.Syntax.Expression.IfBlock cond then_ else_ ->
+                [ cond |> withoutBindings
+                , then_ |> withoutBindings
+                , else_ |> withoutBindings
+                ]
+
+            Elm.Syntax.Expression.TupledExpression expressions ->
+                expressions |> List.map withoutBindings
+
+            Elm.Syntax.Expression.Negation expr ->
+                [ expr |> withoutBindings ]
+
+            Elm.Syntax.Expression.RecordAccess expr _ ->
+                [ expr |> withoutBindings ]
+
+            Elm.Syntax.Expression.PrefixOperator _ ->
+                []
+
+            Elm.Syntax.Expression.Operator _ ->
+                []
+
+            Elm.Syntax.Expression.Integer _ ->
+                []
+
+            Elm.Syntax.Expression.Hex _ ->
+                []
+
+            Elm.Syntax.Expression.Floatable _ ->
+                []
+
+            Elm.Syntax.Expression.Literal _ ->
+                []
+
+            Elm.Syntax.Expression.CharLiteral _ ->
+                []
+
+            Elm.Syntax.Expression.UnitExpr ->
+                []
+
+            Elm.Syntax.Expression.FunctionOrValue _ _ ->
+                []
+
+            Elm.Syntax.Expression.RecordAccessFunction _ ->
+                []
+
+            Elm.Syntax.Expression.GLSLExpression _ ->
+                []
+
+            Elm.Syntax.Expression.LambdaExpression lambda ->
+                [ { expressionNode = lambda.expression
+                  , bindings =
+                        lambda.args |> List.concatMap patternBindings
+                  }
+                ]
+
+            Elm.Syntax.Expression.CaseExpression caseOf ->
+                (caseOf.expression |> withoutBindings)
+                    :: (caseOf.cases
+                            |> List.map
+                                (\( patternNode, caseExpressionNode ) ->
+                                    { expressionNode = caseExpressionNode
+                                    , bindings = patternNode |> patternBindings
+                                    }
+                                )
+                       )
+
+            Elm.Syntax.Expression.LetExpression letIn ->
+                let
+                    variablesForWholeLetIn : List String
+                    variablesForWholeLetIn =
+                        letIn.declarations
+                            |> List.concatMap
+                                (\(Elm.Syntax.Node.Node _ letDeclaration) ->
+                                    case letDeclaration of
+                                        Elm.Syntax.Expression.LetFunction letFunction ->
+                                            letFunction.declaration
+                                                |> Elm.Syntax.Node.value
+                                                |> .name
+                                                |> Elm.Syntax.Node.value
+                                                |> List.singleton
+
+                                        Elm.Syntax.Expression.LetDestructuring patternNode _ ->
+                                            patternNode |> patternBindings
+                                )
+                in
+                { expressionNode = letIn.expression
+                , bindings = variablesForWholeLetIn
+                }
+                    :: (letIn.declarations
+                            |> List.map
+                                (\(Elm.Syntax.Node.Node _ letDeclaration) ->
+                                    letDeclaration |> letDeclarationExpressionSubsWithBindings
+                                )
+                       )
+
+
+letDeclarationExpressionSubsWithBindings :
+    Elm.Syntax.Expression.LetDeclaration
+    ->
+        { expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+        , bindings : List String
+        }
+letDeclarationExpressionSubsWithBindings =
+    \letDeclaration ->
+        case letDeclaration of
+            Elm.Syntax.Expression.LetDestructuring _ destructuredExpressionNode ->
+                destructuredExpressionNode |> withoutBindings
+
+            Elm.Syntax.Expression.LetFunction letValueOrFunctionDeclaration ->
+                { expressionNode = letValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value |> .expression
+                , bindings =
+                    letValueOrFunctionDeclaration.declaration
+                        |> Elm.Syntax.Node.value
+                        |> .arguments
+                        |> List.concatMap patternBindings
+                }
+
+
+{-| Recursively find all introduced variables
+in the [pattern](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Pattern)
+(like `a` and `b` in `( Just a, { b } )`)
+-}
+patternBindings : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> List String
+patternBindings =
+    -- IGNORE TCO
+    \(Elm.Syntax.Node.Node _ pattern) ->
+        case pattern of
+            Elm.Syntax.Pattern.VarPattern name ->
+                name |> List.singleton
+
+            Elm.Syntax.Pattern.AsPattern afterAsPattern (Elm.Syntax.Node.Node _ name) ->
+                name :: (afterAsPattern |> patternBindings)
+
+            Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
+                inParens |> patternBindings
+
+            Elm.Syntax.Pattern.ListPattern patterns ->
+                patterns |> List.concatMap patternBindings
+
+            Elm.Syntax.Pattern.TuplePattern patterns ->
+                patterns |> List.concatMap patternBindings
+
+            Elm.Syntax.Pattern.RecordPattern fields ->
+                fields |> List.map Elm.Syntax.Node.value
+
+            Elm.Syntax.Pattern.NamedPattern _ patterns ->
+                patterns |> List.concatMap patternBindings
+
+            Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
+                (tailPattern |> patternBindings) ++ (headPattern |> patternBindings)
+
+            Elm.Syntax.Pattern.AllPattern ->
+                []
+
+            Elm.Syntax.Pattern.UnitPattern ->
+                []
+
+            Elm.Syntax.Pattern.CharPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.StringPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.IntPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.HexPattern _ ->
+                []
+
+            Elm.Syntax.Pattern.FloatPattern _ ->
                 []
 
 
