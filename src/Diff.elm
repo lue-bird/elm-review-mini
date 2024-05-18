@@ -1,9 +1,6 @@
-module Diff exposing
-    ( Change(..)
-    , diff
-    )
+module Diff exposing (Change(..), diff)
 
-{-| Derived from <https://github.com/jinjor/elm-diff/> including edits to typos, types and inlining in the code
+{-| Derived from (edited) <https://github.com/jinjor/elm-diff/>
 
 The following is the original license
 
@@ -42,22 +39,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Compares two list and returns how they have changed.
 Each function internally uses Wu's [O(NP) algorithm](http://myerslab.mpi-cbg.de/wp-content/uploads/2014/06/np_diff.pdf).
 
-
-# Types
-
-@docs Change
-
-
-# Diffing
-
-@docs diff
+@docs Change, diff
 
 -}
 
 import Array exposing (Array)
 
 
-{-| This describes how each line has changed and also contains its value.
+{-| How each line has changed plus its value
 -}
 type Change a
     = Added a
