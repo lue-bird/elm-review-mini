@@ -2,7 +2,7 @@
 
 Scan your [elm](https://elm-lang.org/) project to enforce conventions using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
 
-While heavily inspired by [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) it comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
+While heavily inspired by the phenomenal [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) it comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
 
 Use it in your project by adding this starter config with the CLI set up
 ```bash
