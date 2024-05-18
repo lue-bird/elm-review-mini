@@ -12,9 +12,15 @@ export interface ElmPorts {
 }
 
 export function compileElm(elmProjectDirectoryPath: string, mainElmModuleName: string[]): { init: () => { ports: ElmPorts } } {
+    if (elmProjectDirectoryPath === undefined) {
+        console.error("To access import.meta.dirname you'll need at least Node.js 20.11 / 21.2: https://stackoverflow.com/a/50052194")
+        throw new Error()
+    }
     const elmJsPath = path.resolve(elmProjectDirectoryPath, "review-mini", "elm-stuff", "review-mini-cli-elm.js")
     child_process.execSync(
-        `elm make ${path.join(...mainElmModuleName)} --output "${elmJsPath}"`, // TODO --optimize
+        // if you want to use Debug.log etc while prototyping or debugging, remove the --optimize flag
+        // if you need extra performance switch to https://github.com/mdgriffith/elm-optimize-level-2
+        `elm make ${path.join(...mainElmModuleName)} --output "${elmJsPath}" --optimize`,
         { cwd: elmProjectDirectoryPath }
     )
     eval(
@@ -34,8 +40,7 @@ export function programStart(elmPorts: ElmPorts) {
         // console.log("elm → js: ", fromElm)
         switch (fromElm.tag) {
             case "InitialFilesRequested": {
-
-                const elmJsonSource = fs.readFileSync(path.resolve(process.cwd(), "elm.json"), { encoding: "utf8" })
+                const elmJsonSource = await fs.promises.readFile(path.resolve(process.cwd(), "elm.json"), { encoding: "utf8" })
 
                 const elmJsonProject = JSON.parse(elmJsonSource)
                 const directDependencyNameVersionStrings: string[] =
@@ -48,7 +53,6 @@ export function programStart(elmPorts: ElmPorts) {
                             .map(([name, version]: [string, string]) =>
                                 path.join(name, version)
                             )
-
                 const directDependencies = await Promise.all(
                     directDependencyNameVersionStrings.map(packageDirectory =>
                         Promise.all([
