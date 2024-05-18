@@ -27,7 +27,7 @@ configuration =
 ```
 see also ["when to enable a review"](#when-to-create-or-enable-a-review).
 
-You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example of a review that prevents a typo in a string that was made too often at your company:
+You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example of a review that fixes a typo in a string that was made too often at your company:
 ```elm
 module StringSpellsCompanyNameCorrectly exposing (review)
 ```
@@ -35,6 +35,7 @@ module StringSpellsCompanyNameCorrectly exposing (review)
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
+import Elm.Syntax.Range
 import Review
 
 review : Review.Review
@@ -43,62 +44,105 @@ review =
         { inspect =
             [ Review.inspectModule
                 (\moduleData ->
-                    moduleData.syntax.declarations
-                        |> List.concatMap declarationToKnowledge
+                    { stringsWithTypos =
+                        moduleData.syntax.declarations
+                            |> List.concatMap declarationToTyposInStrings
+                            |> List.map
+                                (\typoRange ->
+                                    { range = typoRange
+                                    , modulePath = moduleData.path
+                                    }
+                                )
+                    }
                 )
             ]
-        , knowledgeMerge = \a b -> a ++ b
+        , knowledgeMerge = knowledgeMerge
         , report = report
         }
 
 type alias Knowledge =
-    List { modulePath : String, range : Elm.Syntax.Range.Range }
+    { stringsWithTypos :
+        List { modulePath : String, range : Elm.Syntax.Range.Range }
+    }
 
-declarationToKnowledge :
+declarationToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
-    -> Knowledge
-declarationToKnowledge =
+    -> List Elm.Syntax.Range.Range
+declarationToTyposInStrings =
     \(Elm.Syntax.Node.Node _ declaration) ->
-        case Elm.Syntax.Node.value declaration of
+        case declaration of
             Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
                 functionDeclaration.declaration
                     |> Elm.Syntax.Node.value
                     |> .expression
-                    |> expressionToKnowledge
+                    |> expressionToTyposInStrings
 
             _ ->
                 []
 
-expressionToKnowledge :
+expressionToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-    -> Knowledge
-expressionToKnowledge =
+    -> List Elm.Syntax.Range.Range
+expressionToTyposInStrings =
     \expressionNode ->
         case expressionNode of
             Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
-                if string |> String.contains "frits.com" then
-                    [ { modulePath = moduleData.path, range = range } ]
-
-                else
-                    []
+                string
+                    |> Review.sourceRangesOf "frits.com"
+                    |> List.map (rangeRelativeTo range.start)
 
             nonStringExpressionNode ->
                 nonStringExpressionNode
                     |> Review.expressionSubs
-                    |> List.concatMap expressionToKnowledge
+                    |> List.concatMap expressionToTyposInStrings
 
-report : Knowledge -> Review.Error
-report stringsWithTypos =
-    stringsWithTypos
+knowledgeMerge : Knowledge -> Knowledge -> Knowledge
+knowledgeMerge a b =
+    { stringsWithTypos =
+        a.stringsWithTypos ++ b.stringsWithTypos
+    }
+
+report : Knowledge -> List Review.Error
+report knowledge =
+    knowledge.stringsWithTypos
         |> List.map
             (\stringWithTypos ->
-                { target = Review.FileTargetModule stringWithTypos.modulePath
-                , message = "Replace `frits.com` by `fruits.com`"
-                , details = [ "This typo has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
+                { path = stringWithTypos.modulePath
+                , message = "misspelled fruits.com"
+                , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
                 , range = stringWithTypos.range
-                , fix = []
+                , fix =
+                    [ { path = stringWithTypos.modulePath
+                      , edits = [ Review.replaceRange stringWithTypos.range "fruits.com" ]
+                      }
+                    ]
                 }
             )
+
+rangeRelativeTo :
+    Elm.Syntax.Range.Location
+    -> (Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range)
+rangeRelativeTo baseStart =
+    \offsetRange ->
+        { start = offsetRange.start |> locationRelativeTo baseStart
+        , end = offsetRange.end |> locationRelativeTo baseStart
+        }
+
+locationRelativeTo :
+    Elm.Syntax.Range.Location
+    -> (Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location)
+locationRelativeTo baseStart =
+    \offsetLocation ->
+        case offsetLocation.row of
+            1 ->
+                { row = baseStart.row
+                , column = baseStart.column + offsetLocation.column
+                }
+
+            offsetRowAtLeast2 ->
+                { row = baseStart.row + (offsetRowAtLeast2 - 1)
+                , column = offsetLocation.column
+                }
 ```
 
 ## when to create or enable a review
