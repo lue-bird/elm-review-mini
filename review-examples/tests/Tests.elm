@@ -383,7 +383,7 @@ importExposingIsExplicitTests =
                             ]
                       , range = Review.Test.Under ".."
                       , fixedFiles =
-                            [ { path = "src/A.elm"
+                            [ { path = "src/B.elm"
                               , source = """
                                     module B exposing (b)
 
@@ -441,7 +441,7 @@ importExposingIsExplicitTests =
                             ]
                       , range = Review.Test.Under ".."
                       , fixedFiles =
-                            [ { path = "src/A.elm"
+                            [ { path = "src/B.elm"
                               , source = """
                                     module B exposing (b)
 
