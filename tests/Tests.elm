@@ -11,7 +11,7 @@ tests =
         [ Test.describe "StringSpellsCompanyNameCorrectly"
             [ Test.test "fruits.com in string is accepted"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -29,7 +29,7 @@ tests =
                 )
             , Test.test "(should pass) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -63,7 +63,7 @@ tests =
                 )
             , Test.test "(should fail because module source doesn't parse) fruits.com in string is accepted"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -82,7 +82,7 @@ tests =
                 )
             , Test.test "(should fail because missing errors) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -101,7 +101,7 @@ tests =
                 )
             , Test.test "(should fail because missing fixes) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -126,7 +126,7 @@ tests =
                 )
             , Test.test "(should fail because incorrect range) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -160,7 +160,7 @@ tests =
                 )
             , Test.test "(should fail because fixed module source doesn't parse) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """

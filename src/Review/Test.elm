@@ -1,4 +1,4 @@
-module Review.Test exposing (run, minimalApplicationConfiguration, ExpectedErrorRange(..))
+module Review.Test exposing (run, applicationConfigurationMinimal, ExpectedErrorRange(..))
 
 {-| Test your review using [`elm-test`](https://dark.elm.dmy.fr/packages/elm-explorations/test/latest/).
 
@@ -22,7 +22,7 @@ since the behavior of a review rarely changes drastically.
 If you like putting `Debug.log`s in your code as much as I do,
 run your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
-@docs run, minimalApplicationConfiguration, ExpectedErrorRange
+@docs run, applicationConfigurationMinimal, ExpectedErrorRange
 
 -}
 
@@ -71,8 +71,8 @@ Equivalent to (copy and adapt if necessary)
     }
 
 -}
-minimalApplicationConfiguration : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
-minimalApplicationConfiguration =
+applicationConfigurationMinimal : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
+applicationConfigurationMinimal =
     { elmJson = """
         {
             "type": "application",
@@ -160,7 +160,7 @@ with your provided expected errors.
         describe "The.Review.You.Want.To.Test"
             [ test "should report ... when ..."
                 (\() ->
-                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A/B.elm"
                           , source = """

@@ -34,7 +34,7 @@ moduleNameWithUnderscoreForbidTests =
     Test.describe "ModuleNameWithUnderscoreForbid"
         [ Test.test "single module without errors"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -51,7 +51,7 @@ moduleNameWithUnderscoreForbidTests =
             )
         , Test.test "single module with error"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A_.elm"
                       , source = """
@@ -81,7 +81,7 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
     Test.describe "ModuleValueOrFunctionIsTypeAnnotated"
         [ Test.test "allows annotated value and function declaration and un-annotated let value and function declaration"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -111,7 +111,7 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
             )
         , Test.test "reports un-annotated value declaration"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -145,7 +145,7 @@ letValueOrFunctionIsTypeAnnotatedTests =
     Test.describe "LetValueOrFunctionIsTypeAnnotated"
         [ Test.test "allows annotated and un-annotated module-level value and function declaration and annotated let value and function declaration"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -180,7 +180,7 @@ letValueOrFunctionIsTypeAnnotatedTests =
             )
         , Test.test "reports un-annotated let value declaration"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -218,7 +218,7 @@ moduleExposingIsExplicitTests =
     Test.describe "ModuleExposingIsExplicit"
         [ Test.test "allows module exposing (value, function, type alias, choice type)"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -245,7 +245,7 @@ moduleExposingIsExplicitTests =
             )
         , Test.test "reports module exposing (..) with value, function, type alias, choice type"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -306,7 +306,7 @@ importExposingIsExplicitTests =
     Test.describe "ImportExposingIsExplicit"
         [ Test.test "allows import exposing (value)"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -343,7 +343,7 @@ importExposingIsExplicitTests =
             )
         , Test.test "reports import exposing (..) with .. being from explicit exposing value, function, type alias, choice type"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -401,7 +401,7 @@ importExposingIsExplicitTests =
             )
         , Test.test "reports import exposing (..) with .. being from exposing everything being value, function, type alias, choice type"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -465,7 +465,7 @@ moduleAndExposesAreUsedTests =
     Test.describe "ModuleAndExposesAreUsed"
         [ Test.test "unused exposed value, usage fully qualified"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -518,7 +518,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
         , Test.test "unused exposed value as the only expose"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -560,7 +560,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
         , Test.test "unused exposed value, usage qualified by alias"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -613,7 +613,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
         , Test.test "unused exposed value, usage by import exposing"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -672,7 +672,7 @@ patternVariablesAreUsedTests =
     Test.describe "PatternVariableIsUsed"
         [ Test.test "used pattern variables are not reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -709,7 +709,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -743,7 +743,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable from single-field record is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -777,7 +777,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable as first from multi-field record is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -811,7 +811,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable as last from multi-field record is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -845,7 +845,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused function declaration argument pattern variable from as is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -879,7 +879,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused lambda argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -913,7 +913,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused case argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -951,7 +951,7 @@ patternVariablesAreUsedTests =
             )
         , Test.test "unused let destructured argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -999,7 +999,7 @@ debugIsNotUsedTests =
     Test.describe "DebugIsNotUsed"
         [ Test.test "using variables named log, toString, todo are allowed"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1022,7 +1022,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using log with import Debug exposing (log) and module-declared log is allowed"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1045,7 +1045,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using log with import Debug exposing (log) with alias and module-declared log is allowed"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1068,7 +1068,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using \"Debug.log\" though unambiguous import alias to a module different than Debug is allowed"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1097,7 +1097,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using Debug.todo from implicit import is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1124,7 +1124,7 @@ debugIsNotUsedTests =
             )
         , Test.test "using Debug.log from implicit import is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1154,7 +1154,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using Debug.toString from implicit import is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1184,7 +1184,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using Debug.toString qualified by import alias is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1216,7 +1216,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1248,7 +1248,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using qualified Debug.toString from explicit import exposing and import alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1280,7 +1280,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from explicit import exposing with alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1312,7 +1312,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using qualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1344,7 +1344,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using qualified Debug.toString from explicit import exposing (..) and import alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1376,7 +1376,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from import exposing (..) with alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1408,7 +1408,7 @@ Using any `Debug` member also prevents compiling in optimized mode and publishin
             )
         , Test.test "using unqualified Debug.toString from import exposing (..) without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1446,7 +1446,7 @@ commentDoesNotUseCertainWordsTests =
     Test.describe "CommentDoesNotUseCertainWords"
         [ Test.test "comments without marks are allowed"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1492,7 +1492,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "single-line comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1518,7 +1518,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "multi-line comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1547,7 +1547,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "module documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1578,7 +1578,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "value documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1610,7 +1610,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "function documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1642,7 +1642,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "type alias documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1674,7 +1674,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "choice type documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1706,7 +1706,7 @@ commentDoesNotUseCertainWordsTests =
             )
         , Test.test "port documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.minimalApplicationConfiguration
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
