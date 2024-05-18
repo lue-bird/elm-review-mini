@@ -863,9 +863,9 @@ sourceOffsetToLocationIn source =
         let
             lines : List String
             lines =
-                source |> String.lines
+                source |> Unicode.left sourceOffset |> String.lines
         in
-        { row = (lines |> List.length) + 1
+        { row = lines |> List.length
         , column =
             case lines |> ListLocalExtra.last of
                 Nothing ->
