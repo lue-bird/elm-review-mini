@@ -1,4 +1,4 @@
-module Review.Test exposing (run, applicationConfigAfterElmInit, ExpectedErrorRange(..))
+module Review.Test exposing (run, minimalApplicationConfiguration, ExpectedErrorRange(..))
 
 {-| Test your review using [`elm-test`](https://dark.elm.dmy.fr/packages/elm-explorations/test/latest/).
 
@@ -22,7 +22,7 @@ since the behavior of a review rarely changes drastically.
 If you like putting `Debug.log`s in your code as much as I do,
 run your tests with [`elm-test-rs`](https://github.com/mpizenberg/elm-test-rs).
 
-@docs run, applicationConfigAfterElmInit, ExpectedErrorRange
+@docs run, minimalApplicationConfiguration, ExpectedErrorRange
 
 -}
 
@@ -43,7 +43,8 @@ import Review
 import Set exposing (Set)
 
 
-{-| Equivalent to (copy and adapt if necessary)
+{-| The default project after `elm init` minus the `elm/html` and `elm/browser` dependencies.
+Equivalent to (copy and adapt if necessary)
 
     { elmJson = """
         {
@@ -70,8 +71,8 @@ import Set exposing (Set)
     }
 
 -}
-applicationConfigAfterElmInit : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
-applicationConfigAfterElmInit =
+minimalApplicationConfiguration : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
+minimalApplicationConfiguration =
     { elmJson = """
         {
             "type": "application",
@@ -139,7 +140,12 @@ type ExpectedErrorRange
 expectationsViolated : List String -> Expect.Expectation
 expectationsViolated =
     \errors ->
-        Expect.fail (errors |> String.join "\n\n\n\n")
+        case errors of
+            [] ->
+                Expect.pass
+
+            error0 :: error1Up ->
+                Expect.fail ((error0 :: error1Up) |> String.join "\n\n\n\n")
 
 
 {-| Run a `Review` on a project, matching all reported module errors, `elm.json` errors and extra file errors
@@ -154,7 +160,7 @@ with your provided expected errors.
         describe "The.Review.You.Want.To.Test"
             [ test "should report ... when ..."
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigAfterElmInit
+                    { projectConfiguration = Review.Test.minimalApplicationConfiguration
                     , files =
                         [ { path = "src/A/B.elm"
                           , source = """
@@ -567,10 +573,10 @@ failureMessage title content =
 
 moduleFailedToParse : { path : String } -> String
 moduleFailedToParse file =
-    failureMessage "MODULE FAILED TO PARSE"
+    failureMessage "module failed to parse"
         ([ """I could not parse the provided elm module source code at path """
          , file.path
-         , "\n\n"
+         , ".\n\n"
          , """Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)"""
          ]
             |> String.concat
@@ -579,7 +585,7 @@ moduleFailedToParse file =
 
 dependencyElmJsonParsingFailure : Json.Decode.Error -> String
 dependencyElmJsonParsingFailure jsonDecodeError =
-    failureMessage "DEPENDENCY ELM.JSON FAILED TO PARSE"
+    failureMessage "dependency elm.json failed to parse"
         ([ """I could not parse a provided dependency elm.json source: """
          , jsonDecodeError |> Json.Decode.errorToString
          , "\n\n"
@@ -591,7 +597,7 @@ dependencyElmJsonParsingFailure jsonDecodeError =
 
 dependencyDocsJsonParsingFailure : Json.Decode.Error -> String
 dependencyDocsJsonParsingFailure jsonDecodeError =
-    failureMessage "DEPENDENCY DOCS.JSON FAILED TO PARSE"
+    failureMessage "dependency docs.json failed to parse"
         ([ """I could not parse a provided dependency docs.json source: """
          , jsonDecodeError |> Json.Decode.errorToString
          , "\n\n"
@@ -702,10 +708,14 @@ invalidExpectedErrorsIn project =
 
 elmJsonFixedSourceParsingFailure : Json.Decode.Error -> { message : String, details : List String } -> String
 elmJsonFixedSourceParsingFailure decodeError errorInfo =
-    failureMessage "EXPECTED FIXED ELM.JSON FAILED TO PARSE"
-        ([ """I could not decode the expected fixed elm.json for the error with the message \""""
+    failureMessage "expected fixed elm.json failed to parse"
+        ([ """I could not decode the expected fixed elm.json for the error with the message
+
+  """
          , errorInfo.message
-         , """" because """
+         , """"
+
+because """
          , decodeError |> Json.Decode.errorToString
          ]
             |> String.concat
@@ -714,14 +724,16 @@ elmJsonFixedSourceParsingFailure decodeError errorInfo =
 
 moduleFixedSourceParsingFailure : { path : String, errorInfo : { message : String, details : List String } } -> String
 moduleFixedSourceParsingFailure info =
-    failureMessage "EXPECTED FIXED MODULE SOURCE CODE PARSING ERROR"
+    failureMessage "expected fixed module failed to parse"
         ([ "I could not parse the provided expected fixed elm module source code at path "
          , info.path
-         , " for the error with the message \""
+         , """ for the error with the message
+
+  """
          , info.errorInfo.message
-         , "\""
-         , "\n\n"
-         , """Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)"""
+         , """
+
+Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)?"""
          ]
             |> String.concat
         )
@@ -729,7 +741,7 @@ moduleFixedSourceParsingFailure info =
 
 unknownFilesInExpectedErrors : String -> String
 unknownFilesInExpectedErrors path =
-    failureMessage "EXPECTED ERROR USES UNKNOWN PATH"
+    failureMessage "expected errors use unknown path"
         ([ """I expected errors for the file at path """
          , path
          , """ but I couldn't find an entry with its source in the test files field with that path."""
@@ -796,7 +808,7 @@ checkAllErrorsMatch toCheck =
                 , expectedErrorsWithNoMatch = []
                 }
     in
-    checkErrorsMatch
+    expectErrorsMatch
         { sourceByPath = toCheck.sourceByPath
         , runResult = toCheck.runResult
         , expected = errorsOrdered.expected
@@ -912,14 +924,14 @@ matchingConfidenceLevel source expectedErrorDetails reviewError =
                     3
 
 
-checkErrorsMatch :
+expectErrorsMatch :
     { sourceByPath : FastDict.Dict String String
     , runResult : SuccessfulRunResult
     , expected : List ExpectedFileError
     , reviewErrors : List FileReviewError
     }
     -> Expect.Expectation
-checkErrorsMatch toCheckForMatchingErrors =
+expectErrorsMatch toCheckForMatchingErrors =
     -- IGNORE TCO
     case ( toCheckForMatchingErrors.expected, toCheckForMatchingErrors.reviewErrors ) of
         ( [], [] ) ->
@@ -940,7 +952,7 @@ checkErrorsMatch toCheckForMatchingErrors =
         ( expected :: restOfExpectedErrors, reviewError :: restOfErrors ) ->
             Expect.all
                 [ \() ->
-                    checkErrorsMatch
+                    expectErrorsMatch
                         { sourceByPath = toCheckForMatchingErrors.sourceByPath
                         , runResult = toCheckForMatchingErrors.runResult
                         , expected = restOfExpectedErrors
@@ -960,7 +972,7 @@ checkErrorsMatch toCheckForMatchingErrors =
                         , reviewError = reviewError
                         , expected = expected
                         }
-                , checkDetailsAreCorrect reviewError expected
+                , \() -> checkDetailsAreCorrect reviewError expected
                 , \() ->
                     checkFixesAreCorrect
                         { sourceByPath = toCheckForMatchingErrors.sourceByPath
@@ -1080,7 +1092,7 @@ formatSourceCode string =
 
 underMismatch : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> { under : String, errorSourceInRange : String } -> String
 underMismatch error range =
-    failureMessage "ERROR LOCATION DOESN'T MATCH"
+    failureMessage "error location doesn't match"
         ([ """I found an error with the message
 
   """
@@ -1119,7 +1131,7 @@ locationToCodeString =
 
 wrongLocation : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> Elm.Syntax.Range.Range -> String -> String
 wrongLocation error range under =
-    failureMessage "ERROR LOCATION DOESN'T MATCH"
+    failureMessage "exact error location doesn't match"
         ([ """I was looking for the error with the message
 
   """
@@ -1151,7 +1163,7 @@ but I found it at
 
 locationIsAmbiguousInSourceCode : String -> { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String -> List Int -> String
 locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
-    failureMessage "EXPECTED ERROR LOCATION IS AMBIGUOUS"
+    failureMessage "expected error location is ambiguous"
         ([ """The exact location where the error appears is ambiguous.
 
 You are looking for the error message
@@ -1208,7 +1220,7 @@ startingLocationInSource sourceCode position =
     }
 
 
-checkDetailsAreCorrect : FileReviewError -> ExpectedFileError -> (() -> Expect.Expectation)
+checkDetailsAreCorrect : FileReviewError -> ExpectedFileError -> Expect.Expectation
 checkDetailsAreCorrect error expectedError =
     Expect.all
         [ \() ->
@@ -1220,11 +1232,12 @@ checkDetailsAreCorrect error expectedError =
                 |> Expect.equal expectedError.details
                 |> Expect.onFail (unexpectedDetails expectedError.details error)
         ]
+        ()
 
 
 unexpectedDetails : List String -> { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
 unexpectedDetails expectedDetails error =
-    failureMessage "ERROR DETAILS DON'T MATCH"
+    failureMessage "error details don't match"
         ([ """I found an error for a file with the message
 
   """
@@ -1248,7 +1261,7 @@ but I found the details
 
 emptyDetails : String -> String
 emptyDetails errorMessage =
-    failureMessage "ERROR DETAILS ARE EMPTY"
+    failureMessage "error details are empty"
         ([ """I found an error with the message
 
   """
@@ -1334,8 +1347,8 @@ removeWhitespace =
 
 fixedSourceMismatch : String -> String -> { error_ | message : String, details : List String } -> String
 fixedSourceMismatch resultingSource expectedSource error =
-    failureMessage "FIXED SOURCE DOESN'T MATCH"
-        ([ """I found a different fixed source code than expected for the error with the message:
+    failureMessage "fixed source doesn't match"
+        ([ """I found a different fixed source code than expected for the error with the message
 
   """
          , error.message
@@ -1362,7 +1375,7 @@ fixedSourceWhitespaceMismatch resultingSource expectedSource error =
         ( expected, resulting ) =
             highlightDifferencesInSourceCodes ( resultingSource, expectedSource )
     in
-    failureMessage "FIXED SOURCE DOESN'T MATCH WHITESPACE"
+    failureMessage "fixed source whitespace doesn't match"
         ([ """I found a different fixed source than expected for the error with the message
 
   """
@@ -1432,7 +1445,7 @@ replaceWhitespace lines =
 
 unchangedSourceAfterFix : { error_ | message : String, details : List String } -> String
 unchangedSourceAfterFix error =
-    failureMessage "APPLYING THE EDITS DID NOT CHANGE THE SOURCE"
+    failureMessage "applying edits did not change the source"
         ([ """After applying the fixes provided by the error with the message
 
   """
@@ -1452,9 +1465,8 @@ doesn't do anything."""
 
 hasCollisionsInFixRanges : { error_ | message : String, details : List String } -> String
 hasCollisionsInFixRanges error =
-    failureMessage "SOURCE EDIT RANGES COLLIDE"
-        ([ """I got something unexpected when applying the fixes provided by the error
-with the message
+    failureMessage "source edit ranges collide"
+        ([ """When applying the fixes provided by the error with the message
 
   """
          , error.message
@@ -1477,16 +1489,16 @@ of your fixes."""
 
 missingSourceEditsForFile : String -> { error_ | message : String, details : List String } -> String
 missingSourceEditsForFile path expectedError =
-    failureMessage "FIX IS MISSING EDITS TO FILE"
+    failureMessage "file fix edits are missing"
         ([ """The error with the message
 
   """
          , expectedError.message
          , """
 
-did not provide edits as a fix for the file """
+did not provide edits as a fix for the file at the path """
          , path
-         , """ which was expected."""
+         , """ which I had expected."""
          ]
             |> String.concat
         )
@@ -1494,14 +1506,14 @@ did not provide edits as a fix for the file """
 
 unexpectedEditsToFile : String -> { error_ | message : String, details : List String } -> String
 unexpectedEditsToFile path error =
-    failureMessage "SOURCE EDITS TO FILE NOT EXPECTED"
+    failureMessage "source edits to file not expected"
         ([ """The error with the message
 
   """
          , error.message
          , """
 
-provided a fix with source edits for the file """
+provided a fix with source edits for the file at path """
          , path
          , """ for which you expected no edits.
 
@@ -1515,7 +1527,7 @@ To expect edits, add an entry { path = \""""
 
 messageMismatch : { expectedError_ | message : String, details : List String } -> { error_ | message : String, details : List String } -> String
 messageMismatch expectedError reviewError =
-    failureMessage "ERROR MESSAGE DOESN'T MATCH"
+    failureMessage "error message doesn't match"
         ([ """I was looking for the error with the message
 
   """
@@ -1533,7 +1545,7 @@ but I found the error message
 
 tooFewErrors : String -> List { message : String, details : List String, under : String } -> String
 tooFewErrors path missingExpectedErrors =
-    failureMessage "TOO FEW ERRORS"
+    failureMessage "missing errors"
         ([ "I expected to see more errors for the file at path "
          , path
          , """.
@@ -1549,19 +1561,10 @@ Here are those I could not find:
 
 
 tooManyErrors : String -> List { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
-tooManyErrors moduleName extraErrors =
-    let
-        errorCount : Int
-        errorCount =
-            extraErrors |> List.length
-    in
-    failureMessage "TOO MANY ERRORS"
-        ([ "I found "
-         , errorCount |> String.fromInt
-         , " "
-         , pluralizeErrors errorCount
-         , " too many for module "
-         , moduleName
+tooManyErrors path extraErrors =
+    failureMessage "unexpected additional errors"
+        ([ "I found too many errors for the file at path "
+         , path
          , ":\n\n"
          , extraErrors
             |> List.map
@@ -1586,19 +1589,9 @@ rangeToCodeString =
             |> String.concat
 
 
-pluralizeErrors : Int -> String
-pluralizeErrors n =
-    case n of
-        1 ->
-            "error"
-
-        _ ->
-            "errors"
-
-
 elmJsonParsingFailure : Json.Decode.Error -> String
 elmJsonParsingFailure decodeError =
-    failureMessage "ELM.JSON FAILED TO PARSE"
+    failureMessage "elm.json failed to parse"
         ([ """I could not decode the provided elm.json because """
          , decodeError |> Json.Decode.errorToString
          , "\n\n"
