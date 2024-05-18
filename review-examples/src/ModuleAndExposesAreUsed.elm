@@ -84,7 +84,7 @@ review =
                     { referenceUseCounts = FastDict.empty
                     , moduleExposes = FastDict.empty
                     , modulesAllowingUnusedExposes =
-                        case elmJson of
+                        case elmJson.project of
                             Elm.Project.Application _ ->
                                 Set.empty
 
