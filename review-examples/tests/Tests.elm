@@ -1621,7 +1621,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1650,7 +1650,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1681,7 +1681,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1713,7 +1713,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1745,7 +1745,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1777,7 +1777,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1809,7 +1809,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
@@ -1840,7 +1840,7 @@ commentDoesNotUseCertainWordsTests =
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
-                      , details = [ "This mark has been placed in a comment for future notice. Read the comment carefully and decide what you want to do. Once you're done, remove the notice." ]
+                      , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
                       }
