@@ -2,6 +2,7 @@ module StringSpellsCompanyNameCorrectly exposing (review)
 
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
+import Elm.Syntax.File
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Review
@@ -11,22 +12,27 @@ review : Review.Review
 review =
     Review.create
         { inspect =
-            [ Review.inspectModule
-                (\moduleData ->
-                    { stringsWithTypos =
-                        moduleData.syntax.declarations
-                            |> List.concatMap declarationToTyposInStrings
-                            |> List.map
-                                (\typoRange ->
-                                    { range = typoRange
-                                    , modulePath = moduleData.path
-                                    }
-                                )
-                    }
-                )
+            [ Review.inspectModule moduleDataToKnowledge
             ]
         , knowledgeMerge = knowledgeMerge
         , report = report
+        }
+
+
+moduleDataToKnowledge :
+    { moduleData_ | path : String, syntax : Elm.Syntax.File.File }
+    -> Knowledge
+moduleDataToKnowledge =
+    \moduleData ->
+        { typosInStrings =
+            moduleData.syntax.declarations
+                |> List.concatMap declarationToTyposInStrings
+                |> List.map
+                    (\typoRange ->
+                        { range = typoRange
+                        , modulePath = moduleData.path
+                        }
+                    )
         }
 
 
@@ -92,14 +98,13 @@ locationRelativeTo baseStart =
 
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge
 knowledgeMerge a b =
-    { stringsWithTypos =
-        a.stringsWithTypos ++ b.stringsWithTypos
+    { typosInStrings = a.typosInStrings ++ b.typosInStrings
     }
 
 
 report : Knowledge -> List Review.Error
 report knowledge =
-    knowledge.stringsWithTypos
+    knowledge.typosInStrings
         |> List.map
             (\stringWithTypos ->
                 { path = stringWithTypos.modulePath
@@ -116,6 +121,6 @@ report knowledge =
 
 
 type alias Knowledge =
-    { stringsWithTypos :
+    { typosInStrings :
         List { modulePath : String, range : Elm.Syntax.Range.Range }
     }

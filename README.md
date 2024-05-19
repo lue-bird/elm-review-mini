@@ -1,8 +1,7 @@
 > Status: package and common reviews unpublished, a few helpers still missing
 
 Scan your [elm](https://elm-lang.org/) project to enforce conventions using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
-
-While heavily inspired by the phenomenal [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) it comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
+It's heavily inspired by the phenomenal [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) but comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
 
 Use it in your project by adding this starter config with the CLI set up
 ```bash
@@ -12,7 +11,8 @@ The created `review-mini/` is a regular elm application where you can add new re
 
 ```elm
 module ReviewConfiguration exposing (configuration)
-
+```
+```elm
 import SomeConvention
 import Review
 
@@ -27,15 +27,14 @@ configuration =
 ```
 see also ["when to enable a review"](#when-to-create-or-enable-a-review).
 
-You can also [create custom reviews](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create). An example:
+An example of [creating a custom review](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create) to fix a typo in a string that was made too often:
 ```elm
 module StringSpellsCompanyNameCorrectly exposing (review)
-
-{-| Fix a typo in a string that was made too often. -}
 ```
 ```elm
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
+import Elm.Syntax.File
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Review
@@ -44,19 +43,7 @@ review : Review.Review
 review =
     Review.create
         { inspect =
-            [ Review.inspectModule
-                (\moduleData ->
-                    { typosInStrings =
-                        moduleData.syntax.declarations
-                            |> List.concatMap declarationToTyposInStrings
-                            |> List.map
-                                (\typoRange ->
-                                    { range = typoRange
-                                    , modulePath = moduleData.path
-                                    }
-                                )
-                    }
-                )
+            [ Review.inspectModule moduleDataToKnowledge
             ]
         , knowledgeMerge = knowledgeMerge
         , report = report
@@ -66,6 +53,22 @@ type alias Knowledge =
     { typosInStrings :
         List { modulePath : String, range : Elm.Syntax.Range.Range }
     }
+
+moduleDataToKnowledge :
+    { moduleData_ | path : String, syntax : Elm.Syntax.File.File }
+    -> Knowledge
+moduleDataToKnowledge =
+    \moduleData ->
+        { typosInStrings =
+            moduleData.syntax.declarations
+                |> List.concatMap declarationToTyposInStrings
+                |> List.map
+                    (\typoRange ->
+                        { range = typoRange
+                        , modulePath = moduleData.path
+                        }
+                    )
+        }
 
 declarationToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
@@ -181,8 +184,6 @@ When wondering whether to enable a review, here's a checklist
 
   - no LSP integration (shouldn't be too hard as it's similar to elm-review)
   - no ecosystem
-  - finding the module origin of any used identifiers in the code is pretty manual and therefore error prone
-    (requires storing exposes of each module, getting all declaration names in the current module, keeping track of bindings available in the current branch)
   - the problem you encountered. Please [open an issue](https://github.com/lue-bird/elm-review-mini/issues) <3
 
 --------

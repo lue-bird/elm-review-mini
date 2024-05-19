@@ -10,11 +10,12 @@ import Dict
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Exposing
 import Elm.Syntax.File
+import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
-import Review exposing (Review)
+import Review
 import Set exposing (Set)
 
 
@@ -41,7 +42,7 @@ Therefore, the API should be explicitly defined and as small as possible.
         ""
 
 -}
-review : Review
+review : Review.Review
 review =
     Review.create
         { inspect =
@@ -76,10 +77,10 @@ moduleDataToKnowledge moduleData =
     let
         moduleName : Elm.Syntax.ModuleName.ModuleName
         moduleName =
-            moduleData.syntax.moduleDefinition |> Review.moduleHeaderNameNode |> Elm.Syntax.Node.value
+            moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
     in
     { exposingEverythingByModulePath =
-        case moduleData.syntax.moduleDefinition |> Review.moduleHeaderExposingNode |> Elm.Syntax.Node.value of
+        case moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.exposingList of
             Elm.Syntax.Exposing.Explicit _ ->
                 FastDict.empty
 

@@ -1,12 +1,13 @@
 module ModuleNameWithUnderscoreForbid exposing (review)
 
 import Dict
+import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
-import Review exposing (Review)
+import Review
 
 
-review : Review
+review : Review.Review
 review =
     Review.create
         { inspect =
@@ -15,7 +16,7 @@ review =
                     let
                         moduleNameNode : Elm.Syntax.Node.Node Elm.Syntax.ModuleName.ModuleName
                         moduleNameNode =
-                            moduleData.syntax.moduleDefinition |> Review.moduleHeaderNameNode
+                            moduleData.syntax.moduleDefinition |> moduleHeaderNameNode
 
                         moduleNameString : String
                         moduleNameString =
@@ -47,3 +48,17 @@ review =
                             }
                         )
         }
+
+
+moduleHeaderNameNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.ModuleName.ModuleName
+moduleHeaderNameNode =
+    \(Elm.Syntax.Node.Node _ moduleHeader) ->
+        case moduleHeader of
+            Elm.Syntax.Module.NormalModule data ->
+                data.moduleName
+
+            Elm.Syntax.Module.PortModule data ->
+                data.moduleName
+
+            Elm.Syntax.Module.EffectModule data ->
+                data.moduleName

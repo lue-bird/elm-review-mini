@@ -10,11 +10,12 @@ import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
 import Elm.Syntax.File
+import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
-import Review exposing (Review)
+import Review
 import Set exposing (Set)
 
 
@@ -43,7 +44,7 @@ additionally enable [`LetValueOrFunctionIsTypeAnnotated`](LetValueOrFunctionIsTy
         c
 
 -}
-review : Review
+review : Review.Review
 review =
     Review.create
         { inspect =
@@ -68,7 +69,8 @@ type alias Knowledge =
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge
 knowledgeMerge a b =
     { valueAndFunctionDeclarationsWithoutTypeAnnotation =
-        a.valueAndFunctionDeclarationsWithoutTypeAnnotation ++ b.valueAndFunctionDeclarationsWithoutTypeAnnotation
+        a.valueAndFunctionDeclarationsWithoutTypeAnnotation
+            ++ b.valueAndFunctionDeclarationsWithoutTypeAnnotation
     }
 
 
@@ -77,7 +79,7 @@ moduleDataToKnowledge moduleData =
     let
         moduleName : Elm.Syntax.ModuleName.ModuleName
         moduleName =
-            moduleData.syntax.moduleDefinition |> Review.moduleHeaderNameNode |> Elm.Syntax.Node.value
+            moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
     in
     { valueAndFunctionDeclarationsWithoutTypeAnnotation =
         moduleData.syntax.declarations

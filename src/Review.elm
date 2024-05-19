@@ -5,7 +5,8 @@ module Review exposing
     , Error, elmJsonPath
     , SourceEdit(..), insertAt, removeRange, replaceRange
     , expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
-    , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode, moduleExposes
+    , moduleHeaderDocumentation, moduleExposes
+    , determineModuleOrigin, importsToExplicit
     , topLevelExposeListToExposes
     , sourceExtractInRange, sourceRangesOf
     , packageElmJsonExposedModules
@@ -40,7 +41,11 @@ or [`mdgriffith/elm-codegen`](https://dark.elm.dmy.fr/packages/mdgriffith/elm-co
 
 # convenience helpers
 
-By only listing all immediate sub-parts of a piece of syntax you can choose to traverse it however you need to.
+Various helpers for [`elm-syntax`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/)
+and other project data that is often useful when writing a review.
+
+For example,
+by only listing all immediate sub-parts of a piece of syntax you can choose to traverse it however you need to.
 E.g. to find all `as` pattern ranges
 
     findAllAsPatternRanges :
@@ -61,10 +66,13 @@ This fine control allows you to e.g. skip visiting certain parts that you alread
 
 @docs expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
 
-@docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode, moduleExposes
+@docs moduleHeaderDocumentation, moduleExposes
+@docs determineModuleOrigin, importsToExplicit
 @docs topLevelExposeListToExposes
 @docs sourceExtractInRange, sourceRangesOf
 @docs packageElmJsonExposedModules
+
+Suggestions to add, remove or change helpers welcome!
 
 
 # running
@@ -170,7 +178,7 @@ type Run
                         { range : Elm.Syntax.Range.Range
                         , message : String
                         , details : List String
-                        , fix : List { path : String, edits : List SourceEdit }
+                        , fixEditsByPath : FastDict.Dict String (List SourceEdit)
                         }
                     )
             , nextRun : Run
@@ -219,8 +227,6 @@ I recommend having the documentation for that package open while writing a revie
 ### syntax.moduleDefinition
 
 The [module header](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`).
-A few helpers: [`moduleHeaderNameNode`](#moduleHeaderNameNode), [`moduleHeaderExposingNode`](#moduleHeaderExposingNode)
-and [`moduleHeaderDocumentation`](#moduleHeaderDocumentation), [`moduleExposes`](#moduleExposes)
 
 
 ### syntax.declarations
@@ -232,17 +238,16 @@ The module's
 
 ### syntax.comments
 
-In source order
-
   - Module documentation (`{-| -}`)
   - Port documentation comments (`{-| -}`)
   - comments (`{- -}` and `--`)
 
-If you only need to access the module documentation, you can use
-[`moduleHeaderDocumentation`](#moduleHeaderDocumentation).
-
+provided in source order.
 Documentation comments (`{-| -}`) of value/function/choice type/type alias declarations
 can be found directly in their syntax data.
+
+If you only need the module documentation, use
+[`moduleHeaderDocumentation`](#moduleHeaderDocumentation).
 
 
 ### syntax.imports
@@ -305,7 +310,7 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                             )
             }
 
-I strongly recommend [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/).
+I strongly recommend [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/)
 for your writing your review instead of `Dict`
 because `Dict.union` and friends have performance footguns you shouldn't need to worry about
 
@@ -526,7 +531,7 @@ create review =
                                                                 { message = error.message
                                                                 , details = error.details
                                                                 , range = error.range
-                                                                , fix = error.fix
+                                                                , fixEditsByPath = error.fix |> fixToFileEditsByPath
                                                                 }
                                                             |> Just
                                                     )
@@ -559,6 +564,28 @@ create review =
     { ignoreErrorsForPathsWhere = \_ -> False
     , run = runWithCache knowledgeCacheEmpty
     }
+
+
+fixToFileEditsByPath :
+    List { path : String, edits : List SourceEdit }
+    -> FastDict.Dict String (List SourceEdit)
+fixToFileEditsByPath =
+    \fix ->
+        fix
+            |> List.foldl
+                (\fileFix soFar ->
+                    soFar
+                        |> FastDict.update fileFix.path
+                            (\editsSoFar ->
+                                case fileFix.edits ++ (editsSoFar |> Maybe.withDefault []) of
+                                    [] ->
+                                        Nothing
+
+                                    edit0 :: edit1Up ->
+                                        (edit0 :: edit1Up) |> Just
+                            )
+                )
+                FastDict.empty
 
 
 knowledgeCacheEmpty : Cache knowledge_
@@ -778,7 +805,7 @@ run :
                         { range : Elm.Syntax.Range.Range
                         , message : String
                         , details : List String
-                        , fix : List { path : String, edits : List SourceEdit }
+                        , fixEditsByPath : FastDict.Dict String (List SourceEdit)
                         }
                     )
             , nextRun : Run
@@ -795,7 +822,7 @@ run review =
                             { range : Elm.Syntax.Range.Range
                             , message : String
                             , details : List String
-                            , fix : List { path : String, edits : List SourceEdit }
+                            , fixEditsByPath : FastDict.Dict String (List SourceEdit)
                             }
                         )
                 , nextRun : Run
@@ -814,9 +841,7 @@ run review =
                                     { range = fileReviewError.range
                                     , message = fileReviewError.message
                                     , details = fileReviewError.details
-                                    , fix =
-                                        fileReviewError.fix
-                                            |> List.filter (\fileEdit -> not (fileEdit.edits |> List.isEmpty))
+                                    , fixEditsByPath = fileReviewError.fixEditsByPath
                                     }
                                 )
                     )
@@ -1321,38 +1346,6 @@ elmJsonModuleNameToSyntax =
         elmJsonModuleName |> Elm.Module.toString |> String.split "."
 
 
-{-| The module header name + range
--}
-moduleHeaderNameNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.ModuleName.ModuleName
-moduleHeaderNameNode =
-    \(Elm.Syntax.Node.Node _ moduleHeader) ->
-        case moduleHeader of
-            Elm.Syntax.Module.NormalModule data ->
-                data.moduleName
-
-            Elm.Syntax.Module.PortModule data ->
-                data.moduleName
-
-            Elm.Syntax.Module.EffectModule data ->
-                data.moduleName
-
-
-{-| The module header [exposing part](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Exposing#Exposing) + range
--}
-moduleHeaderExposingNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
-moduleHeaderExposingNode =
-    \(Elm.Syntax.Node.Node _ moduleHeader) ->
-        case moduleHeader of
-            Elm.Syntax.Module.NormalModule moduleHeaderData ->
-                moduleHeaderData.exposingList
-
-            Elm.Syntax.Module.PortModule moduleHeaderData ->
-                moduleHeaderData.exposingList
-
-            Elm.Syntax.Module.EffectModule moduleHeaderData ->
-                moduleHeaderData.exposingList
-
-
 {-| The module's documentation comment at the top of the file, which can be `Nothing`.
 `elm-syntax` has a weird way of giving you the comments of a file, this helper should make it easier
 -}
@@ -1440,8 +1433,8 @@ moduleExposes syntaxFile =
                     )
                 |> FastDict.fromList
     in
-    case syntaxFile.moduleDefinition |> moduleHeaderExposingNode of
-        Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
+    case syntaxFile.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.exposingList of
+        Elm.Syntax.Exposing.Explicit topLevelExposeList ->
             let
                 visibleExposes : { simpleNames : Set String, typesExposingVariants : Set String }
                 visibleExposes =
@@ -1462,7 +1455,7 @@ moduleExposes syntaxFile =
                         FastDict.empty
             }
 
-        Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _) ->
+        Elm.Syntax.Exposing.All _ ->
             { simpleNames =
                 syntaxFile.declarations
                     |> List.foldl
@@ -1548,6 +1541,335 @@ topLevelExposeListToExposes =
                 { simpleNames = Set.empty
                 , typesExposingVariants = Set.empty
                 }
+
+
+{-| Either the full qualification of a given variant/value/function/type identifier
+or `Nothing` if defined locally.
+
+Requires a list of local explicit imports, see [`importsToExplicit`](#importsToExplicit)
+
+-}
+determineModuleOrigin :
+    FastDict.Dict
+        Elm.Syntax.ModuleName.ModuleName
+        { alias : Maybe String
+        , exposes : Set String -- includes names of variants
+        }
+    -> (( Elm.Syntax.ModuleName.ModuleName, String ) -> Maybe Elm.Syntax.ModuleName.ModuleName)
+determineModuleOrigin imports =
+    \( qualification, unqualifiedName ) ->
+        case imports |> FastDict.get qualification of
+            Just _ ->
+                qualification |> Just
+
+            Nothing ->
+                let
+                    maybeOriginByAlias : Maybe Elm.Syntax.ModuleName.ModuleName
+                    maybeOriginByAlias =
+                        imports
+                            |> FastDictLocalExtra.firstJustMap
+                                (\importModuleName import_ ->
+                                    case import_.alias of
+                                        Nothing ->
+                                            Nothing
+
+                                        Just alias ->
+                                            if qualification == [ alias ] then
+                                                importModuleName |> Just
+
+                                            else
+                                                Nothing
+                                )
+                in
+                case maybeOriginByAlias of
+                    Just aliasOriginModuleName ->
+                        aliasOriginModuleName |> Just
+
+                    Nothing ->
+                        case qualification of
+                            [] ->
+                                imports
+                                    |> FastDictLocalExtra.firstJustMap
+                                        (\importModuleName import_ ->
+                                            if import_.exposes |> Set.member unqualifiedName then
+                                                importModuleName |> Just
+
+                                            else
+                                                Nothing
+                                        )
+
+                            _ :: _ ->
+                                Nothing
+
+
+{-| Regular elm imports don't tell the whole truth of what names can be used in the module declarations.
+Elm for example [uses some imports implicitly](https://dark.elm.dmy.fr/packages/elm/core/latest#Default-Imports),
+allows `exposing (..)` and `ChoiceTypeWithVariants(..)`
+and merges imports in a specific manner.
+
+[`importsToExplicit`](#importsToExplicit) now takes the module exposes
+of each module (see [`moduleExposes`](#moduleExposes))
+and a list of imports `exposing (..)` and imports exposing explicit (see [`topLevelExposeListToExposes`](#topLevelExposeListToExposes))
+from the current module to give you a
+[`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/) with all imports and actual exposes and aliases listed.
+
+Can be used to [`determineModuleOrigin`](#determineModuleOrigin).
+
+Edge case note: The [elm compiler has a bug where the List module does not expose the type `List`](https://github.com/elm/core/issues/1037).
+To make it easier to differentiate between local and imported `List` type
+we still say that the `List` type originates from `List`.
+It's then the responsibility of review authors to cope with this edge case
+when trying to edit the qualification or adding an import.
+
+-}
+importsToExplicit :
+    { moduleExposes :
+        FastDict.Dict
+            Elm.Syntax.ModuleName.ModuleName
+            { typesWithVariantNames : FastDict.Dict String (Set String)
+            , simpleNames : Set String
+            }
+    , importsExposingAll : List { moduleName : Elm.Syntax.ModuleName.ModuleName, alias : Maybe String }
+    , importsExposingExplicit :
+        List
+            { moduleName : Elm.Syntax.ModuleName.ModuleName
+            , alias : Maybe String
+            , typesExposingVariants : Set String
+            , simpleNames : Set String
+            }
+    }
+    ->
+        FastDict.Dict
+            Elm.Syntax.ModuleName.ModuleName
+            { alias : Maybe String
+            , exposes : Set String -- includes names of variants
+            }
+importsToExplicit info =
+    let
+        explicitImportsExposingAllAndDefaultOnes :
+            FastDict.Dict
+                Elm.Syntax.ModuleName.ModuleName
+                { alias : Maybe String
+                , exposes : Set String -- includes names of variants
+                }
+        explicitImportsExposingAllAndDefaultOnes =
+            info.importsExposingAll
+                |> List.foldl
+                    (\import_ importsSoFar ->
+                        importsSoFar
+                            |> mergeInImport
+                                { moduleName = import_.moduleName
+                                , alias = import_.alias
+                                , exposes =
+                                    case info |> .moduleExposes |> FastDict.get import_.moduleName of
+                                        Just actualExposes ->
+                                            Set.union actualExposes.simpleNames
+                                                (actualExposes.typesWithVariantNames
+                                                    |> FastDict.foldl
+                                                        (\typeName variantNames soFar ->
+                                                            Set.union variantNames
+                                                                (soFar |> Set.insert typeName)
+                                                        )
+                                                        Set.empty
+                                                )
+
+                                        Nothing ->
+                                            Set.empty
+                                }
+                    )
+                    implicitImports
+    in
+    info.importsExposingExplicit
+        |> List.foldl
+            (\import_ importsSoFar ->
+                importsSoFar
+                    |> mergeInImport
+                        { moduleName = import_.moduleName
+                        , alias = import_.alias
+                        , exposes =
+                            case info |> .moduleExposes |> FastDict.get import_.moduleName of
+                                Just moduleExposeInfo ->
+                                    Set.union
+                                        import_.simpleNames
+                                        (import_.typesExposingVariants
+                                            |> Set.foldl
+                                                (\typeExpose soFar ->
+                                                    Set.union
+                                                        (moduleExposeInfo
+                                                            |> .typesWithVariantNames
+                                                            |> FastDict.get typeExpose
+                                                            |> Maybe.withDefault Set.empty
+                                                        )
+                                                        soFar
+                                                        |> Set.insert typeExpose
+                                                )
+                                                Set.empty
+                                        )
+
+                                Nothing ->
+                                    Set.empty
+                        }
+            )
+            explicitImportsExposingAllAndDefaultOnes
+
+
+{-| From the `elm/core` readme:
+
+>
+> ### Default Imports
+
+> The modules in this package are so common, that some of them are imported by default in all Elm files. So it is as if every Elm file starts with these imports:
+>
+>     import Basics exposing (..)
+>     import List exposing (List, (::))
+>     import Maybe exposing (Maybe(..))
+>     import Result exposing (Result(..))
+>     import String exposing (String)
+>     import Char exposing (Char)
+>     import Tuple
+>     import Debug
+>     import Platform exposing (Program)
+>     import Platform.Cmd as Cmd exposing (Cmd)
+>     import Platform.Sub as Sub exposing (Sub)
+
+-}
+implicitImports :
+    FastDict.Dict
+        Elm.Syntax.ModuleName.ModuleName
+        { alias : Maybe String
+        , exposes : Set String -- includes names of variants
+        }
+implicitImports =
+    [ ( [ "Basics" ]
+      , { alias = Nothing
+        , exposes =
+            [ "Int"
+            , "Float"
+            , "(+)"
+            , "(-)"
+            , "(*)"
+            , "(/)"
+            , "(//)"
+            , "(^)"
+            , "toFloat"
+            , "round"
+            , "floor"
+            , "ceiling"
+            , "truncate"
+            , "(==)"
+            , "(/=)"
+            , "(<)"
+            , "(>)"
+            , "(<=)"
+            , "(>=)"
+            , "max"
+            , "min"
+            , "compare"
+            , "Order"
+            , "LT"
+            , "EQ"
+            , "GT"
+            , "Bool"
+            , "True"
+            , "False"
+            , "not"
+            , "(&&)"
+            , "(||)"
+            , "xor"
+            , "(++)"
+            , "modBy"
+            , "remainderBy"
+            , "negate"
+            , "abs"
+            , "clamp"
+            , "sqrt"
+            , "logBase"
+            , "e"
+            , "pi"
+            , "cos"
+            , "sin"
+            , "tan"
+            , "acos"
+            , "asin"
+            , "atan"
+            , "atan2"
+            , "degrees"
+            , "radians"
+            , "turns"
+            , "toPolar"
+            , "fromPolar"
+            , "isNaN"
+            , "isInfinite"
+            , "identity"
+            , "always"
+            , "(<|)"
+            , "(|>)"
+            , "(<<)"
+            , "(>>)"
+            , "Never"
+            , "never"
+            ]
+                |> Set.fromList
+        }
+      )
+    , ( [ "List" ], { alias = Nothing, exposes = Set.fromList [ "(::)", "List" ] } )
+    , ( [ "Maybe" ], { alias = Nothing, exposes = Set.fromList [ "Maybe", "Just", "Nothing" ] } )
+    , ( [ "Result" ], { alias = Nothing, exposes = Set.fromList [ "Result", "Ok", "Err" ] } )
+    , ( [ "String" ], { alias = Nothing, exposes = Set.singleton "String" } )
+    , ( [ "Char" ], { alias = Nothing, exposes = Set.singleton "Char" } )
+    , ( [ "Tuple" ], { alias = Nothing, exposes = Set.empty } )
+    , ( [ "Debug" ], { alias = Nothing, exposes = Set.empty } )
+    , ( [ "Platform" ], { alias = Nothing, exposes = Set.singleton "Program" } )
+    , ( [ "Platform", "Cmd" ], { alias = Just "Cmd", exposes = Set.singleton "Cmd" } )
+    , ( [ "Platform", "Sub" ], { alias = Just "Sub", exposes = Set.singleton "Sub" } )
+    ]
+        |> FastDict.fromList
+
+
+mergeInImport :
+    { moduleName : Elm.Syntax.ModuleName.ModuleName
+    , alias : Maybe String
+    , exposes : Set String
+    }
+    ->
+        (FastDict.Dict
+            Elm.Syntax.ModuleName.ModuleName
+            { alias : Maybe String
+            , exposes : Set String -- includes names of variants
+            }
+         ->
+            FastDict.Dict
+                Elm.Syntax.ModuleName.ModuleName
+                { alias : Maybe String
+                , exposes : Set String -- includes names of variants
+                }
+        )
+mergeInImport importInfoToAdd imports =
+    FastDict.update importInfoToAdd.moduleName
+        (\existingImport ->
+            let
+                newImportInfo : { alias : Maybe String, exposes : Set String }
+                newImportInfo =
+                    case existingImport of
+                        Nothing ->
+                            { alias = importInfoToAdd.alias
+                            , exposes = importInfoToAdd.exposes
+                            }
+
+                        Just import_ ->
+                            { alias =
+                                case import_.alias of
+                                    Just alias ->
+                                        alias |> Just
+
+                                    Nothing ->
+                                        importInfoToAdd.alias
+                            , exposes = Set.union import_.exposes importInfoToAdd.exposes
+                            }
+            in
+            Just newImportInfo
+        )
+        imports
 
 
 {-| A single edit to be applied to a file's source

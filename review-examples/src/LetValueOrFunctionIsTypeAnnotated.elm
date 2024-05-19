@@ -6,16 +6,15 @@ module LetValueOrFunctionIsTypeAnnotated exposing (review)
 
 -}
 
-import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
-import Elm.Syntax.Expression exposing (LetDeclaration)
+import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
-import Review exposing (Review)
+import Review
 import Set exposing (Set)
 
 
@@ -49,7 +48,7 @@ For that, enable [`ModuleValueOrFunctionIsTypeAnnotated`](ModuleValueOrFunctionI
         b
 
 -}
-review : Review
+review : Review.Review
 review =
     Review.create
         { inspect =
@@ -128,7 +127,7 @@ expressionLetValuesAndFunctionsWithoutTypeAnnotation expressionNode =
 
 
 letDeclarationToLetValuesAndFunctionsWithoutTypeAnnotation :
-    LetDeclaration
+    Elm.Syntax.Expression.LetDeclaration
     ->
         Maybe
             { name : String

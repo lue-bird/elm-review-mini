@@ -1,4 +1,4 @@
-module FastDictLocalExtra exposing (all, concatToListMap, fromListMap, unionWith)
+module FastDictLocalExtra exposing (all, concatToListMap, firstJustMap, fromListMap, unionWith)
 
 import FastDict
 
@@ -57,3 +57,19 @@ all isOkay =
         (\state ->
             isOkay state.key state.value && state.left () && state.right ()
         )
+
+
+firstJustMap : (key -> value -> Maybe found) -> FastDict.Dict key value -> Maybe found
+firstJustMap keyValueToMaybeFound =
+    \fastDict ->
+        fastDict
+            |> FastDict.stoppableFoldl
+                (\key value _ ->
+                    case keyValueToMaybeFound key value of
+                        Nothing ->
+                            FastDict.Continue Nothing
+
+                        Just found ->
+                            FastDict.Stop (Just found)
+                )
+                Nothing

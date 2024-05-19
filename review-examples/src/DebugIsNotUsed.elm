@@ -161,8 +161,8 @@ moduleDataToKnowledge moduleData =
                                        )
                        )
 
-        moduleValueOrFunctionDeclarationExpressions : FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-        moduleValueOrFunctionDeclarationExpressions =
+        moduleValueOrFunctionDeclaredNames : FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
+        moduleValueOrFunctionDeclaredNames =
             moduleData.syntax.declarations
                 |> FastDict.LocalExtra.unionFromListWithMap
                     (\(Elm.Syntax.Node.Node _ declaration) ->
@@ -183,7 +183,7 @@ moduleDataToKnowledge moduleData =
                     (\a b -> a ++ b)
     in
     { debugLogUses =
-        moduleValueOrFunctionDeclarationExpressions
+        moduleValueOrFunctionDeclaredNames
             |> FastDict.filter (\reference _ -> reference |> referenceIsDebug "log")
             |> FastDict.values
             |> List.concat
@@ -192,7 +192,7 @@ moduleDataToKnowledge moduleData =
                     { referenceRange = referenceRange, modulePath = moduleData.path }
                 )
     , debugTodoUses =
-        moduleValueOrFunctionDeclarationExpressions
+        moduleValueOrFunctionDeclaredNames
             |> FastDict.filter (\reference _ -> reference |> referenceIsDebug "todo")
             |> FastDict.values
             |> List.concat
@@ -201,7 +201,7 @@ moduleDataToKnowledge moduleData =
                     { referenceRange = referenceRange, modulePath = moduleData.path }
                 )
     , debugToStringUses =
-        moduleValueOrFunctionDeclarationExpressions
+        moduleValueOrFunctionDeclaredNames
             |> FastDict.filter (\reference _ -> reference |> referenceIsDebug "toString")
             |> FastDict.values
             |> List.concat
