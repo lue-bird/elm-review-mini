@@ -619,6 +619,58 @@ If you think you don't need it anymore or think it was added it prematurely, you
                 }
                     |> Review.Test.run
             )
+        , Test.test "unused exposed value as the only expose, cleaning up unused imports of the now unused module"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            a =
+                                b ()
+                            b () =
+                                a
+                            """
+                      }
+                    , { path = "src/Main.elm"
+                      , source = """
+                            module Main exposing (main)
+                            import A
+                            import A
+                            main =
+                                ""
+                            """
+                      }
+                    ]
+                , review = ModuleAndExposesAreUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "module A isn't used"
+                      , details =
+                            [ "Since all exposed members aren't used outside of this module, the whole module is unused."
+                            , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+But maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important."""
+                            , """If intended for determined future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
+                            ]
+                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , fixedFiles =
+                            [ { path = "src/Main.elm"
+                              , source = """
+                                    module Main exposing (main)
+                                    main =
+                                        ""
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
         , Test.test "unused exposed value, usage qualified by alias"
             (\() ->
                 { projectConfiguration = Review.Test.applicationConfigurationMinimal

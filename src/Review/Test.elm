@@ -1279,19 +1279,18 @@ help the user who encounters the problem by for example
 
 
 checkFixesAreCorrect :
-    { sourceByPath : FastDict.Dict String String, reviewError : FileReviewError, expected : ExpectedFileError }
+    { sourceByPath : FastDict.Dict String String
+    , reviewError : FileReviewError
+    , expected : ExpectedFileError
+    }
     -> Expect.Expectation
 checkFixesAreCorrect toCheck =
     let
         expectedFixedSourcedByPath : FastDict.Dict String String
         expectedFixedSourcedByPath =
             toCheck.expected.fixedFiles
-                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
-
-        reviewSourceEditsByPath : FastDict.Dict String (List Review.SourceEdit)
-        reviewSourceEditsByPath =
-            toCheck.reviewError.fix
-                |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.edits })
+                |> FastDictLocalExtra.fromListMap
+                    (\file -> { key = file.path, value = file.source })
     in
     FastDict.merge
         (\path _ -> (::) (missingSourceEditsForFile path toCheck.expected))
@@ -1306,7 +1305,7 @@ checkFixesAreCorrect toCheck =
         )
         (\path _ -> (::) (unexpectedEditsToFile path toCheck.expected))
         expectedFixedSourcedByPath
-        reviewSourceEditsByPath
+        toCheck.reviewError.fixEditsByPath
         []
         |> expectationsViolated
 
@@ -1350,19 +1349,19 @@ fixedSourceMismatch resultingSource expectedSource error =
     failureMessage "fixed source doesn't match"
         ([ """I found a different fixed source code than expected for the error with the message
 
-  """
+"""
          , error.message
          , """
 
 after the fixes have been applied, I expected the source to be
 
-  """
+"""
          , formatSourceCode expectedSource
          , """
 
 but I found the source
 
-  """
+"""
          , formatSourceCode resultingSource
          ]
             |> String.concat
@@ -1387,13 +1386,13 @@ The problem is related to """
          , """.
 after the fixes have been applied, I expected the source to be
 
-  """
+"""
          , expected
          , """
 
 but I found the source
 
-  """
+"""
          , resulting
          ]
             |> String.concat
@@ -1605,5 +1604,5 @@ type alias FileReviewError =
     { range : Elm.Syntax.Range.Range
     , message : String
     , details : List String
-    , fix : List { path : String, edits : List Review.SourceEdit }
+    , fixEditsByPath : FastDict.Dict String (List Review.SourceEdit)
     }
