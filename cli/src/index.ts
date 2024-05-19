@@ -11,26 +11,34 @@ export interface ElmPorts {
     fromJs: { send: (toElm: any) => void }
 }
 
-export function compileElm(elmProjectDirectoryPath: string, mainElmModuleName: string[]): { init: () => { ports: ElmPorts } } {
+/** Small helper for creating a runnable elm program. Requires the `elm` binary to be available.
+ * Feel free to use a custom loader that e.g. allows debug or uses an alternative compiler.
+ * 
+ * @param elmProjectDirectoryPath The path to the `review-mini/` elm application. Use `import.meta.dirname`
+ * @param mainElmModuleNamePath 
+ * @returns An elm worker program you can start whenever you want which then provides its ports
+ */
+export function compileElm(elmProjectDirectoryPath: string, mainElmModuleNamePath: string): { init: () => { ports: ElmPorts } } {
     if (elmProjectDirectoryPath === undefined) {
         console.error("To access import.meta.dirname you'll need at least Node.js 20.11 / 21.2: https://stackoverflow.com/a/50052194")
         throw new Error()
     }
-    const elmJsPath = path.resolve(elmProjectDirectoryPath, "review-mini", "elm-stuff", "review-mini-cli-elm.js")
+    const elmJsPath = path.join(elmProjectDirectoryPath, "elm-stuff", "temp-review-mini-cli-elm.js")
     child_process.execSync(
         // if you want to use Debug.log etc while prototyping or debugging, remove the --optimize flag
         // if you need extra performance switch to https://github.com/mdgriffith/elm-optimize-level-2
-        `elm make ${path.join(...mainElmModuleName)} --output "${elmJsPath}" --optimize`,
+        `elm make ${mainElmModuleNamePath} --output "${elmJsPath}" --optimize`,
         { cwd: elmProjectDirectoryPath }
     )
     eval(
         fs.readFileSync(elmJsPath, { encoding: "utf8" })
             .replace("(this)", "(globalThis)")
     )
+    fs.unlinkSync(elmJsPath)
     return (globalThis as any).Elm.Cli
 }
 
-export function programStart(elmPorts: ElmPorts) {
+export function startWatching(elmPorts: ElmPorts) {
     function sendToElm(eventData: any): void {
         // console.log("js → elm: ", eventData)
         elmPorts.fromJs.send(eventData)
