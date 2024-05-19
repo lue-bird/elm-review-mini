@@ -410,7 +410,7 @@ moduleToExposes syntaxFile =
                             Elm.Syntax.Exposing.InfixExpose symbol ->
                                 { soFar
                                     | simpleNames =
-                                        soFar.simpleNames |> FastDict.insert symbol exposeRange
+                                        soFar.simpleNames |> FastDict.insert ("(" ++ symbol ++ ")") exposeRange
                                 }
                     )
                     { range = range
