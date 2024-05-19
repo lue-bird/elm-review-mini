@@ -227,7 +227,6 @@ moduleDataToKnowledge =
                                 )
                     )
                     FastDict.empty
-                |> Debug.log "moduleImports"
         }
 
 
