@@ -18,6 +18,8 @@ and uses the combined knowledge to report problems.
 
 @docs ignoreErrorsForPathsWhere
 
+Everything below is intended for writing a new review
+
 @docs create
 
 
@@ -341,7 +343,9 @@ inspectExtraFile moduleDataToKnowledge =
     InspectExtraFile moduleDataToKnowledge
 
 
-{-| Collect knowledge from all [project config and docs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/) the project directly depends on
+{-| Collect knowledge from all [project configs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project)
+and [module docs](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Docs#Module)
+the project directly depends on
 -}
 inspectDirectDependencies :
     (List { elmJson : Elm.Project.Project, modules : List Elm.Docs.Module } -> knowledge)
