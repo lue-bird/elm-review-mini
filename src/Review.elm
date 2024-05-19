@@ -5,7 +5,8 @@ module Review exposing
     , Error, elmJsonPath
     , SourceEdit(..), insertAt, removeRange, replaceRange
     , expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
-    , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
+    , moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode, moduleExposes
+    , topLevelExposeListToExposes
     , sourceExtractInRange, sourceRangesOf
     , packageElmJsonExposedModules
     , Inspect(..), Review, run, sourceApplyEdits, SourceEditError(..), Run(..)
@@ -60,7 +61,8 @@ This fine control allows you to e.g. skip visiting certain parts that you alread
 
 @docs expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
 
-@docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode
+@docs moduleHeaderDocumentation, moduleHeaderNameNode, moduleHeaderExposingNode, moduleExposes
+@docs topLevelExposeListToExposes
 @docs sourceExtractInRange, sourceRangesOf
 @docs packageElmJsonExposedModules
 
@@ -76,6 +78,7 @@ Make `elm-review-mini` run in a new environment
 import Elm.Docs
 import Elm.Module
 import Elm.Project
+import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
 import Elm.Syntax.File
@@ -200,8 +203,8 @@ elmJsonPath =
 
 {-| Collect knowledge from a module file.
 
-The file path, relative to the project's `elm.json`
-can also be used as an [`Error`](#Error) target file path.
+The path is relative to the project's `elm.json`
+and can be used as an [`Error`](#Error) target file path.
 
 The raw elm file source can be used
 to preserve existing formatting in a range
@@ -213,24 +216,23 @@ The `syntax` field contains a tree-like structure which represents your source c
 I recommend having the documentation for that package open while writing a review.
 
 
-### .moduleDefinition
+### syntax.moduleDefinition
 
 The [module header](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Module) (`module SomeModuleName exposing (a, b)`).
-A few helpers: [`moduleHeaderNameNode`](#moduleHeaderNameNode), [`moduleHeaderDocumentation`](#moduleHeaderDocumentation)
+A few helpers: [`moduleHeaderNameNode`](#moduleHeaderNameNode), [`moduleHeaderExposingNode`](#moduleHeaderExposingNode)
+and [`moduleHeaderDocumentation`](#moduleHeaderDocumentation), [`moduleExposes`](#moduleExposes)
 
 
-### .declarations
+### syntax.declarations
 
 The module's
 [declaration statements](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Declaration)
 (`someVar = add 1 2`, `type Bool = True | False`, `port output : Json.Encode.Value -> Cmd msg`).
 
 
-### .comments
+### syntax.comments
 
-Function/type/type alias declarations have their possible documentation comment (`{-| -}`) included directly in the syntax data.
-
-All other comments are provided in source order
+In source order
 
   - Module documentation (`{-| -}`)
   - Port documentation comments (`{-| -}`)
@@ -239,12 +241,16 @@ All other comments are provided in source order
 If you only need to access the module documentation, you can use
 [`moduleHeaderDocumentation`](#moduleHeaderDocumentation).
 
+Documentation comments (`{-| -}`) of value/function/choice type/type alias declarations
+can be found directly in their syntax data.
 
-### .imports
+
+### syntax.imports
 
 The module's
 [import statements](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/7.2.1/Elm-Syntax-Import)
-(`import Html as H exposing (div)`) in order of their definition
+(`import Html as H exposing (div)`) in order of their definition.
+A nice helper to get the exposes: [`topLevelExposeListToExposes`](#topLevelExposeListToExposes)
 
 An example review that forbids importing both `Element` (`elm-ui`) and
 `Html.Styled` (`elm-css`) in the same module:
@@ -253,7 +259,7 @@ An example review that forbids importing both `Element` (`elm-ui`) and
     import Elm.Syntax.Node
     import Elm.Syntax.Range
     import Review
-    import Dict
+    import FastDict
 
     review : Review.Review
     review =
@@ -269,7 +275,7 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                                         (\(Elm.Syntax.Node.Node _ import_) ->
                                             ( import.moduleName |> Elm.Syntax.Node.value, import.moduleName |> Elm.Syntax.Node.range )
                                         )
-                                    |> Dict.fromList
+                                    |> FastDict.fromList
                         in
                         case
                             ( importedModuleNames |> Dict.get [ "Element" ]
@@ -277,17 +283,17 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                             )
                         of
                             ( Just elementImportRange, Just _ ) ->
-                                Dict.singleton moduleData.path elementImportRange
+                                FastDict.singleton moduleData.path elementImportRange
 
                         else
-                            Dict.empty
+                            FastDict.empty
                     )
                 ]
-            , knowledgeMerge = \a b -> Dict.union a b
+            , knowledgeMerge = \a b -> FastDict.union a b
             , report =
                 \invalidImportsByPath ->
                     invalidImportsByPath
-                        |> Dict.toList
+                        |> FastDict.toList
                         |> List.map
                             (\( path, elementImportRange ) ->
                                 { path = moduleData.path
@@ -299,6 +305,10 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                             )
             }
 
+I strongly recommend [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/).
+for your writing your review instead of `Dict`
+because `Dict.union` and friends have performance footguns you shouldn't need to worry about
+
 -}
 inspectModule :
     ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
@@ -307,10 +317,8 @@ inspectModule moduleDataToKnowledge =
     InspectModule moduleDataToKnowledge
 
 
-{-| Collect knowledge from the [elm.json project config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project)
-
+{-| Collect knowledge from the [elm.json project config](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Project).
 You can use the raw source to [search for a section](#sourceRangesOf) you want to highlight in an [`Error`](#Error)
-
 -}
 inspectElmJson :
     ({ source : String, project : Elm.Project.Project } -> knowledge)
@@ -319,11 +327,9 @@ inspectElmJson moduleDataToKnowledge =
     InspectElmJson moduleDataToKnowledge
 
 
-{-| Collect knowledge from a provided non-elm or elm.json file like README.md or CHANGELOG.md.
-
-The provided file path is relative to the project's `elm.json`
-and can also be used as an [`Error`](#Error) target file path
-
+{-| Collect knowledge from an available files like README.md or CHANGELOG.md that aren't source modules or the elm.json.
+The provided path is relative to the project's `elm.json`
+and can be used as an [`Error`](#Error) target file path
 -}
 inspectExtraFile : ({ path : String, source : String } -> knowledge) -> Inspect knowledge
 inspectExtraFile moduleDataToKnowledge =
@@ -349,7 +355,7 @@ To write a new [`Review`](#Review) you need to
 Write tests with [`Review.Test`](Review-Test) alongside your implementation
 and document your review,
 explaining when (not) to enable the review
-and adding a few examples of patterns that will (not) be reported.
+and adding examples of patterns that will (not) be reported
 
 -}
 create :
@@ -715,9 +721,9 @@ ignoreErrorsForPathsWhere filterOut =
         }
 
 
-{-| Review a given project and return the errors reported by the given [`Review`](#Review).
-The provided errors are provided as a [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/)
-just because well.. it's a bit faster.
+{-| Review a given project and return the errors reported by the given [`Review`](#Review)
+as a [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/)
+along with a next [`Run`](#Run) that uses cached knowledge wherever it can.
 
     import Review
     import SomeConvention
@@ -739,8 +745,7 @@ just because well.. it's a bit faster.
 
 (elm/core is automatically part of every project)
 
-The result also contains a [`Run`](#Run) which
-internally keeps a cache to make it faster to re-run the review when only some files have changed.
+The resulting next [`Run`](#Run) internally keeps a cache to make it faster to re-run the review when only some files have changed.
 You can store this resulting `nextRun` in your application state type, e.g.
 
     Review.run
@@ -1392,6 +1397,157 @@ findModuleDocumentationBeforeCutOffLine cutOffLine comments =
 
             else
                 findModuleDocumentationBeforeCutOffLine cutOffLine restOfComments
+
+
+{-| Collect all exposed members from the file
+
+  - `simpleNames`: values, functions, type alias, opaque types (those without `(..)`), infix operators (parenthesized)
+
+  - `typesWithVariantNames`: names of types that expose their variants with `(..)`
+    paired with what variant names are actually meant by `..`.
+    It's provided as a [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/).
+    I strongly recommend using it too for your writing your review instead of `Dict`
+    because `Dict.union` and friends have performance footguns you shouldn't need to worry about
+
+-}
+moduleExposes :
+    Elm.Syntax.File.File
+    ->
+        { simpleNames : Set String
+        , typesWithVariantNames : FastDict.Dict String (Set String)
+        }
+moduleExposes syntaxFile =
+    let
+        moduleTypesWithVariantNames : FastDict.Dict String (Set String)
+        moduleTypesWithVariantNames =
+            syntaxFile.declarations
+                |> List.filterMap
+                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                        case declaration of
+                            Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                ( choiceTypeDeclaration.name |> Elm.Syntax.Node.value
+                                , choiceTypeDeclaration.constructors
+                                    |> List.map
+                                        (\(Elm.Syntax.Node.Node _ constructor) ->
+                                            constructor.name |> Elm.Syntax.Node.value
+                                        )
+                                    |> Set.fromList
+                                )
+                                    |> Just
+
+                            _ ->
+                                Nothing
+                    )
+                |> FastDict.fromList
+    in
+    case syntaxFile.moduleDefinition |> moduleHeaderExposingNode of
+        Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
+            let
+                visibleExposes : { simpleNames : Set String, typesExposingVariants : Set String }
+                visibleExposes =
+                    topLevelExposeList |> topLevelExposeListToExposes
+            in
+            { simpleNames = visibleExposes.simpleNames
+            , typesWithVariantNames =
+                visibleExposes.typesExposingVariants
+                    |> Set.foldl
+                        (\choiceTypeName soFar ->
+                            case moduleTypesWithVariantNames |> FastDict.get choiceTypeName of
+                                Nothing ->
+                                    soFar
+
+                                Just variantNames ->
+                                    soFar |> FastDict.insert choiceTypeName variantNames
+                        )
+                        FastDict.empty
+            }
+
+        Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _) ->
+            { simpleNames =
+                syntaxFile.declarations
+                    |> List.foldl
+                        (\(Elm.Syntax.Node.Node _ declaration) soFar ->
+                            case declaration of
+                                Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+                                    soFar
+
+                                Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
+                                    soFar
+                                        |> Set.insert
+                                            (valueOrFunctionDeclaration.declaration
+                                                |> Elm.Syntax.Node.value
+                                                |> .name
+                                                |> Elm.Syntax.Node.value
+                                            )
+
+                                Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
+                                    soFar |> Set.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
+
+                                Elm.Syntax.Declaration.PortDeclaration signature ->
+                                    soFar |> Set.insert (signature.name |> Elm.Syntax.Node.value)
+
+                                Elm.Syntax.Declaration.InfixDeclaration symbol ->
+                                    soFar |> Set.insert (symbol.function |> Elm.Syntax.Node.value)
+
+                                -- invalid elm
+                                Elm.Syntax.Declaration.Destructuring _ _ ->
+                                    soFar
+                        )
+                        Set.empty
+            , typesWithVariantNames = moduleTypesWithVariantNames
+            }
+
+
+{-| Collect all exposed members from an explicit exposing list of [visible expose](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Exposing#TopLevelExpose)s
+
+  - `simpleNames`: values, functions, type alias, opaque types (those without `(..)`), infix operators (parenthesized)
+  - `typesWithVariantNames`: names of types that expose their variants with `(..)`
+
+-}
+topLevelExposeListToExposes :
+    List (Elm.Syntax.Node.Node Elm.Syntax.Exposing.TopLevelExpose)
+    -> { simpleNames : Set String, typesExposingVariants : Set String }
+topLevelExposeListToExposes =
+    \topLevelExposeSet ->
+        topLevelExposeSet
+            |> List.foldl
+                (\(Elm.Syntax.Node.Node _ expose) soFar ->
+                    case expose of
+                        Elm.Syntax.Exposing.TypeExpose choiceTypeExpose ->
+                            case choiceTypeExpose.open of
+                                Nothing ->
+                                    { soFar
+                                        | simpleNames = soFar.simpleNames |> Set.insert choiceTypeExpose.name
+                                    }
+
+                                Just _ ->
+                                    { soFar
+                                        | typesExposingVariants =
+                                            soFar.typesExposingVariants
+                                                |> Set.insert choiceTypeExpose.name
+                                    }
+
+                        Elm.Syntax.Exposing.FunctionExpose valueOrFunctionName ->
+                            { soFar
+                                | simpleNames =
+                                    soFar.simpleNames |> Set.insert valueOrFunctionName
+                            }
+
+                        Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
+                            { soFar
+                                | simpleNames =
+                                    soFar.simpleNames |> Set.insert exposeName
+                            }
+
+                        Elm.Syntax.Exposing.InfixExpose symbol ->
+                            { soFar
+                                | simpleNames =
+                                    soFar.simpleNames |> Set.insert ([ "(", symbol, ")" ] |> String.concat)
+                            }
+                )
+                { simpleNames = Set.empty
+                , typesExposingVariants = Set.empty
+                }
 
 
 {-| A single edit to be applied to a file's source
