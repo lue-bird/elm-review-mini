@@ -1,4 +1,4 @@
-> Status: package and common reviews unpublished, a few helpers still missing
+> Status: package, CLI and common reviews unpublished, a few helpers still missing
 
 Scan your [elm](https://elm-lang.org/) project to enforce conventions using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
 It's heavily inspired by the phenomenal [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) but comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
@@ -155,7 +155,8 @@ A new review can often turn out to be a nuisance to someone, sometimes in ways y
 If a developer disagrees with a review, they may try to circumvent it, resulting in code that is even more error prone than the pattern that was originally forbidden.
 So the value provided by the review should be much greater than the trouble it causes, and if you find that a review doesn't live up to this, consider disabling it.
 
-Reviews are most useful when some concretely defined bad pattern must _never_ appear in the code and less useful when a pattern is _sometimes_ allowed to appear on a case-by-case basis (false positives). There is _no way to locally ignore specific review errors_, see ["How disable comments make static analysis tools worse" by Jeroen Engels](https://jfmengels.net/disable-comments/)
+Reviews are most useful when some concretely defined bad pattern must _never_ appear in the code and less useful when a pattern is _sometimes_ allowed to appear on a case-by-case basis (false positives).
+With `elm-review-mini`, there is _no way to locally ignore specific review errors_, see ["How disable comments make static analysis tools worse" by Jeroen Engels](https://jfmengels.net/disable-comments/)
 and similarly, there is no way to suppress legacy issues as lower-priority because in my opinion even these should always be visible as a (longer term) project checklist.
 
 You can however [configure file paths (e.g. from vendored packages or generated code) for which no errors will be reported](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
