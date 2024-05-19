@@ -399,6 +399,67 @@ importExposingIsExplicitTests =
                 }
                     |> Review.Test.run
             )
+        , Test.test "reports import exposing (..) with .. being from explicit exposing value, function, type alias, choice type, not including an unexposed member"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (Alias, Choice(..), function, value)
+
+                            value =
+                                unexposed
+                            
+                            unexposed =
+                                ""
+                            
+                            function () =
+                                value
+                            
+                            type Choice
+                                = Variant
+                            
+                            type alias Alias =
+                                String
+                            """
+                      }
+                    , { path = "src/B.elm"
+                      , source = """
+                            module B exposing (b)
+
+                            import A exposing (..)
+
+                            b =
+                                value
+                            """
+                      }
+                    ]
+                , review = ImportExposingIsExplicit.review
+                , expectedErrors =
+                    [ { path = "src/B.elm"
+                      , message = "import A exposes everything, not explicit"
+                      , details =
+                            [ "When you import everything from a module without explicitly listing what you actually need, it becomes harder to know where a reference comes from and which \"domain\" it belongs to for example."
+                            , "Try using qualified imports like ModuleName.member or if that becomes too inconvenient, explicitly list what exposes you want to import for use without qualification. To start by explicitly listing all of the current members, accept the automatic fix and clean up from there."
+                            ]
+                      , range = Review.Test.Under ".."
+                      , fixedFiles =
+                            [ { path = "src/B.elm"
+                              , source = """
+                                    module B exposing (b)
+
+                                    import A exposing (Alias, Choice(..), function, value)
+
+                                    b =
+                                        value
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
         , Test.test "reports import exposing (..) with .. being from exposing everything being value, function, type alias, choice type"
             (\() ->
                 { projectConfiguration = Review.Test.applicationConfigurationMinimal

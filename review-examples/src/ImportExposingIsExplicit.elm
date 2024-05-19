@@ -87,12 +87,17 @@ moduleDataToKnowledge moduleData =
     in
     { exposesByModuleName =
         let
-            exposes : { simpleNames : Set String, choiceTypeNames : Set String }
+            exposes : { simpleNames : Set String, typesExposingVariants : Set String }
             exposes =
-                moduleData.syntax |> moduleMembersThatCanBeExposed
+                case moduleData.syntax.moduleDefinition |> Review.moduleHeaderExposingNode |> Elm.Syntax.Node.value of
+                    Elm.Syntax.Exposing.Explicit topLevelExposeList ->
+                        topLevelExposeList |> Review.topLevelExposeListToExposes
+
+                    Elm.Syntax.Exposing.All _ ->
+                        moduleData.syntax |> moduleMembersAsExplicitExposing
         in
         FastDict.singleton moduleName
-            { choiceTypesExposingVariants = exposes.choiceTypeNames
+            { choiceTypesExposingVariants = exposes.typesExposingVariants
             , simpleNames = exposes.simpleNames
             }
     , importsExposingEverything =
@@ -116,21 +121,21 @@ moduleDataToKnowledge moduleData =
     }
 
 
-moduleMembersThatCanBeExposed :
+moduleMembersAsExplicitExposing :
     Elm.Syntax.File.File
     ->
         { simpleNames : Set String
-        , choiceTypeNames : Set String
+        , typesExposingVariants : Set String
         }
-moduleMembersThatCanBeExposed syntaxFile =
+moduleMembersAsExplicitExposing syntaxFile =
     syntaxFile.declarations
         |> List.foldl
             (\(Elm.Syntax.Node.Node _ declaration) soFar ->
                 case declaration of
                     Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
                         { soFar
-                            | choiceTypeNames =
-                                soFar.choiceTypeNames |> Set.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
+                            | typesExposingVariants =
+                                soFar.typesExposingVariants |> Set.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
                         }
 
                     Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
@@ -164,7 +169,7 @@ moduleMembersThatCanBeExposed syntaxFile =
                     Elm.Syntax.Declaration.Destructuring _ _ ->
                         soFar
             )
-            { choiceTypeNames = Set.empty, simpleNames = Set.empty }
+            { typesExposingVariants = Set.empty, simpleNames = Set.empty }
 
 
 report : Knowledge -> List Review.Error
