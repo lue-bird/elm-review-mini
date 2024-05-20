@@ -48,7 +48,10 @@ export function startWatching(elmPorts: ElmPorts) {
         // console.log("elm → js: ", fromElm)
         switch (fromElm.tag) {
             case "InitialFilesRequested": {
-                const elmJsonSource = await fs.promises.readFile(path.resolve(process.cwd(), "elm.json"), { encoding: "utf8" })
+                const elmJsonSource = await fs.promises.readFile(
+                    path.resolve(process.cwd(), "elm.json"),
+                    { encoding: "utf8" }
+                )
 
                 const elmJsonProject = JSON.parse(elmJsonSource)
                 const directDependencyNameVersionStrings: string[] =
@@ -64,8 +67,14 @@ export function startWatching(elmPorts: ElmPorts) {
                 const directDependencies = await Promise.all(
                     directDependencyNameVersionStrings.map(packageDirectory =>
                         Promise.all([
-                            fs.promises.readFile(path.resolve(elmHomePackages, packageDirectory, "elm.json"), { encoding: "utf8" }),
-                            fs.promises.readFile(path.resolve(elmHomePackages, packageDirectory, "docs.json"), { encoding: "utf8" })
+                            fs.promises.readFile(
+                                path.resolve(elmHomePackages, packageDirectory, "elm.json"),
+                                { encoding: "utf8" }
+                            ),
+                            fs.promises.readFile(
+                                path.resolve(elmHomePackages, packageDirectory, "docs.json"),
+                                { encoding: "utf8" }
+                            )
                         ])
                             .then(([elmJson, docsJson]) => ({
                                 elmJson: JSON.parse(elmJson),
@@ -81,106 +90,118 @@ export function startWatching(elmPorts: ElmPorts) {
                         :
                         [path.resolve(process.cwd(), "src")]
 
-                const modules: { path: string, source: string }[] = await Promise.all(
-                    sourceDirectoryPaths
-                        .map(directoryPath =>
-                            fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
-                                .then(fileNames =>
-                                    fileNames
-                                        .filter(dirent => dirent.isFile())
-                                        .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
-                                )
-                        )
-                ).then(filePaths =>
-                    Promise.all(
-                        filePaths
-                            .flat()
-                            .map(filePath =>
-                                fs.promises.readFile(filePath, { encoding: "utf8" })
-                                    .then(source => ({
-                                        path: path.relative(process.cwd(), filePath),
-                                        source: source
-                                    }))
+                const modules: { path: string, source: string }[] =
+                    await Promise.all(
+                        sourceDirectoryPaths
+                            .map(directoryPath =>
+                                fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
+                                    .then(fileNames =>
+                                        fileNames
+                                            .filter(dirent => dirent.isFile())
+                                            .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
+                                    )
                             )
                     )
-                )
+                        .then(filePaths =>
+                            Promise.all(
+                                filePaths
+                                    .flat()
+                                    .map(filePath =>
+                                        fs.promises.readFile(filePath, { encoding: "utf8" })
+                                            .then(source => ({
+                                                path: path.relative(process.cwd(), filePath),
+                                                source: source
+                                            }))
+                                    )
+                            )
+                        )
 
-                const extraPaths: string[] = fromElm.value.extraPaths
+                const extraPaths: string[] =
+                    (fromElm.value.extraPaths as string[])
+                        .map(directoryOrFilePath => path.resolve(process.cwd(), directoryOrFilePath))
+                        .filter(path => {
+                            if (fs.existsSync(path)) {
+                                return true
+                            } else {
+                                console.warn(`The configured extra path ${path} does not exist. Proceeding without inspecting this path`)
+                                return false
+                            }
+                        })
                 const extraDirectoryPaths =
-                    extraPaths
-                        .map(directoryOrFilePath => path.resolve(process.cwd(), directoryOrFilePath))
-                        .filter(path => fs.lstatSync(path).isDirectory())
+                    extraPaths.filter(path => fs.lstatSync(path).isDirectory())
                 const extraFilePaths =
-                    extraPaths
-                        .map(directoryOrFilePath => path.resolve(process.cwd(), directoryOrFilePath))
-                        .filter(path => fs.lstatSync(path).isFile())
-                const extraFiles: { path: string, source: string }[] = await Promise.all(
-                    extraDirectoryPaths
-                        .map(directoryPath =>
-                            fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
-                                .then(fileNames =>
-                                    fileNames
-                                        .filter(dirent => dirent.isFile())
-                                        .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
-                                )
-                        )
-                ).then(filePaths =>
-                    Promise.all(
-                        filePaths
-                            .flat()
-                            .concat(extraFilePaths)
-                            .map(filePath =>
-                                fs.promises.readFile(filePath, { encoding: "utf8" })
-                                    .then(source => ({
-                                        path: path.relative(process.cwd(), filePath),
-                                        source: source
-                                    }))
+                    extraPaths.filter(path => fs.lstatSync(path).isFile())
+                const allExtraFiles: { path: string, source: string }[] =
+                    await Promise.all(
+                        extraDirectoryPaths
+                            .map(directoryPath =>
+                                fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
+                                    .then(fileNames =>
+                                        fileNames
+                                            .filter(dirent => dirent.isFile())
+                                            .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
+                                    )
                             )
                     )
-                )
+                        .then(filePaths =>
+                            Promise.all(
+                                filePaths
+                                    .flat()
+                                    .concat(extraFilePaths)
+                                    .map(filePath =>
+                                        fs.promises.readFile(filePath, { encoding: "utf8" })
+                                            .then(source => ({
+                                                path: path.relative(process.cwd(), filePath),
+                                                source: source
+                                            }))
+                                    )
+                            )
+                        )
+
                 sendToElm({
                     tag: "InitialFilesReceived",
                     value: {
                         elmJson: { source: elmJsonSource, project: elmJsonProject },
                         directDependencies: directDependencies,
                         modules: modules,
-                        extraFiles: extraFiles
+                        extraFiles: allExtraFiles
                     }
                 })
 
-                watchDirectories(
-                    sourceDirectoryPaths,
-                    {
-                        onAddOrChange: async (fullPath) => {
-                            sendToElm({
-                                tag: "ModuleAddedOrChanged",
-                                value: {
-                                    path: path.relative(process.cwd(), fullPath),
-                                    source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
-                                }
-                            })
-                        },
-                        onDelete: async (fullPath) => {
-                            sendToElm({ tag: "ModuleRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
-                        }
+                watchDirectories({
+                    directoryPaths: sourceDirectoryPaths,
+                    onAddOrChange: async (fullPath) => {
+                        sendToElm({
+                            tag: "ModuleAddedOrChanged",
+                            value: {
+                                path: path.relative(process.cwd(), fullPath),
+                                source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
+                            }
+                        })
+                    },
+                    onDelete: async (fullPath) => {
+                        sendToElm({ tag: "ModuleRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
                     }
+                }
                 )
-                watchDirectories(
-                    extraDirectoryPaths.concat(extraFilePaths),
-                    {
-                        onAddOrChange: async (fullPath) => {
-                            sendToElm({
-                                tag: "ExtraFileAddedOrChanged",
-                                value: {
-                                    path: path.relative(process.cwd(), fullPath),
-                                    source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
-                                }
-                            })
-                        },
-                        onDelete: async (fullPath) => {
-                            sendToElm({ tag: "ExtraFileRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
-                        }
-                    })
+                watchDirectories({
+                    directoryPaths: extraDirectoryPaths.concat(extraFilePaths),
+                    onAddOrChange: async (fullPath) => {
+                        sendToElm({
+                            tag: "ExtraFileAddedOrChanged",
+                            value: {
+                                path: path.relative(process.cwd(), fullPath),
+                                source: await fs.promises.readFile(fullPath, { encoding: "utf8" })
+                            }
+                        })
+                    },
+                    onDelete: async (fullPath) => {
+                        sendToElm({
+                            tag: "ExtraFileRemoved",
+                            value: { path: path.relative(process.cwd(), fullPath) }
+                        })
+                    }
+                })
                 break
             }
             case "ErrorsReceived": {
@@ -213,18 +234,24 @@ export function startWatching(elmPorts: ElmPorts) {
                 break
             }
             default: {
-                notifyOfUnknownMessageKind(fromElm.tag)
+                console.error(`bug: unknown message kind ${fromElm.tag} from elm. The associated js implementation is missing. Please open an issue on github.com/lue-bird/elm-review-mini`)
             }
         }
     })
 }
 
 
-function watchDirectories(directoryPaths: string[], onEvent: { onDelete: (fullPath: string) => Promise<void>, onAddOrChange: (fullPath: string) => Promise<void> }) {
+function watchDirectories(
+    watch: {
+        directoryPaths: string[],
+        onDelete: (fullPath: string) => Promise<void>,
+        onAddOrChange: (fullPath: string) => Promise<void>
+    }
+) {
     // most editors chunk up their file edits in 2, see
     // https://stackoverflow.com/questions/12978924/fs-watch-fired-twice-when-i-change-the-watched-file
     let debounced = true
-    directoryPaths
+    watch.directoryPaths
         .forEach(directoryPath => {
             fs.watch(
                 directoryPath,
@@ -238,9 +265,9 @@ function watchDirectories(directoryPaths: string[], onEvent: { onDelete: (fullPa
                             console.clear()
                             const fullPath = path.join(directoryPath, fileName)
                             if (fs.existsSync(fullPath)) {
-                                await onEvent.onAddOrChange(fullPath)
+                                await watch.onAddOrChange(fullPath)
                             } else {
-                                await onEvent.onDelete(fullPath)
+                                await watch.onDelete(fullPath)
                             }
                         }
                     } else {
@@ -262,10 +289,3 @@ const elmRoot =
         )
 const elmHomePackages =
     path.join(elmRoot, "0.19.1", "packages")
-
-function notifyOfUnknownMessageKind(messageTag: string) {
-    notifyOfBug("Unknown message kind " + messageTag + " from elm. The associated js implementation is missing")
-}
-function notifyOfBug(bugDescription: string) {
-    console.error("bug: " + bugDescription + ". Please open an issue on github.com/lue-bird/elm-state-interface")
-}
