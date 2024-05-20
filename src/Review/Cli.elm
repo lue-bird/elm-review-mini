@@ -91,9 +91,9 @@ To be used from a node.js CLI program
 as showcased in [elm-review-mini-cli-starter](https://github.com/lue-bird/elm-review-mini-cli-starter)
 -}
 program :
-    { toJs : Json.Encode.Value -> Cmd Never
+    { configuration : { reviews : List Review.Review, extraPaths : List String }
+    , toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
-    , configuration : { reviews : List Review.Review, extraPaths : List String }
     }
     -> Program
 program config =
@@ -135,7 +135,9 @@ eventToSendToJsToJson =
                                                     let
                                                         pathSource : String
                                                         pathSource =
-                                                            errorsToSend.projectFilesByPath |> FastDict.get path |> Maybe.withDefault ""
+                                                            errorsToSend.projectFilesByPath
+                                                                |> FastDict.get path
+                                                                |> Maybe.withDefault ""
                                                     in
                                                     errors
                                                         |> List.map
@@ -192,7 +194,12 @@ errorDisplay :
             , range : Elm.Syntax.Range.Range
             , message : String
             , details : List String
-            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
+            , fixedSources :
+                List
+                    { path : String
+                    , fixedSource : String
+                    , originalSource : String
+                    }
         }
     -> String
 errorDisplay source =
@@ -238,7 +245,10 @@ errorDisplay source =
 sourceHighlightDifferentLines : String -> String -> String
 sourceHighlightDifferentLines aString bString =
     let
-        highlightedAndFinalNoChangeLines : { continuousNoChangeLinesReversed : List String, highlighted : String }
+        highlightedAndFinalNoChangeLines :
+            { continuousNoChangeLinesReversed : List String
+            , highlighted : String
+            }
         highlightedAndFinalNoChangeLines =
             Diff.diff (aString |> String.lines) (bString |> String.lines)
                 |> List.foldl
@@ -254,7 +264,9 @@ sourceHighlightDifferentLines aString bString =
                                 { continuousNoChangeLinesReversed = []
                                 , highlighted =
                                     [ soFar.highlighted
-                                    , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
+                                    , soFar.continuousNoChangeLinesReversed
+                                        |> List.reverse
+                                        |> continuousNoChangeLinesCollapse
                                     , "\n"
                                     , Ansi.green ("|   " ++ line)
                                     ]
@@ -265,7 +277,9 @@ sourceHighlightDifferentLines aString bString =
                                 { continuousNoChangeLinesReversed = []
                                 , highlighted =
                                     [ soFar.highlighted
-                                    , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
+                                    , soFar.continuousNoChangeLinesReversed
+                                        |> List.reverse
+                                        |> continuousNoChangeLinesCollapse
                                     , "\n"
                                     , Ansi.red ("|   " ++ line)
                                     ]
@@ -338,7 +352,8 @@ codeExtract source range =
         else
             [ sourceLineAtRow (range.start.row - 2)
             , sourceLineAtRow (range.start.row - 1)
-                |> withErrorHighlightedRange { start = range.start.column, end = range.end.column }
+                |> withErrorHighlightedRange
+                    { start = range.start.column, end = range.end.column }
             , sourceLineAtRow range.end.row
             ]
                 |> List.filter (\l -> not (l |> String.isEmpty))
@@ -397,15 +412,16 @@ withErrorHighlightedRange lineRange =
             |> Unicode.left (lineRange.end - lineRange.start)
             |> Ansi.backgroundRed
         , lineContent
-            |> Unicode.dropLeft (lineRange.start - 1 + lineRange.end - lineRange.start)
+            |> Unicode.dropLeft
+                (lineRange.start - 1 + lineRange.end - lineRange.start)
         ]
             |> String.concat
 
 
 initialStateAndCommand :
-    { toJs : Json.Encode.Value -> Cmd Never
+    { configuration : { reviews : List Review.Review, extraPaths : List String }
+    , toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
-    , configuration : { reviews : List Review.Review, extraPaths : List String }
     }
     -> ( ProgramState, Cmd never_ )
 initialStateAndCommand config =
@@ -418,9 +434,9 @@ initialStateAndCommand config =
 
 
 reactToEvent :
-    { toJs : Json.Encode.Value -> Cmd Never
+    { configuration : { reviews : List Review.Review, extraPaths : List String }
+    , toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
-    , configuration : { reviews : List Review.Review, extraPaths : List String }
     }
     -> ProgramEvent
     -> (ProgramState -> ( ProgramState, Cmd never_ ))
@@ -453,10 +469,12 @@ reactToEvent config event =
                             initialFilesByPath =
                                 FastDict.union
                                     (initialFiles.extraFiles
-                                        |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
+                                        |> FastDictLocalExtra.fromListMap
+                                            (\file -> { key = file.path, value = file.source })
                                     )
                                     (initialFiles.modules
-                                        |> FastDictLocalExtra.fromListMap (\file -> { key = file.path, value = file.source })
+                                        |> FastDictLocalExtra.fromListMap
+                                            (\file -> { key = file.path, value = file.source })
                                     )
 
                             runResult :
@@ -1092,9 +1110,9 @@ allModuleFilesToWithParsedSyntax =
 
 
 listen :
-    { toJs : Json.Encode.Value -> Cmd Never
+    { configuration : { reviews : List Review.Review, extraPaths : List String }
+    , toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
-    , configuration : { reviews : List Review.Review, extraPaths : List String }
     }
     -> (ProgramState -> Sub ProgramEvent)
 listen config =
