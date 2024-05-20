@@ -29,6 +29,7 @@ import FastDict
 import FastDictLocalExtra
 import Json.Decode
 import Json.Encode
+import ListLocalExtra
 import Review exposing (Review)
 import Unicode
 
@@ -237,19 +238,68 @@ errorDisplay source =
 sourceHighlightDifferentLines : String -> String -> String
 sourceHighlightDifferentLines aString bString =
     Diff.diff (aString |> String.lines) (bString |> String.lines)
-        |> List.map
-            (\change ->
+        |> List.foldl
+            (\change soFar ->
                 case change of
-                    Diff.NoChange str ->
-                        "|   " ++ str
+                    Diff.NoChange line ->
+                        { soFar
+                            | continuousNoChangeLinesReversed =
+                                soFar.continuousNoChangeLinesReversed |> (::) line
+                        }
 
-                    Diff.Added str ->
-                        Ansi.green ("|   " ++ str)
+                    Diff.Added line ->
+                        { continuousNoChangeLinesReversed = []
+                        , highlighted =
+                            [ soFar.highlighted
+                            , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
+                            , "\n"
+                            , Ansi.green ("|   " ++ line)
+                            ]
+                                |> String.concat
+                        }
 
-                    Diff.Removed str ->
-                        Ansi.red ("|   " ++ str)
+                    Diff.Removed line ->
+                        { continuousNoChangeLinesReversed = []
+                        , highlighted =
+                            [ soFar.highlighted
+                            , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
+                            , "\n"
+                            , Ansi.red ("|   " ++ line)
+                            ]
+                                |> String.concat
+                        }
             )
-        |> String.join "\n"
+            { continuousNoChangeLinesReversed = [], highlighted = "" }
+        |> .highlighted
+
+
+continuousNoChangeLinesCollapse : List String -> String
+continuousNoChangeLinesCollapse =
+    \noChangeLines ->
+        case noChangeLines of
+            [] ->
+                ""
+
+            [ onlyNoChangeLine ] ->
+                "|   " ++ onlyNoChangeLine
+
+            [ noChangeLine0, noChangeLine1 ] ->
+                [ "|   "
+                , noChangeLine0
+                , "\n"
+                , "|   "
+                , noChangeLine1
+                ]
+                    |> String.concat
+
+            noChangeLine0 :: _ :: noChangeLine2 :: noChangeLine3Up ->
+                [ "|   "
+                , noChangeLine0
+                , "\n⋮\n"
+                , "|   "
+                , noChangeLine3Up |> ListLocalExtra.last |> Maybe.withDefault noChangeLine2
+                ]
+                    |> String.concat
 
 
 codeExtract : String -> Elm.Syntax.Range.Range -> String
