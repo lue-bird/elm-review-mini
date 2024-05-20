@@ -190,7 +190,7 @@ export function startWatching(elmPorts: ElmPorts) {
                         input: process.stdin,
                         output: process.stdout,
                     })
-                    readLineInterface.question("To apply these edits, type y. To reject, type n")
+                    readLineInterface.question("To apply these edits, enter y. To reject, enter n: ")
                         .then(async (response) => {
                             if (response === "y") {
                                 await Promise.all(
