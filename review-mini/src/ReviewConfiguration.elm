@@ -7,7 +7,7 @@ import LetValueOrFunctionIsTypeAnnotated
 import ModuleExposingIsExplicit
 import ModuleValueOrFunctionIsTypeAnnotated
 import DebugIsNotUsed
-import PatternVariableIsUsed
+import LocalBindingIsUsed
 import CommentDoesNotUseCertainMarks
 
 
@@ -22,7 +22,7 @@ configuration =
         , ModuleValueOrFunctionIsTypeAnnotated.review
         , LetValueOrFunctionIsTypeAnnotated.review
         , DebugIsNotUsed.review
-        , PatternVariableIsUsed.review
+        , LocalBindingIsUsed.review
         , CommentDoesNotUseCertainMarks.review [ "TODO" ]
         ]
     }
