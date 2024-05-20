@@ -18,7 +18,7 @@ import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
 import FastDict.LocalExtra
-import Review  
+import Review
 import Set exposing (Set)
 
 
@@ -480,7 +480,7 @@ report knowledge =
                                     , details =
                                         [ "Since all exposed members aren't used outside of this module, the whole module is unused."
                                         , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                                         , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
@@ -513,9 +513,8 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                     { path = moduleKnowledge.exposes.path
                                     , message = [ "expose ", ( moduleKnowledge.name, exposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
                                     , details =
-                                        [ "Since all exposed members aren't used outside of this module, the whole module is unused."
-                                        , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+                                        [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                                         , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
@@ -537,42 +536,50 @@ If you think you don't need it anymore or think it was added it prematurely, you
                 , moduleKnowledge.exposes.exposedTypesWithVariantNames
                     |> FastDict.LocalExtra.justsToListMap
                         (\typeExposeUnqualified typeExpose ->
-                            let
-                                typeExposeVariantReferences : () -> Set ( Elm.Syntax.ModuleName.ModuleName, String )
-                                typeExposeVariantReferences () =
-                                    typeExpose.variants |> Set.map (\unqualified -> ( moduleKnowledge.name, unqualified ))
-                            in
-                            if
-                                (usedReferences |> Set.member ( moduleKnowledge.name, typeExposeUnqualified ))
-                                    && (Set.diff (typeExposeVariantReferences ()) usedReferences |> Set.isEmpty)
-                            then
-                                { path = moduleKnowledge.exposes.path
-                                , message = [ "expose ", ( moduleKnowledge.name, typeExposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
-                                , details =
-                                    [ "Either use it or remove it from the exposing part of the module header which might reveal its declaration as unused." ]
-                                , range = typeExpose.range
-                                , fix =
-                                    [ { path = moduleKnowledge.exposes.path
-                                      , edits =
-                                            [ Review.replaceRange moduleKnowledge.exposes.exposingRange
-                                                (Set.union
-                                                    (moduleKnowledge.exposes.exposedSimpleNames
-                                                        |> FastDict.LocalExtra.keys
-                                                    )
-                                                    (moduleKnowledge.exposes.exposedTypesWithVariantNames
-                                                        |> FastDict.LocalExtra.keys
-                                                        |> Set.remove typeExposeUnqualified
-                                                    )
-                                                    |> exposingToString
-                                                )
-                                            ]
-                                      }
-                                    ]
-                                }
-                                    |> Just
+                            if usedReferences |> Set.member ( moduleKnowledge.name, typeExposeUnqualified ) then
+                                Nothing
 
                             else
-                                Nothing
+                                let
+                                    typeExposeVariantReferences : Set ( Elm.Syntax.ModuleName.ModuleName, String )
+                                    typeExposeVariantReferences =
+                                        typeExpose.variants |> Set.map (\unqualified -> ( moduleKnowledge.name, unqualified ))
+                                in
+                                if Set.diff typeExposeVariantReferences usedReferences |> Set.isEmpty then
+                                    Nothing
+
+                                else
+                                    { path = moduleKnowledge.exposes.path
+                                    , message = [ "expose ", ( moduleKnowledge.name, typeExposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
+                                    , details =
+                                        [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important."""
+                                        , """If intended for determined future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
+                                        ]
+                                    , range = typeExpose.range
+                                    , fix =
+                                        [ { path = moduleKnowledge.exposes.path
+                                          , edits =
+                                                [ Review.replaceRange moduleKnowledge.exposes.exposingRange
+                                                    (Set.union
+                                                        (moduleKnowledge.exposes.exposedSimpleNames
+                                                            |> FastDict.LocalExtra.keys
+                                                        )
+                                                        (moduleKnowledge.exposes.exposedTypesWithVariantNames
+                                                            |> FastDict.LocalExtra.keys
+                                                            |> Set.remove typeExposeUnqualified
+                                                        )
+                                                        |> exposingToString
+                                                    )
+                                                ]
+                                          }
+                                        ]
+                                    }
+                                        |> Just
                         )
                 ]
                     |> List.concat

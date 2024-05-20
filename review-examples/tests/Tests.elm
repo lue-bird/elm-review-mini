@@ -551,9 +551,8 @@ moduleAndExposesAreUsedTests =
                     [ { path = "src/A.elm"
                       , message = "expose A.a isn't used outside of this module"
                       , details =
-                            [ "Since all exposed members aren't used outside of this module, the whole module is unused."
-                            , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+                            [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                             , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
@@ -605,7 +604,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       , details =
                             [ "Since all exposed members aren't used outside of this module, the whole module is unused."
                             , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                             , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
@@ -649,7 +648,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       , details =
                             [ "Since all exposed members aren't used outside of this module, the whole module is unused."
                             , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                             , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
@@ -698,9 +697,8 @@ If you think you don't need it anymore or think it was added it prematurely, you
                     [ { path = "src/A.elm"
                       , message = "expose A.a isn't used outside of this module"
                       , details =
-                            [ "Since all exposed members aren't used outside of this module, the whole module is unused."
-                            , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+                            [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                             , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
@@ -714,6 +712,58 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                     module A exposing (b)
                                     a =
                                         1
+                                    b =
+                                        2
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused exposed choice type with variants, usage qualified by alias"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (A(..), b)
+                            type A
+                                = A
+                            b =
+                                2
+                            """
+                      }
+                    , { path = "src/Main.elm"
+                      , source = """
+                            module Main exposing (main)
+                            import A as Aa
+                            main =
+                                Aa.b
+                            """
+                      }
+                    ]
+                , review = ModuleAndExposesAreUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "expose A.A isn't used outside of this module"
+                      , details =
+                            [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important."""
+                            , """If intended for determined future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
+                            ]
+                      , range = Review.Test.Under "A(..)"
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (b)
+                                    type A
+                                        = A
                                     b =
                                         2
                                     """
@@ -751,9 +801,8 @@ If you think you don't need it anymore or think it was added it prematurely, you
                     [ { path = "src/A.elm"
                       , message = "expose A.a isn't used outside of this module"
                       , details =
-                            [ "Since all exposed members aren't used outside of this module, the whole module is unused."
-                            , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
-But maybe you've since moved in a different direction,
+                            [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
                             , """If intended for determined future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
