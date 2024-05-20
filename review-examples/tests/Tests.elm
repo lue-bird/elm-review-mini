@@ -554,7 +554,7 @@ moduleAndExposesAreUsedTests =
                             [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
-                            , """If intended for determined future use, try gradually using it.
+                            , """If intended for future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
@@ -606,7 +606,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
-                            , """If intended for determined future use, try gradually using it.
+                            , """If intended for future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
@@ -650,7 +650,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             , """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
-                            , """If intended for determined future use, try gradually using it.
+                            , """If intended for future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
@@ -700,7 +700,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
-                            , """If intended for determined future use, try gradually using it.
+                            , """If intended for future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
@@ -752,7 +752,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
-                            , """If intended for determined future use, try gradually using it.
+                            , """If intended for future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
@@ -804,7 +804,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
 in which case allowing the unused code to sit can make it harder to find what's important."""
-                            , """If intended for determined future use, try gradually using it.
+                            , """If intended for future use, try gradually using it.
 If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
