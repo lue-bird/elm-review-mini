@@ -4,11 +4,11 @@ import CommentDoesNotUseCertainMarks
 import DebugIsNotUsed
 import ImportExposingIsExplicit
 import LetValueOrFunctionIsTypeAnnotated
+import LocalBindingIsUsed
 import ModuleAndExposesAreUsed
 import ModuleExposingIsExplicit
 import ModuleNameWithUnderscoreForbid
 import ModuleValueOrFunctionIsTypeAnnotated
-import PatternVariableIsUsed
 import Review
 import Review.Test
 import Test exposing (Test)
@@ -21,7 +21,7 @@ tests =
         , moduleValueOrFunctionIsTypeAnnotatedTests
         , letValueOrFunctionIsTypeAnnotatedTests
         , moduleAndExposesAreUsedTests
-        , patternVariablesAreUsedTests
+        , localBindingIsUsedTests
         , moduleExposingIsExplicitTests
         , importExposingIsExplicitTests
         , debugIsNotUsedTests
@@ -829,9 +829,9 @@ If you think you don't need it anymore or think it was added it prematurely, you
         ]
 
 
-patternVariablesAreUsedTests : Test
-patternVariablesAreUsedTests =
-    Test.describe "PatternVariableIsUsed"
+localBindingIsUsedTests : Test
+localBindingIsUsedTests =
+    Test.describe "LocalBindingIsUsed"
         [ Test.test "used pattern variables are not reported"
             (\() ->
                 { projectConfiguration = Review.Test.applicationConfigurationMinimal
@@ -864,8 +864,135 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "used let declared values and functions are not reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+                        
+                        a =
+                            let
+                                b =
+                                    let
+                                        c =
+                                            1
+                                    in
+                                    c
+                            in
+                            b
+                        """
+                      }
+                    ]
+                , review = LocalBindingIsUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused let declared value among multiple is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                let
+                                    b =
+                                        let
+                                            unused =
+                                                1
+                                            
+                                            used =
+                                                2
+                                        in
+                                        used
+                                in
+                                b
+                            """
+                      }
+                    ]
+                , review = LocalBindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , range = Review.Test.Under "unused"
+                      , message = "let declared unused isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        let
+                                            b =
+                                                let
+....................................................
+....................................................
+                                                    used =
+                                                        2
+                                                in
+                                                used
+                                        in
+                                        b
+                                    """ |> String.replace "." " "
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused let declared value among as the only one between let..in is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                let
+                                    b =
+                                        let
+                                            unused =
+                                                1
+                                        in
+                                        2
+                                in
+                                b
+                            """
+                      }
+                    ]
+                , review = LocalBindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , range = Review.Test.Under "unused"
+                      , message = "let declared unused isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        let
+                                            b =
+                                                2
+                                        in
+                                        b
+                                    """ |> String.replace "." " "
+                              }
+                            ]
+                      }
+                    ]
                 }
                     |> Review.Test.run
             )
@@ -882,7 +1009,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -916,7 +1043,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -950,7 +1077,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -984,7 +1111,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1018,7 +1145,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1052,7 +1179,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1088,7 +1215,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1128,7 +1255,7 @@ patternVariablesAreUsedTests =
                         """
                       }
                     ]
-                , review = PatternVariableIsUsed.review
+                , review = LocalBindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
