@@ -237,40 +237,53 @@ errorDisplay source =
 
 sourceHighlightDifferentLines : String -> String -> String
 sourceHighlightDifferentLines aString bString =
-    Diff.diff (aString |> String.lines) (bString |> String.lines)
-        |> List.foldl
-            (\change soFar ->
-                case change of
-                    Diff.NoChange line ->
-                        { soFar
-                            | continuousNoChangeLinesReversed =
-                                soFar.continuousNoChangeLinesReversed |> (::) line
-                        }
+    let
+        highlightedAndFinalNoChangeLines : { continuousNoChangeLinesReversed : List String, highlighted : String }
+        highlightedAndFinalNoChangeLines =
+            Diff.diff (aString |> String.lines) (bString |> String.lines)
+                |> List.foldl
+                    (\change soFar ->
+                        case change of
+                            Diff.NoChange line ->
+                                { soFar
+                                    | continuousNoChangeLinesReversed =
+                                        soFar.continuousNoChangeLinesReversed |> (::) line
+                                }
 
-                    Diff.Added line ->
-                        { continuousNoChangeLinesReversed = []
-                        , highlighted =
-                            [ soFar.highlighted
-                            , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
-                            , "\n"
-                            , Ansi.green ("|   " ++ line)
-                            ]
-                                |> String.concat
-                        }
+                            Diff.Added line ->
+                                { continuousNoChangeLinesReversed = []
+                                , highlighted =
+                                    [ soFar.highlighted
+                                    , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
+                                    , "\n"
+                                    , Ansi.green ("|   " ++ line)
+                                    ]
+                                        |> String.concat
+                                }
 
-                    Diff.Removed line ->
-                        { continuousNoChangeLinesReversed = []
-                        , highlighted =
-                            [ soFar.highlighted
-                            , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
-                            , "\n"
-                            , Ansi.red ("|   " ++ line)
-                            ]
-                                |> String.concat
-                        }
-            )
-            { continuousNoChangeLinesReversed = [], highlighted = "" }
-        |> .highlighted
+                            Diff.Removed line ->
+                                { continuousNoChangeLinesReversed = []
+                                , highlighted =
+                                    [ soFar.highlighted
+                                    , soFar.continuousNoChangeLinesReversed |> List.reverse |> continuousNoChangeLinesCollapse
+                                    , "\n"
+                                    , Ansi.red ("|   " ++ line)
+                                    ]
+                                        |> String.concat
+                                }
+                    )
+                    { continuousNoChangeLinesReversed = [], highlighted = "" }
+    in
+    case highlightedAndFinalNoChangeLines.continuousNoChangeLinesReversed |> ListLocalExtra.last of
+        Nothing ->
+            highlightedAndFinalNoChangeLines.highlighted
+
+        Just nextNoChangeLine ->
+            [ highlightedAndFinalNoChangeLines.highlighted
+            , "\n|   "
+            , nextNoChangeLine
+            ]
+                |> String.concat
 
 
 continuousNoChangeLinesCollapse : List String -> String
