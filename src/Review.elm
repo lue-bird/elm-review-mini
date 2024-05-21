@@ -5,9 +5,9 @@ module Review exposing
     , Error, elmJsonPath
     , SourceEdit(..), insertAt, removeRange, replaceRange
     , expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
-    , moduleHeaderDocumentation, moduleExposes
+    , moduleHeaderDocumentation
     , determineModuleOrigin, importsToExplicit
-    , topLevelExposeListToExposes
+    , moduleExposes, topLevelExposeListToExposes, moduleInterfaceExposes
     , sourceExtractInRange, sourceRangesOf
     , packageElmJsonExposedModules
     , Inspect(..), Review, run, sourceApplyEdits, SourceEditError(..), Run(..)
@@ -68,9 +68,9 @@ This fine control allows you to e.g. skip visiting certain parts that you alread
 
 @docs expressionSubs, expressionSubsWithBindings, patternBindings, patternSubs, typeSubs
 
-@docs moduleHeaderDocumentation, moduleExposes
+@docs moduleHeaderDocumentation
 @docs determineModuleOrigin, importsToExplicit
-@docs topLevelExposeListToExposes
+@docs moduleExposes, topLevelExposeListToExposes, moduleInterfaceExposes
 @docs sourceExtractInRange, sourceRangesOf
 @docs packageElmJsonExposedModules
 
@@ -1493,6 +1493,53 @@ moduleExposes syntaxFile =
                         Set.empty
             , typesWithVariantNames = moduleTypesWithVariantNames
             }
+
+
+{-| Same as [`moduleExposes`](#moduleExposes) but for [docs module](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Docs#Module)s
+from [`Review.inspectDirectDependencies`](#inspectDirectDependencies)
+-}
+moduleInterfaceExposes :
+    Elm.Docs.Module
+    -> { simpleNames : Set String, typesWithVariantNames : FastDict.Dict String (Set String) }
+moduleInterfaceExposes =
+    \moduleInterface ->
+        { simpleNames =
+            [ moduleInterface.aliases
+                |> List.map .name
+            , moduleInterface.binops
+                |> List.map
+                    (\infixOperator -> [ "(", infixOperator.name, ")" ] |> String.concat)
+            , moduleInterface.unions
+                |> List.filterMap
+                    (\choiceTypeInterface ->
+                        case choiceTypeInterface.tags of
+                            [] ->
+                                choiceTypeInterface.name |> Just
+
+                            _ :: _ ->
+                                Nothing
+                    )
+            ]
+                |> List.concat
+                |> Set.fromList
+        , typesWithVariantNames =
+            moduleInterface.unions
+                |> List.filterMap
+                    (\choiceTypeInterface ->
+                        case choiceTypeInterface.tags of
+                            [] ->
+                                Nothing
+
+                            variantInterface0 :: variantInterface1Up ->
+                                ( choiceTypeInterface.name
+                                , (variantInterface0 :: variantInterface1Up)
+                                    |> List.map (\( variantName, _ ) -> variantName)
+                                    |> Set.fromList
+                                )
+                                    |> Just
+                    )
+                |> FastDict.fromList
+        }
 
 
 {-| Collect all exposed members from an explicit exposing list of [visible expose](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Exposing#TopLevelExpose)s
