@@ -1,4 +1,4 @@
-module Declaration.LocalExtra exposing (identifierUses)
+module Declaration.LocalExtra exposing (declaredNames, identifierUses)
 
 import Elm.Syntax.Declaration
 import Elm.Syntax.ModuleName
@@ -14,10 +14,10 @@ import Set.LocalExtra
 import Type.LocalExtra
 
 
-{-| Declared name (+ possible variant names)
+{-| Declared names (+ possible variant names)
 -}
-names : Elm.Syntax.Declaration.Declaration -> Set String
-names =
+declaredNames : Elm.Syntax.Declaration.Declaration -> Set String
+declaredNames =
     \declaration ->
         case declaration of
             Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
