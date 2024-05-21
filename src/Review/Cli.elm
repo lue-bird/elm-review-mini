@@ -86,25 +86,6 @@ type alias FileReviewError =
     }
 
 
-{-| Run reviews, re-running on file changes.
-To be used from a node.js CLI program
-as showcased in [elm-review-mini-cli-starter](https://github.com/lue-bird/elm-review-mini-cli-starter)
--}
-program :
-    { configuration : { reviews : List Review.Review, extraPaths : List String }
-    , toJs : Json.Encode.Value -> Cmd Never
-    , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
-    }
-    -> Program
-program config =
-    Platform.worker
-        { init = \() -> initialStateAndCommand config
-        , update =
-            \event state -> state |> reactToEvent config event
-        , subscriptions = \state -> state |> listen config
-        }
-
-
 eventToSendToJsToJson : EventToSendToJs -> Json.Encode.Value
 eventToSendToJsToJson =
     \eventToBeSentToJs ->
@@ -418,6 +399,40 @@ withErrorHighlightedRange lineRange =
             |> String.concat
 
 
+{-| Run reviews, re-running on file changes.
+To be used from a node.js CLI program
+as showcased in [elm-review-mini-cli-starter](https://github.com/lue-bird/elm-review-mini-cli-starter)
+-}
+program :
+    { configuration : { reviews : List Review.Review, extraPaths : List String }
+    , toJs : Json.Encode.Value -> Cmd Never
+    , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
+    }
+    -> Program
+program config =
+    Platform.worker
+        { init = \() -> initialStateAndCommand config
+        , update =
+            \event state ->
+                let
+                    ( newState, elmEventsToSendToJs ) =
+                        state |> reactToEvent config event
+                in
+                ( newState
+                , elmEventsToSendToJs
+                    |> List.map
+                        (\elmEventToSendToJs ->
+                            elmEventToSendToJs
+                                |> eventToSendToJsToJson
+                                |> config.toJs
+                                |> Cmd.map Basics.never
+                        )
+                    |> Cmd.batch
+                )
+        , subscriptions = \state -> state |> listen config
+        }
+
+
 initialStateAndCommand :
     { configuration : { reviews : List Review.Review, extraPaths : List String }
     , toJs : Json.Encode.Value -> Cmd Never
@@ -439,7 +454,7 @@ reactToEvent :
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
     }
     -> ProgramEvent
-    -> (ProgramState -> ( ProgramState, Cmd never_ ))
+    -> (ProgramState -> ( ProgramState, List EventToSendToJs ))
 reactToEvent config event =
     \state ->
         case event of
@@ -447,20 +462,14 @@ reactToEvent config event =
                 case initialFiles.modules |> allModuleFilesToWithParsedSyntax of
                     Err pathsThatFailedToParse ->
                         ( state
-                        , Json.Encode.object
-                            [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
-                            , ( "value"
-                              , ([ "module(s) at path(s) "
-                                 , pathsThatFailedToParse |> String.join " and "
-                                 , " failed to parse"
-                                 ]
-                                    |> String.concat
-                                )
-                                    |> Json.Encode.string
-                              )
-                            ]
-                            |> config.toJs
-                            |> Cmd.map Basics.never
+                        , ProblemEncountered
+                            ([ "module(s) at path(s) "
+                             , pathsThatFailedToParse |> String.join " and "
+                             , " failed to parse"
+                             ]
+                                |> String.concat
+                            )
+                            |> List.singleton
                         )
 
                     Ok modules ->
@@ -516,7 +525,7 @@ reactToEvent config event =
                             }
                         , case maybeNextFixableErrorOrAllUnfixable of
                             Nothing ->
-                                Cmd.none
+                                []
 
                             Just nextFixableErrorOrAllUnfixable ->
                                 ErrorsReceived
@@ -525,9 +534,7 @@ reactToEvent config event =
                                             |> FastDict.insert "elm.json" initialFiles.elmJson.source
                                     , errors = nextFixableErrorOrAllUnfixable
                                     }
-                                    |> eventToSendToJsToJson
-                                    |> config.toJs
-                                    |> Cmd.map Basics.never
+                                    |> List.singleton
                         )
 
             ErrorFixRejected ->
@@ -557,7 +564,7 @@ reactToEvent config event =
                             }
                         , case maybeNextFixableErrorOrAllUnfixable of
                             Nothing ->
-                                Cmd.none
+                                []
 
                             Just nextFixableErrorOrAllUnfixable ->
                                 ErrorsReceived
@@ -566,13 +573,11 @@ reactToEvent config event =
                                             |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
                                     , errors = nextFixableErrorOrAllUnfixable
                                     }
-                                    |> eventToSendToJsToJson
-                                    |> config.toJs
-                                    |> Cmd.map Basics.never
+                                    |> List.singleton
                         )
 
                     unexpectedState ->
-                        ( unexpectedState, Cmd.none )
+                        ( unexpectedState, [] )
 
             ModuleAddedOrChanged moduleAddedOrChangedPathAndSource ->
                 case state of
@@ -580,20 +585,14 @@ reactToEvent config event =
                         case moduleAddedOrChangedPathAndSource |> moduleFileToWithParsedSyntax of
                             Err () ->
                                 ( HavingRunReviewsPreviously havingRunReviewsPreviously
-                                , Json.Encode.object
-                                    [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
-                                    , ( "value"
-                                      , ([ "module at path "
-                                         , moduleAddedOrChangedPathAndSource.path
-                                         , " failed to parse"
-                                         ]
-                                            |> String.concat
-                                        )
-                                            |> Json.Encode.string
-                                      )
-                                    ]
-                                    |> config.toJs
-                                    |> Cmd.map Basics.never
+                                , ProblemEncountered
+                                    ([ "module at path "
+                                     , moduleAddedOrChangedPathAndSource.path
+                                     , " failed to parse"
+                                     ]
+                                        |> String.concat
+                                    )
+                                    |> List.singleton
                                 )
 
                             Ok moduleAddedOrChanged ->
@@ -646,7 +645,7 @@ reactToEvent config event =
                                     }
                                 , case maybeNextFixableErrorOrAllUnfixable of
                                     Nothing ->
-                                        Cmd.none
+                                        []
 
                                     Just nextFixableErrorOrAllUnfixable ->
                                         ErrorsReceived
@@ -655,13 +654,11 @@ reactToEvent config event =
                                                     |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
                                             , errors = nextFixableErrorOrAllUnfixable
                                             }
-                                            |> eventToSendToJsToJson
-                                            |> config.toJs
-                                            |> Cmd.map Basics.never
+                                            |> List.singleton
                                 )
 
                     unexpectedState ->
-                        ( unexpectedState, Cmd.none )
+                        ( unexpectedState, [] )
 
             ModuleRemoved moduleRemoved ->
                 case state of
@@ -715,7 +712,7 @@ reactToEvent config event =
                             }
                         , case maybeNextFixableErrorOrAllUnfixable of
                             Nothing ->
-                                Cmd.none
+                                []
 
                             Just nextFixableErrorOrAllUnfixable ->
                                 ErrorsReceived
@@ -724,13 +721,11 @@ reactToEvent config event =
                                             |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
                                     , errors = nextFixableErrorOrAllUnfixable
                                     }
-                                    |> eventToSendToJsToJson
-                                    |> config.toJs
-                                    |> Cmd.map Basics.never
+                                    |> List.singleton
                         )
 
                     unexpectedState ->
-                        ( unexpectedState, Cmd.none )
+                        ( unexpectedState, [] )
 
             ExtraFileAddedOrChanged fileAddedOrChanged ->
                 case state of
@@ -784,7 +779,7 @@ reactToEvent config event =
                             }
                         , case maybeNextFixableErrorOrAllUnfixable of
                             Nothing ->
-                                Cmd.none
+                                []
 
                             Just nextFixableErrorOrAllUnfixable ->
                                 ErrorsReceived
@@ -793,13 +788,11 @@ reactToEvent config event =
                                             |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
                                     , errors = nextFixableErrorOrAllUnfixable
                                     }
-                                    |> eventToSendToJsToJson
-                                    |> config.toJs
-                                    |> Cmd.map Basics.never
+                                    |> List.singleton
                         )
 
                     unexpectedState ->
-                        ( unexpectedState, Cmd.none )
+                        ( unexpectedState, [] )
 
             ExtraFileRemoved fileRemoved ->
                 case state of
@@ -853,7 +846,7 @@ reactToEvent config event =
                             }
                         , case maybeNextFixableErrorOrAllUnfixable of
                             Nothing ->
-                                Cmd.none
+                                []
 
                             Just nextFixableErrorOrAllUnfixable ->
                                 ErrorsReceived
@@ -862,13 +855,11 @@ reactToEvent config event =
                                             |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
                                     , errors = nextFixableErrorOrAllUnfixable
                                     }
-                                    |> eventToSendToJsToJson
-                                    |> config.toJs
-                                    |> Cmd.map Basics.never
+                                    |> List.singleton
                         )
 
                     unexpectedState ->
-                        ( unexpectedState, Cmd.none )
+                        ( unexpectedState, [] )
 
             JsEventJsonFailedToDecode jsonDecodeError ->
                 ( state
@@ -876,9 +867,7 @@ reactToEvent config event =
                     ("bug: failed to decode json event from the js CLI"
                         ++ (jsonDecodeError |> Json.Decode.errorToString)
                     )
-                    |> eventToSendToJsToJson
-                    |> config.toJs
-                    |> Cmd.map Basics.never
+                    |> List.singleton
                 )
 
 
