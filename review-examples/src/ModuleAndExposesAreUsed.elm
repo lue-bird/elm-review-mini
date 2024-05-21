@@ -7,6 +7,7 @@ module ModuleAndExposesAreUsed exposing (review)
 -}
 
 import Declaration.LocalExtra
+import Elm.Docs
 import Elm.Project
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
@@ -83,6 +84,7 @@ review =
                 (\elmJson ->
                     { identifierUseCounts = FastDict.empty
                     , moduleExposes = FastDict.empty
+                    , dependencyModuleExposes = FastDict.empty
                     , modulesAllowingUnusedExposes =
                         case elmJson.project of
                             Elm.Project.Application _ ->
@@ -93,8 +95,8 @@ review =
                     , moduleImports = FastDict.empty
                     }
                 )
-            , Review.inspectModule
-                moduleDataToKnowledge
+            , Review.inspectDirectDependencies directDependenciesToKnowledge
+            , Review.inspectModule moduleDataToKnowledge
             ]
         , knowledgeMerge = knowledgeMerge
         , report = report
@@ -124,9 +126,37 @@ type alias Knowledge =
             , exposedSimpleNames : FastDict.Dict String Elm.Syntax.Range.Range
             , exposedTypesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : Set String }
             }
+    , dependencyModuleExposes :
+        FastDict.Dict
+            Elm.Syntax.ModuleName.ModuleName
+            { simpleNames : Set String
+            , typesWithVariantNames : FastDict.Dict String (Set String)
+            }
     , moduleImports :
         FastDict.Dict Elm.Syntax.ModuleName.ModuleName (List { path : String, row : Int })
     }
+
+
+directDependenciesToKnowledge :
+    List { dependency_ | modules : List Elm.Docs.Module }
+    -> Knowledge
+directDependenciesToKnowledge =
+    \dependencies ->
+        { identifierUseCounts = FastDict.empty
+        , moduleExposes = FastDict.empty
+        , dependencyModuleExposes =
+            dependencies
+                |> List.concatMap .modules
+                |> List.map
+                    (\moduleInterface ->
+                        ( moduleInterface.name |> String.split "."
+                        , moduleInterface |> Review.moduleInterfaceExposes
+                        )
+                    )
+                |> FastDict.fromList
+        , modulesAllowingUnusedExposes = Set.empty
+        , moduleImports = FastDict.empty
+        }
 
 
 moduleDataToKnowledge :
@@ -139,7 +169,9 @@ moduleDataToKnowledge =
             moduleName =
                 moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
         in
-        { identifierUseCounts =
+        { dependencyModuleExposes = FastDict.empty
+        , modulesAllowingUnusedExposes = Set.empty
+        , identifierUseCounts =
             { identifierUseCounts =
                 moduleData.syntax.declarations
                     |> FastDict.LocalExtra.unionFromListWithMap
@@ -209,7 +241,6 @@ moduleDataToKnowledge =
                 , exposedSimpleNames = exposes.simpleNames
                 , exposedTypesWithVariantNames = exposes.typesWithVariantNames
                 }
-        , modulesAllowingUnusedExposes = Set.empty
         , moduleImports =
             moduleData.syntax.imports
                 |> List.foldl
@@ -378,6 +409,8 @@ knowledgeMerge a b =
         FastDict.LocalExtra.unionWith (++)
             a.moduleImports
             b.moduleImports
+    , dependencyModuleExposes =
+        FastDict.union a.dependencyModuleExposes b.dependencyModuleExposes
     }
 
 
@@ -399,17 +432,19 @@ report knowledge =
                             explicitImports =
                                 Review.importsToExplicit
                                     { moduleExposes =
-                                        knowledge.moduleExposes
-                                            |> FastDict.map
-                                                (\_ moduleExposes ->
-                                                    { simpleNames =
-                                                        moduleExposes.exposedSimpleNames
-                                                            |> FastDict.LocalExtra.keys
-                                                    , typesWithVariantNames =
-                                                        moduleExposes.exposedTypesWithVariantNames
-                                                            |> FastDict.map (\_ rangeAndVariantNames -> rangeAndVariantNames.variants)
-                                                    }
-                                                )
+                                        FastDict.union knowledge.dependencyModuleExposes
+                                            (knowledge.moduleExposes
+                                                |> FastDict.map
+                                                    (\_ moduleExposes ->
+                                                        { simpleNames =
+                                                            moduleExposes.exposedSimpleNames
+                                                                |> FastDict.LocalExtra.keys
+                                                        , typesWithVariantNames =
+                                                            moduleExposes.exposedTypesWithVariantNames
+                                                                |> FastDict.map (\_ rangeAndVariantNames -> rangeAndVariantNames.variants)
+                                                        }
+                                                    )
+                                            )
                                     , importsExposingExplicit = identifierUseCountsForModule.importsExposingExplicit
                                     , importsExposingAll = identifierUseCountsForModule.importsExposingAll
                                     }
