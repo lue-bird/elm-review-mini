@@ -143,21 +143,15 @@ makeChangesHelp :
     -> List ( Int, Int )
     -> Result BugReport (List (Change a))
 makeChangesHelp changes getA getB ( x, y ) path =
-    -- IGNORE TCO
     case path of
         [] ->
             Ok changes
 
         ( prevX, prevY ) :: tail ->
-            let
-                makeChangesHelpWith : Change a -> Result BugReport (List (Change a))
-                makeChangesHelpWith c =
-                    makeChangesHelp (c :: changes) getA getB ( prevX, prevY ) tail
-            in
             if x - 1 == prevX && y - 1 == prevY then
                 case getA x of
                     Just a ->
-                        NoChange a |> makeChangesHelpWith
+                        makeChangesHelp (NoChange a :: changes) getA getB ( prevX, prevY ) tail
 
                     Nothing ->
                         Err CannotGetA
@@ -165,7 +159,7 @@ makeChangesHelp changes getA getB ( x, y ) path =
             else if x == prevX then
                 case getB y of
                     Just b ->
-                        Added b |> makeChangesHelpWith
+                        makeChangesHelp (Added b :: changes) getA getB ( prevX, prevY ) tail
 
                     Nothing ->
                         Err CannotGetB
@@ -173,7 +167,7 @@ makeChangesHelp changes getA getB ( x, y ) path =
             else if y == prevY then
                 case getA x of
                     Just a ->
-                        Removed a |> makeChangesHelpWith
+                        makeChangesHelp (Removed a :: changes) getA getB ( prevX, prevY ) tail
 
                     Nothing ->
                         Err CannotGetA
