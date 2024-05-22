@@ -44,6 +44,55 @@ export function startWatching(elmPorts: ElmPorts) {
         elmPorts.fromJs.send(eventData)
     }
 
+    function readDirectDependencies(elmJsonProject: any): Promise<{ elmJson: any, docsJson: any }[]> {
+        const directDependencyPaths: string[] =
+            elmJsonProject["type"] === "package" ?
+                Object.entries(elmJsonProject["dependencies"])
+                    .map(([name, versionConstraint]: [string, string]) =>
+                        path.join(elmHomePackages, name, versionConstraint.substring(0, versionConstraint.indexOf(" ")))
+                    )
+                : Object.entries(elmJsonProject["dependencies"]["direct"])
+                    .map(([name, version]: [string, string]) =>
+                        path.join(elmHomePackages, name, version)
+                    )
+        return Promise.all(
+            directDependencyPaths
+                .map(packageDirectory =>
+                    Promise.all([
+                        fs.promises.readFile(
+                            path.resolve(packageDirectory, "elm.json"),
+                            { encoding: "utf8" }
+                        ),
+                        fs.promises.readFile(
+                            path.resolve(packageDirectory, "docs.json"),
+                            { encoding: "utf8" }
+                        )
+                    ])
+                        .then(([elmJson, docsJson]) => ({
+                            elmJson: JSON.parse(elmJson),
+                            docsJson: JSON.parse(docsJson)
+                        }))
+                )
+        )
+    }
+
+    function elmJsonSourceDirectoryRelativePaths(elmJsonProject: any) {
+        return elmJsonProject["type"] === "application" ?
+            elmJsonProject["source-directories"]
+                .map((sourceDirectoryPath: string) => sourceDirectoryPath)
+            : // elmJsonProject["type"] === "package"
+            ["src"]
+    }
+
+    function readAllContainedFilePaths(directoryPath: string): Promise<string[]> {
+        return fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
+            .then(fileNames =>
+                fileNames
+                    .filter(dirent => dirent.isFile())
+                    .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
+            )
+    }
+
     elmPorts.toJs.subscribe(async function (fromElm: { tag: string, value: any }) {
         // console.log("elm → js: ", fromElm)
         switch (fromElm.tag) {
@@ -54,53 +103,16 @@ export function startWatching(elmPorts: ElmPorts) {
                 )
 
                 const elmJsonProject = JSON.parse(elmJsonSource)
-                const directDependencyNameVersionStrings: string[] =
-                    elmJsonProject["type"] === "package" ?
-                        Object.entries(elmJsonProject["dependencies"])
-                            .map(([name, versionConstraint]: [string, string]) =>
-                                path.join(name, versionConstraint.substring(0, versionConstraint.indexOf(" ")))
-                            )
-                        : Object.entries(elmJsonProject["dependencies"]["direct"])
-                            .map(([name, version]: [string, string]) =>
-                                path.join(name, version)
-                            )
-                const directDependencies = await Promise.all(
-                    directDependencyNameVersionStrings.map(packageDirectory =>
-                        Promise.all([
-                            fs.promises.readFile(
-                                path.resolve(elmHomePackages, packageDirectory, "elm.json"),
-                                { encoding: "utf8" }
-                            ),
-                            fs.promises.readFile(
-                                path.resolve(elmHomePackages, packageDirectory, "docs.json"),
-                                { encoding: "utf8" }
-                            )
-                        ])
-                            .then(([elmJson, docsJson]) => ({
-                                elmJson: JSON.parse(elmJson),
-                                docsJson: JSON.parse(docsJson)
-                            }))
-                    )
-                )
 
                 const sourceDirectoryPaths: string[] =
-                    elmJsonProject["type"] === "application" ?
-                        elmJsonProject["source-directories"]
-                            .map((sourceDirectoryPath: string) => path.resolve(process.cwd(), sourceDirectoryPath))
-                        :
-                        [path.resolve(process.cwd(), "src")]
+                    elmJsonSourceDirectoryRelativePaths(elmJsonProject)
+                        .map((relativeSourceDirectoryPath: string) => path.resolve(process.cwd(), relativeSourceDirectoryPath))
+
 
                 const modules: { path: string, source: string }[] =
                     await Promise.all(
                         sourceDirectoryPaths
-                            .map(directoryPath =>
-                                fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
-                                    .then(fileNames =>
-                                        fileNames
-                                            .filter(dirent => dirent.isFile())
-                                            .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
-                                    )
-                            )
+                            .map(directoryPath => readAllContainedFilePaths(directoryPath))
                     )
                         .then(filePaths =>
                             Promise.all(
@@ -134,14 +146,7 @@ export function startWatching(elmPorts: ElmPorts) {
                 const allExtraFiles: { path: string, source: string }[] =
                     await Promise.all(
                         extraDirectoryPaths
-                            .map(directoryPath =>
-                                fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
-                                    .then(fileNames =>
-                                        fileNames
-                                            .filter(dirent => dirent.isFile())
-                                            .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
-                                    )
-                            )
+                            .map(directoryPath => readAllContainedFilePaths(directoryPath))
                     )
                         .then(filePaths =>
                             Promise.all(
@@ -162,7 +167,7 @@ export function startWatching(elmPorts: ElmPorts) {
                     tag: "InitialFilesReceived",
                     value: {
                         elmJson: { source: elmJsonSource, project: elmJsonProject },
-                        directDependencies: directDependencies,
+                        directDependencies: await readDirectDependencies(elmJsonProject),
                         modules: modules,
                         extraFiles: allExtraFiles
                     }
