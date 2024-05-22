@@ -1,10 +1,10 @@
 module Tests exposing (tests)
 
+import BindingIsUsed
 import CommentDoesNotUseCertainMarks
 import DebugIsNotUsed
 import ImportExposingIsExplicit
 import LetValueOrFunctionIsTypeAnnotated
-import LocalBindingIsUsed
 import ModuleAndExposesAreUsed
 import ModuleExposingIsExplicit
 import ModuleNameWithUnderscoreForbid
@@ -22,7 +22,7 @@ tests =
         , moduleValueOrFunctionIsTypeAnnotatedTests
         , letValueOrFunctionIsTypeAnnotatedTests
         , moduleAndExposesAreUsedTests
-        , localBindingIsUsedTests
+        , bindingIsUsedTests
         , moduleExposingIsExplicitTests
         , importExposingIsExplicitTests
         , debugIsNotUsedTests
@@ -831,42 +831,49 @@ If you think you don't need it anymore or think it was added it prematurely, you
         ]
 
 
-localBindingIsUsedTests : Test
-localBindingIsUsedTests =
-    Test.describe "LocalBindingIsUsed"
-        [ Test.test "used pattern variables are not reported"
+bindingIsUsedTests : Test
+bindingIsUsedTests =
+    Test.describe "BindingIsUsed"
+        [ Test.test "used pattern variables, let declarations and module scope declarations are not reported"
             (\() ->
                 { projectConfiguration = Review.Test.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
+                            module A exposing (a)
 
-                        type A
-                            = A String
-                        
-                        a x0 ( x1, x2 ) { x3 } =
-                            \\(() as x4) ->
-                                let
-                                    (A x5) =
-                                        A x0
-                                    
-                                    ( _, _, x6 ) =
-                                        ( x3, x4, x5 )
-                                    
-                                    b (((x7))) =
-                                        case x1 of
-                                            [ x8 ] ->
-                                                [ x2, x6, x7, x8 ]
-                                            
-                                            _ ->
-                                                []
-                                in
-                                b x0
-                        """
+                            type A
+                                = A String
+                            
+                            type alias String2 =
+                                String
+                            
+                            identity2 =
+                                identity
+                            
+                            a x0 ( x1, x2 ) { x3 } =
+                                \\(() as x4) ->
+                                    let
+                                        (A x5) =
+                                            A x0
+                                        
+                                        ( _, _, x6 ) =
+                                            identity2 ( x3, x4, x5 )
+                                        
+                                        b : String2 -> List String
+                                        b (((x7))) =
+                                            case x1 of
+                                                [ x8 ] ->
+                                                    [ x2, x6, x7, x8 ]
+                                                
+                                                _ ->
+                                                    []
+                                    in
+                                    b x0
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors = []
                 }
                     |> Review.Test.run
@@ -877,22 +884,22 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a =
-                            let
-                                b =
-                                    let
-                                        c =
-                                            1
-                                    in
-                                    c
-                            in
-                            b
-                        """
+                            module A exposing (a)
+                            
+                            a =
+                                let
+                                    b =
+                                        let
+                                            c =
+                                                1
+                                        in
+                                        c
+                                in
+                                b
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors = []
                 }
                     |> Review.Test.run
@@ -921,7 +928,7 @@ localBindingIsUsedTests =
                             """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , range = Review.Test.Under "unused"
@@ -973,7 +980,7 @@ localBindingIsUsedTests =
                             """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , range = Review.Test.Under "unused"
@@ -1004,14 +1011,14 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a unused =
-                            ""
-                        """
+                            module A exposing (a)
+                            
+                            a unused =
+                                ""
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1038,14 +1045,14 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a { unused } =
-                            ""
-                        """
+                            module A exposing (a)
+                            
+                            a { unused } =
+                                ""
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1072,14 +1079,14 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a { unused, used } =
-                            used
-                        """
+                            module A exposing (a)
+                            
+                            a { unused, used } =
+                                used
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1106,14 +1113,14 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a { used, unused } =
-                            used
-                        """
+                            module A exposing (a)
+                            
+                            a { used, unused } =
+                                used
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1140,14 +1147,14 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a (() as unused) =
-                            ""
-                        """
+                            module A exposing (a)
+                            
+                            a (() as unused) =
+                                ""
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1174,14 +1181,14 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a =
-                            \\unused -> ""
-                        """
+                            module A exposing (a)
+                            
+                            a =
+                                \\unused -> ""
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1208,16 +1215,16 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a =
-                            case () of
-                                unused ->
-                                    ""
-                        """
+                            module A exposing (a)
+                            
+                            a =
+                                case () of
+                                    unused ->
+                                        ""
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1246,18 +1253,18 @@ localBindingIsUsedTests =
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
-                        module A exposing (a)
-                        
-                        a =
-                            let
-                                ( unused, _ ) =
-                                    ( (), () )
-                            in
-                            ""
-                        """
+                            module A exposing (a)
+                            
+                            a =
+                                let
+                                    ( unused, _ ) =
+                                        ( (), () )
+                                in
+                                ""
+                            """
                       }
                     ]
-                , review = LocalBindingIsUsed.review
+                , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
@@ -1274,6 +1281,203 @@ localBindingIsUsedTests =
                                                 ( (), () )
                                         in
                                         ""
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused declared value is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                ""
+                            
+                            unused =
+                                ""
+                            """
+                      }
+                    ]
+                , review = BindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "declared A.unused isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        ""
+                                    
+
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused declared function is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                ""
+                            
+                            unused x =
+                                x
+                            """
+                      }
+                    ]
+                , review = BindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "declared A.unused isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , range = Review.Test.Under "unused"
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        ""
+                                    
+                                    
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused declared type alias is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                ""
+                            
+                            type alias Unused =
+                                String
+                            """
+                      }
+                    ]
+                , review = BindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "declared A.Unused isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , range = Review.Test.Under "Unused"
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        ""
+                                    
+                                    
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused choice type with one variant is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+                            
+                            a =
+                                ""
+                            
+                            type UnusedChoiceType
+                                = UnusedVariant String
+                            """
+                      }
+                    ]
+                , review = BindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "declared A.UnusedVariant isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , range = Review.Test.Under "UnusedVariant"
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+                                    
+                                    a =
+                                        ""
+                                    
+                                    
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "unused variant in declared choice type with multiple variants is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a, Unused)
+                            
+                            a =
+                                A
+                            
+                            type Unused
+                                = A
+                                | Unused String
+                            """
+                      }
+                    ]
+                , review = BindingIsUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "declared A.Unused isn't used"
+                      , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                      , range = Review.Test.UnderExactly { section = "Unused", startingAt = { row = 8, column = 7 } }
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a, Unused)
+                                    
+                                    a =
+                                        A
+                                    
+                                    type Unused
+                                        = A
                                     """
                               }
                             ]

@@ -1,4 +1,4 @@
-module LocalBindingIsUsed exposing (review)
+module BindingIsUsed exposing (review)
 
 {-|
 
@@ -6,9 +6,13 @@ module LocalBindingIsUsed exposing (review)
 
 -}
 
+import Declaration.LocalExtra
 import Elm.Syntax.Declaration
+import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
 import Elm.Syntax.File
+import Elm.Syntax.Module
+import Elm.Syntax.ModuleName
 import Elm.Syntax.Node exposing (Node)
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
@@ -20,7 +24,11 @@ import Review
 import Set exposing (Set)
 
 
-{-| Report variables in patterns and let declared values and functions that are never referenced.
+{-| Report introduced names that are associated with a thing but never referenced:
+
+  - variables in patterns
+  - let declared values and functions
+  - module declared values, functions, type aliases and choice types
 
 An unused stray binding might be a sign that someone wanted to use it for something but didn't do so, yet.
 If that's not the case, explicitly say so (usually by replacing the variable with `_` or removing the declaration)
@@ -78,7 +86,7 @@ If that's not the case, explicitly say so (usually by replacing the variable wit
     e =
         let
             { unused } =
-                { unused = 0 }
+                x
         in
         ""
 
@@ -88,6 +96,12 @@ If that's not the case, explicitly say so (usually by replacing the variable wit
                 1
         in
         ""
+
+    type ChoiceTypeUnused
+        = VariantUnused
+
+    type alias TypeALiasUnused =
+        String
 
 -}
 review : Review.Review
@@ -117,10 +131,22 @@ type alias Knowledge =
             , nameRange : Elm.Syntax.Range.Range
             , declarationRemoveRange : Elm.Syntax.Range.Range
             }
+    , usedUnqualifiedIdentifiers :
+        FastDict.Dict
+            Elm.Syntax.ModuleName.ModuleName
+            (Set String)
+    , moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations :
+        List
+            { modulePath : String
+            , moduleName : Elm.Syntax.ModuleName.ModuleName
+            , unqualifiedName : String
+            , nameRange : Elm.Syntax.Range.Range
+            , removeRange : Elm.Syntax.Range.Range
+            }
     }
 
 
-type alias ModuleKnowledge =
+type alias InnerLocalBindingsKnowledge =
     { unqualifiedReferences : Set String
     , unusedPatternVariables :
         List
@@ -142,10 +168,10 @@ moduleToKnowledge : { info_ | path : String, syntax : Elm.Syntax.File.File } -> 
 moduleToKnowledge =
     \moduleData ->
         let
-            moduleKnowledge : ModuleKnowledge
+            moduleKnowledge : InnerLocalBindingsKnowledge
             moduleKnowledge =
                 moduleData.syntax.declarations
-                    |> flatModuleKnowledgeMap
+                    |> flatInnerLocalBindingsKnowledgeMap
                         (\(Elm.Syntax.Node.Node _ declaration) ->
                             case declaration of
                                 Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
@@ -166,6 +192,14 @@ moduleToKnowledge =
                                     , unqualifiedReferences = Set.empty
                                     }
                         )
+
+            moduleName : Elm.Syntax.ModuleName.ModuleName
+            moduleName =
+                moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
+
+            moduleExposes : { simpleNames : Set String, typesWithVariantNames : FastDict.Dict String (Set String) }
+            moduleExposes =
+                moduleData.syntax |> Review.moduleExposes
         in
         { unusedPatternVariables =
             moduleKnowledge.unusedPatternVariables
@@ -188,6 +222,126 @@ moduleToKnowledge =
                         , nameRange = unusedBinding.nameRange
                         }
                     )
+        , usedUnqualifiedIdentifiers =
+            moduleData.syntax.declarations
+                |> FastDict.LocalExtra.unionFromListWithMap
+                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                        declaration
+                            |> Declaration.LocalExtra.identifierUses
+                            |> FastDict.map (\_ ranges -> ranges |> List.length)
+                    )
+                    (+)
+                |> FastDict.foldl
+                    (\( qualification, unqualifiedName ) _ soFar ->
+                        case qualification of
+                            [] ->
+                                soFar |> Set.insert unqualifiedName
+
+                            _ :: _ ->
+                                soFar
+                    )
+                    Set.empty
+                |> FastDict.singleton moduleName
+        , moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations =
+            moduleData.syntax.declarations
+                |> List.concatMap
+                    (\(Elm.Syntax.Node.Node declarationRange declaration) ->
+                        case declaration of
+                            Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
+                                let
+                                    (Elm.Syntax.Node.Node nameRange unqualifiedName) =
+                                        valueOrFunctionDeclaration.declaration
+                                            |> Elm.Syntax.Node.value
+                                            |> .name
+                                in
+                                if moduleExposes.simpleNames |> Set.member unqualifiedName then
+                                    []
+
+                                else
+                                    { unqualifiedName = unqualifiedName
+                                    , nameRange = nameRange
+                                    , removeRange = declarationRange
+                                    }
+                                        |> List.singleton
+
+                            Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
+                                if moduleExposes.simpleNames |> Set.member (typeAliasDeclaration.name |> Elm.Syntax.Node.value) then
+                                    []
+
+                                else
+                                    { unqualifiedName = typeAliasDeclaration.name |> Elm.Syntax.Node.value
+                                    , nameRange = typeAliasDeclaration.name |> Elm.Syntax.Node.range
+                                    , removeRange = declarationRange
+                                    }
+                                        |> List.singleton
+
+                            Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                if moduleExposes.typesWithVariantNames |> FastDict.member (choiceTypeDeclaration.name |> Elm.Syntax.Node.value) then
+                                    []
+
+                                else
+                                    case choiceTypeDeclaration.constructors of
+                                        [] ->
+                                            []
+
+                                        [ Elm.Syntax.Node.Node _ onlyVariant ] ->
+                                            if moduleExposes.simpleNames |> Set.member (choiceTypeDeclaration.name |> Elm.Syntax.Node.value) then
+                                                []
+
+                                            else
+                                                { unqualifiedName = onlyVariant.name |> Elm.Syntax.Node.value
+                                                , nameRange = onlyVariant.name |> Elm.Syntax.Node.range
+                                                , removeRange = declarationRange
+                                                }
+                                                    |> List.singleton
+
+                                        (Elm.Syntax.Node.Node variant0Range variant0) :: variant1Node :: variant2NodeUp ->
+                                            (variant1Node :: variant2NodeUp)
+                                                |> List.foldl
+                                                    (\(Elm.Syntax.Node.Node variantRange variant) soFar ->
+                                                        { result =
+                                                            soFar.result
+                                                                |> (::)
+                                                                    { unqualifiedName = variant.name |> Elm.Syntax.Node.value
+                                                                    , nameRange = variant.name |> Elm.Syntax.Node.range
+                                                                    , removeRange = { start = soFar.variantEndLocation, end = variantRange.end }
+                                                                    }
+                                                        , variantEndLocation = variantRange.end
+                                                        }
+                                                    )
+                                                    { result =
+                                                        [ { unqualifiedName = variant0.name |> Elm.Syntax.Node.value
+                                                          , nameRange = variant0.name |> Elm.Syntax.Node.range
+                                                          , removeRange =
+                                                                { start = variant0Range.start
+                                                                , end = variant1Node |> Elm.Syntax.Node.range |> .end
+                                                                }
+                                                          }
+                                                        ]
+                                                    , variantEndLocation = variant0Range.end
+                                                    }
+                                                |> .result
+
+                            -- not supported
+                            Elm.Syntax.Declaration.InfixDeclaration _ ->
+                                []
+
+                            Elm.Syntax.Declaration.PortDeclaration _ ->
+                                []
+
+                            -- invalid elm
+                            Elm.Syntax.Declaration.Destructuring _ _ ->
+                                []
+                    )
+                |> List.map
+                    (\declared ->
+                        { moduleName = moduleName
+                        , modulePath = moduleData.path
+                        , unqualifiedName = declared.unqualifiedName
+                        , nameRange = declared.nameRange
+                        , removeRange = declared.removeRange
+                        }
+                    )
         }
 
 
@@ -198,7 +352,7 @@ moduleKnowledgeAddVariablesUnusedIn :
         , fixRange : Elm.Syntax.Range.Range
         , fixReplacement : String
         }
-    -> (ModuleKnowledge -> ModuleKnowledge)
+    -> (InnerLocalBindingsKnowledge -> InnerLocalBindingsKnowledge)
 moduleKnowledgeAddVariablesUnusedIn outerVariables =
     \expressionInnerKnowledge ->
         { unqualifiedReferences = expressionInnerKnowledge.unqualifiedReferences
@@ -221,7 +375,7 @@ moduleKnowledgeAddLetDeclaresValuesAndFunctionsUnusedIn :
         , nameRange : Elm.Syntax.Range.Range
         , declarationRemoveRange : Elm.Syntax.Range.Range
         }
-    -> (ModuleKnowledge -> ModuleKnowledge)
+    -> (InnerLocalBindingsKnowledge -> InnerLocalBindingsKnowledge)
 moduleKnowledgeAddLetDeclaresValuesAndFunctionsUnusedIn outerLetDeclaredValuesAndFunctions =
     \expressionInnerKnowledge ->
         { unqualifiedReferences = expressionInnerKnowledge.unqualifiedReferences
@@ -238,15 +392,15 @@ moduleKnowledgeAddLetDeclaresValuesAndFunctionsUnusedIn outerLetDeclaredValuesAn
         }
 
 
-flatModuleKnowledgeMap :
-    (element -> ModuleKnowledge)
-    -> (List element -> ModuleKnowledge)
-flatModuleKnowledgeMap elementToExpressionKnowledge =
+flatInnerLocalBindingsKnowledgeMap :
+    (element -> InnerLocalBindingsKnowledge)
+    -> (List element -> InnerLocalBindingsKnowledge)
+flatInnerLocalBindingsKnowledgeMap elementToExpressionKnowledge =
     \expressionNodeList ->
         expressionNodeList
             |> List.foldl
                 (\expressionNode soFar ->
-                    moduleKnowledgeMerge (expressionNode |> elementToExpressionKnowledge) soFar
+                    innerLocalBindingsKnowledgeMerge soFar (expressionNode |> elementToExpressionKnowledge)
                 )
                 { unqualifiedReferences = Set.empty
                 , unusedPatternVariables = []
@@ -254,18 +408,23 @@ flatModuleKnowledgeMap elementToExpressionKnowledge =
                 }
 
 
-moduleKnowledgeMerge : ModuleKnowledge -> ModuleKnowledge -> ModuleKnowledge
-moduleKnowledgeMerge knowledge soFar =
-    { unqualifiedReferences = Set.union knowledge.unqualifiedReferences soFar.unqualifiedReferences
-    , unusedPatternVariables = knowledge.unusedPatternVariables ++ soFar.unusedPatternVariables
+innerLocalBindingsKnowledgeMerge : InnerLocalBindingsKnowledge -> InnerLocalBindingsKnowledge -> InnerLocalBindingsKnowledge
+innerLocalBindingsKnowledgeMerge knowledge soFar =
+    { unqualifiedReferences =
+        Set.union knowledge.unqualifiedReferences
+            soFar.unqualifiedReferences
+    , unusedPatternVariables =
+        knowledge.unusedPatternVariables
+            ++ soFar.unusedPatternVariables
     , unusedLetDeclaredValuesAndFunctions =
-        knowledge.unusedLetDeclaredValuesAndFunctions ++ soFar.unusedLetDeclaredValuesAndFunctions
+        knowledge.unusedLetDeclaredValuesAndFunctions
+            ++ soFar.unusedLetDeclaredValuesAndFunctions
     }
 
 
 expressionToModuleKnowledge :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-    -> ModuleKnowledge
+    -> InnerLocalBindingsKnowledge
 expressionToModuleKnowledge =
     \(Elm.Syntax.Node.Node expressionRange expression) ->
         case expression of
@@ -276,10 +435,10 @@ expressionToModuleKnowledge =
                 }
 
             Elm.Syntax.Expression.Application subs ->
-                subs |> flatModuleKnowledgeMap expressionToModuleKnowledge
+                subs |> flatInnerLocalBindingsKnowledgeMap expressionToModuleKnowledge
 
             Elm.Syntax.Expression.OperatorApplication _ _ left right ->
-                moduleKnowledgeMerge (left |> expressionToModuleKnowledge) (right |> expressionToModuleKnowledge)
+                innerLocalBindingsKnowledgeMerge (left |> expressionToModuleKnowledge) (right |> expressionToModuleKnowledge)
 
             Elm.Syntax.Expression.FunctionOrValue qualification unqualified ->
                 case qualification of
@@ -296,8 +455,8 @@ expressionToModuleKnowledge =
                         }
 
             Elm.Syntax.Expression.IfBlock condition onTrue onFalse ->
-                moduleKnowledgeMerge (condition |> expressionToModuleKnowledge)
-                    (moduleKnowledgeMerge (onTrue |> expressionToModuleKnowledge)
+                innerLocalBindingsKnowledgeMerge (condition |> expressionToModuleKnowledge)
+                    (innerLocalBindingsKnowledgeMerge (onTrue |> expressionToModuleKnowledge)
                         (onFalse |> expressionToModuleKnowledge)
                     )
 
@@ -347,7 +506,7 @@ expressionToModuleKnowledge =
                 }
 
             Elm.Syntax.Expression.TupledExpression subs ->
-                subs |> flatModuleKnowledgeMap expressionToModuleKnowledge
+                subs |> flatInnerLocalBindingsKnowledgeMap expressionToModuleKnowledge
 
             Elm.Syntax.Expression.ParenthesizedExpression inParens ->
                 inParens |> expressionToModuleKnowledge
@@ -400,12 +559,12 @@ expressionToModuleKnowledge =
                                             Nothing
                                 )
                 in
-                moduleKnowledgeMerge
+                innerLocalBindingsKnowledgeMerge
                     (letIn.expression
                         |> expressionToModuleKnowledge
                     )
                     (letIn.declarations
-                        |> flatModuleKnowledgeMap
+                        |> flatInnerLocalBindingsKnowledgeMap
                             (\(Elm.Syntax.Node.Node _ letDeclaration) ->
                                 case letDeclaration of
                                     Elm.Syntax.Expression.LetFunction letValueOrFunction ->
@@ -430,10 +589,10 @@ expressionToModuleKnowledge =
                     |> moduleKnowledgeAddLetDeclaresValuesAndFunctionsUnusedIn declaredNames
 
             Elm.Syntax.Expression.CaseExpression caseOf ->
-                moduleKnowledgeMerge
+                innerLocalBindingsKnowledgeMerge
                     (caseOf.expression |> expressionToModuleKnowledge)
                     (caseOf.cases
-                        |> flatModuleKnowledgeMap
+                        |> flatInnerLocalBindingsKnowledgeMap
                             (\( patternInCase, expressionInCase ) ->
                                 expressionInCase
                                     |> expressionToModuleKnowledge
@@ -453,13 +612,13 @@ expressionToModuleKnowledge =
 
             Elm.Syntax.Expression.RecordExpr fields ->
                 fields
-                    |> flatModuleKnowledgeMap
+                    |> flatInnerLocalBindingsKnowledgeMap
                         (\(Elm.Syntax.Node.Node _ ( _, newFieldValue )) ->
                             newFieldValue |> expressionToModuleKnowledge
                         )
 
             Elm.Syntax.Expression.ListExpr subs ->
-                subs |> flatModuleKnowledgeMap expressionToModuleKnowledge
+                subs |> flatInnerLocalBindingsKnowledgeMap expressionToModuleKnowledge
 
             Elm.Syntax.Expression.RecordAccess record _ ->
                 record |> expressionToModuleKnowledge
@@ -472,7 +631,7 @@ expressionToModuleKnowledge =
 
             Elm.Syntax.Expression.RecordUpdateExpression _ newFields ->
                 newFields
-                    |> flatModuleKnowledgeMap
+                    |> flatInnerLocalBindingsKnowledgeMap
                         (\(Elm.Syntax.Node.Node _ ( _, newFieldValue )) ->
                             newFieldValue |> expressionToModuleKnowledge
                         )
@@ -486,10 +645,16 @@ expressionToModuleKnowledge =
 
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge
 knowledgeMerge a b =
-    { unusedPatternVariables = a.unusedPatternVariables ++ b.unusedPatternVariables
+    { unusedPatternVariables =
+        a.unusedPatternVariables ++ b.unusedPatternVariables
     , unusedLetDeclaredValuesAndFunctions =
         a.unusedLetDeclaredValuesAndFunctions
             ++ b.unusedLetDeclaredValuesAndFunctions
+    , usedUnqualifiedIdentifiers =
+        FastDict.union a.usedUnqualifiedIdentifiers b.usedUnqualifiedIdentifiers
+    , moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations =
+        a.moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations
+            ++ b.moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations
     }
 
 
@@ -529,6 +694,36 @@ report knowledge =
                       }
                     ]
                 }
+            )
+    , knowledge.moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations
+        |> List.filterMap
+            (\moduleLocalBinding ->
+                case knowledge.usedUnqualifiedIdentifiers |> FastDict.get moduleLocalBinding.moduleName of
+                    Nothing ->
+                        Nothing
+
+                    Just usedUnqualifiedIdentifiersInModule ->
+                        if usedUnqualifiedIdentifiersInModule |> Set.member moduleLocalBinding.unqualifiedName then
+                            Nothing
+
+                        else
+                            { path = moduleLocalBinding.modulePath
+                            , message =
+                                "declared "
+                                    ++ (moduleLocalBinding.moduleName |> String.join ".")
+                                    ++ "."
+                                    ++ moduleLocalBinding.unqualifiedName
+                                    ++ " isn't used"
+                            , details =
+                                [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
+                            , range = moduleLocalBinding.nameRange
+                            , fix =
+                                [ { path = moduleLocalBinding.modulePath
+                                  , edits = [ Review.removeRange moduleLocalBinding.removeRange ]
+                                  }
+                                ]
+                            }
+                                |> Just
             )
     ]
         |> List.concat
