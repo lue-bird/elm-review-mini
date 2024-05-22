@@ -578,6 +578,75 @@ If you think you don't need it anymore or think it was added it prematurely, you
                 }
                     |> Review.Test.run
             )
+        , Test.test "unused exposed value, usage fully qualified, cleaning up unused exposes"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a, b)
+                            a =
+                                1
+                            b =
+                                2
+                            """
+                      }
+                    , { path = "src/B.elm"
+                      , source = """
+                            module B exposing (c)
+                            import A exposing (a)
+                            c =
+                                ""
+                            """
+                      }
+                    , { path = "src/Main.elm"
+                      , source = """
+                            module Main exposing (main)
+                            import A
+                            import B
+                            main =
+                                A.b ++ B.c
+                            """
+                      }
+                    ]
+                , review = ModuleAndExposesAreUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "expose A.a isn't used outside of this module"
+                      , details =
+                            [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
+Or maybe you've since moved in a different direction,
+in which case allowing the unused code to sit can make it harder to find what's important."""
+                            , """If intended for future use, try gradually using it.
+If intended as a very generic utility, try moving it into a package
+(possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
+If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
+                            ]
+                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (b)
+                                    a =
+                                        1
+                                    b =
+                                        2
+                                    """
+                              }
+                            , { path = "src/B.elm"
+                              , source = """
+                                    module B exposing (c)
+                                    import A 
+                                    c =
+                                        ""
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
         , Test.test "unused exposed value as the only expose"
             (\() ->
                 { projectConfiguration = Review.Test.applicationConfigurationMinimal
@@ -662,6 +731,8 @@ If you think you don't need it anymore or think it was added it prematurely, you
                             [ { path = "src/Main.elm"
                               , source = """
                                     module Main exposing (main)
+
+
                                     main =
                                         ""
                                     """

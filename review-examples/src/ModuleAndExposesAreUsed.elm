@@ -19,6 +19,7 @@ import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
 import FastDict.LocalExtra
+import List.LocalExtra
 import Review
 import Set exposing (Set)
 
@@ -133,7 +134,19 @@ type alias Knowledge =
             , typesWithVariantNames : FastDict.Dict String (Set String)
             }
     , moduleImports :
-        FastDict.Dict Elm.Syntax.ModuleName.ModuleName (List { path : String, row : Int })
+        FastDict.Dict
+            Elm.Syntax.ModuleName.ModuleName
+            (List
+                { path : String
+                , range : Elm.Syntax.Range.Range
+                , exposes :
+                    Maybe
+                        { simpleNames : Set String
+                        , typesExposingVariants : Set String
+                        , exposingRange : Elm.Syntax.Range.Range
+                        }
+                }
+            )
     }
 
 
@@ -252,7 +265,26 @@ moduleDataToKnowledge =
                                         |> Maybe.withDefault []
                                         |> (::)
                                             { path = moduleData.path
-                                            , row = importLineRange.start.row
+                                            , range = importLineRange
+                                            , exposes =
+                                                case import_.exposingList of
+                                                    Nothing ->
+                                                        Nothing
+
+                                                    Just (Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _)) ->
+                                                        Nothing
+
+                                                    Just (Elm.Syntax.Node.Node exposingRange (Elm.Syntax.Exposing.Explicit topLevelExposeList)) ->
+                                                        let
+                                                            exposes : { simpleNames : Set String, typesExposingVariants : Set String }
+                                                            exposes =
+                                                                topLevelExposeList |> Review.topLevelExposeListToExposes
+                                                        in
+                                                        { exposingRange = exposingRange
+                                                        , simpleNames = exposes.simpleNames
+                                                        , typesExposingVariants = exposes.typesExposingVariants
+                                                        }
+                                                            |> Just
                                             }
                                         |> Just
                                 )
@@ -266,7 +298,10 @@ moduleToExposes :
     ->
         { range : Elm.Syntax.Range.Range
         , simpleNames : FastDict.Dict String Elm.Syntax.Range.Range
-        , typesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : Set String }
+        , typesWithVariantNames :
+            FastDict.Dict
+                String
+                { range : Elm.Syntax.Range.Range, variants : Set String }
         }
 moduleToExposes syntaxFile =
     let
@@ -327,10 +362,10 @@ moduleToExposes syntaxFile =
                                         soFar.simpleNames |> FastDict.insert valueOrFunctionName exposeRange
                                 }
 
-                            Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
+                            Elm.Syntax.Exposing.TypeOrAliasExpose typeAliasExposeName ->
                                 { soFar
                                     | simpleNames =
-                                        soFar.simpleNames |> FastDict.insert exposeName exposeRange
+                                        soFar.simpleNames |> FastDict.insert typeAliasExposeName exposeRange
                                 }
 
                             Elm.Syntax.Exposing.InfixExpose symbol ->
@@ -451,7 +486,7 @@ report knowledge =
                         in
                         identifierUseCountsForModule.identifierUseCounts
                             |> FastDict.foldl
-                                (\( qualification, unqualified ) referenceCount soFar ->
+                                (\( qualification, unqualified ) identifierCountCount soFar ->
                                     soFar
                                         |> FastDict.update
                                             ( ( qualification, unqualified ) |> Review.determineModuleOrigin explicitImports |> Maybe.withDefault []
@@ -459,7 +494,7 @@ report knowledge =
                                             )
                                             (\countSoFar ->
                                                 (countSoFar |> Maybe.withDefault 0)
-                                                    + referenceCount
+                                                    + identifierCountCount
                                                     |> Just
                                             )
                                 )
@@ -492,25 +527,24 @@ report knowledge =
                 in
                 [ moduleKnowledge.exposes.exposedSimpleNames
                     |> FastDict.LocalExtra.justsToListMap
-                        (\exposeUnqualified exposeRange ->
-                            if usedReferences |> Set.member ( moduleKnowledge.name, exposeUnqualified ) then
+                        (\simpleNameExposeUnqualified exposeRange ->
+                            if usedReferences |> Set.member ( moduleKnowledge.name, simpleNameExposeUnqualified ) then
                                 Nothing
 
                             else
                                 let
-                                    fixedExposes : Set String
+                                    fixedExposes : { typesExposingVariants : Set String, simpleNames : Set String }
                                     fixedExposes =
-                                        Set.union
-                                            (moduleKnowledge.exposes.exposedSimpleNames
+                                        { simpleNames =
+                                            moduleKnowledge.exposes.exposedSimpleNames
                                                 |> FastDict.LocalExtra.keys
-                                                |> Set.remove exposeUnqualified
-                                            )
-                                            (moduleKnowledge.exposes.exposedTypesWithVariantNames
+                                                |> Set.remove simpleNameExposeUnqualified
+                                        , typesExposingVariants =
+                                            moduleKnowledge.exposes.exposedTypesWithVariantNames
                                                 |> FastDict.LocalExtra.keys
-                                                |> Set.map (\typeExposingVariants -> typeExposingVariants ++ "(..)")
-                                            )
+                                        }
                                 in
-                                if fixedExposes |> Set.isEmpty then
+                                if (fixedExposes.simpleNames |> Set.isEmpty) && (fixedExposes.typesExposingVariants |> Set.isEmpty) then
                                     { path = moduleKnowledge.exposes.path
                                     , message = [ "module ", moduleKnowledge.name |> String.join ".", " isn't used" ] |> String.concat
                                     , details =
@@ -535,10 +569,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                                         (\moduleImport ->
                                                             { path = moduleImport.path
                                                             , edits =
-                                                                [ Review.removeRange
-                                                                    { start = { row = moduleImport.row, column = 1 }
-                                                                    , end = { row = moduleImport.row + 1, column = 1 }
-                                                                    }
+                                                                [ Review.removeRange moduleImport.range
                                                                 ]
                                                             }
                                                         )
@@ -547,7 +578,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
 
                                 else
                                     { path = moduleKnowledge.exposes.path
-                                    , message = [ "expose ", ( moduleKnowledge.name, exposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
+                                    , message = [ "expose ", ( moduleKnowledge.name, simpleNameExposeUnqualified ) |> referenceToString, " isn't used outside of this module" ] |> String.concat
                                     , details =
                                         [ """Unused code might be a sign that someone wanted to use it for something but didn't do so, yet.
 Or maybe you've since moved in a different direction,
@@ -559,13 +590,42 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                         ]
                                     , range = exposeRange
                                     , fix =
-                                        [ { path = moduleKnowledge.exposes.path
-                                          , edits =
-                                                [ Review.replaceRange moduleKnowledge.exposes.exposingRange
-                                                    (fixedExposes |> exposingToString)
-                                                ]
-                                          }
-                                        ]
+                                        { path = moduleKnowledge.exposes.path
+                                        , edits =
+                                            [ Review.replaceRange moduleKnowledge.exposes.exposingRange
+                                                (fixedExposes |> exposingToString)
+                                            ]
+                                        }
+                                            :: (case knowledge.moduleImports |> FastDict.get moduleKnowledge.name of
+                                                    Nothing ->
+                                                        []
+
+                                                    Just importsOfModule ->
+                                                        importsOfModule
+                                                            |> List.filterMap
+                                                                (\importOfModule ->
+                                                                    case importOfModule.exposes of
+                                                                        Nothing ->
+                                                                            Nothing
+
+                                                                        Just importOfModuleExposes ->
+                                                                            if importOfModuleExposes.simpleNames |> Set.member simpleNameExposeUnqualified then
+                                                                                { path = importOfModule.path
+                                                                                , edits =
+                                                                                    [ Review.replaceRange importOfModuleExposes.exposingRange
+                                                                                        ({ typesExposingVariants = importOfModuleExposes.typesExposingVariants
+                                                                                         , simpleNames = importOfModuleExposes.simpleNames |> Set.remove simpleNameExposeUnqualified
+                                                                                         }
+                                                                                            |> exposingToString
+                                                                                        )
+                                                                                    ]
+                                                                                }
+                                                                                    |> Just
+
+                                                                            else
+                                                                                Nothing
+                                                                )
+                                               )
                                     }
                                         |> Just
                         )
@@ -598,22 +658,53 @@ If you think you don't need it anymore or think it was added it prematurely, you
                                         ]
                                     , range = typeExpose.range
                                     , fix =
-                                        [ { path = moduleKnowledge.exposes.path
-                                          , edits =
-                                                [ Review.replaceRange moduleKnowledge.exposes.exposingRange
-                                                    (Set.union
-                                                        (moduleKnowledge.exposes.exposedSimpleNames
-                                                            |> FastDict.LocalExtra.keys
-                                                        )
-                                                        (moduleKnowledge.exposes.exposedTypesWithVariantNames
-                                                            |> FastDict.LocalExtra.keys
-                                                            |> Set.remove typeExposeUnqualified
-                                                        )
-                                                        |> exposingToString
-                                                    )
-                                                ]
-                                          }
-                                        ]
+                                        { path = moduleKnowledge.exposes.path
+                                        , edits =
+                                            [ Review.replaceRange moduleKnowledge.exposes.exposingRange
+                                                ({ simpleNames =
+                                                    moduleKnowledge.exposes.exposedSimpleNames
+                                                        |> FastDict.LocalExtra.keys
+                                                 , typesExposingVariants =
+                                                    moduleKnowledge.exposes.exposedTypesWithVariantNames
+                                                        |> FastDict.LocalExtra.keys
+                                                        |> Set.remove typeExposeUnqualified
+                                                 }
+                                                    |> exposingToString
+                                                )
+                                            ]
+                                        }
+                                            :: (case knowledge.moduleImports |> FastDict.get moduleKnowledge.name of
+                                                    Nothing ->
+                                                        []
+
+                                                    Just importsOfModule ->
+                                                        importsOfModule
+                                                            |> List.filterMap
+                                                                (\importOfModule ->
+                                                                    case importOfModule.exposes of
+                                                                        Nothing ->
+                                                                            Nothing
+
+                                                                        Just importOfModuleExposes ->
+                                                                            if importOfModuleExposes.typesExposingVariants |> Set.member typeExposeUnqualified then
+                                                                                { path = importOfModule.path
+                                                                                , edits =
+                                                                                    [ Review.replaceRange importOfModuleExposes.exposingRange
+                                                                                        ({ typesExposingVariants =
+                                                                                            importOfModuleExposes.typesExposingVariants
+                                                                                                |> Set.remove typeExposeUnqualified
+                                                                                         , simpleNames = importOfModuleExposes.simpleNames
+                                                                                         }
+                                                                                            |> exposingToString
+                                                                                        )
+                                                                                    ]
+                                                                                }
+                                                                                    |> Just
+
+                                                                            else
+                                                                                Nothing
+                                                                )
+                                               )
                                     }
                                         |> Just
                         )
@@ -622,10 +713,22 @@ If you think you don't need it anymore or think it was added it prematurely, you
             )
 
 
-exposingToString : Set String -> String
+exposingToString : { simpleNames : Set String, typesExposingVariants : Set String } -> String
 exposingToString =
     \exposes ->
-        [ "exposing (", exposes |> Set.toList |> String.join ", ", ")" ] |> String.concat
+        let
+            exposesSet : Set String
+            exposesSet =
+                Set.union exposes.simpleNames
+                    (exposes.typesExposingVariants
+                        |> Set.map (\typeExposingVariants -> typeExposingVariants ++ "(..)")
+                    )
+        in
+        if exposesSet |> Set.isEmpty then
+            ""
+
+        else
+            [ "exposing (", exposesSet |> Set.toList |> String.join ", ", ")" ] |> String.concat
 
 
 referenceToString : ( Elm.Syntax.ModuleName.ModuleName, String ) -> String
