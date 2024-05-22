@@ -39,16 +39,40 @@ unionWith :
     -> FastDict.Dict comparable v
     -> FastDict.Dict comparable v
     -> FastDict.Dict comparable v
-unionWith valueABMerge a b =
-    FastDict.merge
-        FastDict.insert
-        (\reference aValue bValue soFar ->
-            soFar |> FastDict.insert reference (valueABMerge aValue bValue)
-        )
-        FastDict.insert
-        a
-        b
-        FastDict.empty
+unionWith valueABMerge aDict bDict =
+    if (aDict |> FastDict.size) > (bDict |> FastDict.size) then
+        FastDict.foldl
+            (\key b soFar ->
+                soFar
+                    |> FastDict.update key
+                        (\existingValueAtKey ->
+                            case existingValueAtKey of
+                                Nothing ->
+                                    b |> Just
+
+                                Just a ->
+                                    valueABMerge a b |> Just
+                        )
+            )
+            aDict
+            bDict
+
+    else
+        FastDict.foldl
+            (\key a soFar ->
+                soFar
+                    |> FastDict.update key
+                        (\existingValueAtKey ->
+                            case existingValueAtKey of
+                                Nothing ->
+                                    a |> Just
+
+                                Just b ->
+                                    valueABMerge a b |> Just
+                        )
+            )
+            bDict
+            aDict
 
 
 justsToListMap : (key -> value -> Maybe element) -> (FastDict.Dict key value -> List element)
