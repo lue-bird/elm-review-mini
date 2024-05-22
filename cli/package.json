@@ -1,6 +1,6 @@
 {
   "name": "@lue-bird/elm-review-mini-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "run review-mini from the command line",
   "main": "src-compiled/index.js",
   "type": "module",
