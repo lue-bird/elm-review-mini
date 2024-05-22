@@ -70,6 +70,8 @@ Equivalent to (copy and adapt if necessary)
     , directDependencies = []
     }
 
+(elm/core is automatically part of every tested project)
+
 -}
 applicationConfigurationMinimal : { elmJson : String, directDependencies : List { elmJson : String, docsJson : String } }
 applicationConfigurationMinimal =
@@ -152,54 +154,6 @@ expectationsViolated =
 with your provided expected errors.
 
     import Review.Test
-    import Test exposing (Test, describe, test)
-    import The.Review.You.Want.To.Test exposing (rule)
-
-    tests : Test
-    tests =
-        describe "The.Review.You.Want.To.Test"
-            [ test "should report ... when ..."
-                (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
-                    , files =
-                        [ { path = "src/A/B.elm"
-                          , source = """
-                              module A.B exposing (a, b, c)
-                              import B
-                              a = 1
-                              b = 2
-                              c = 3
-                              """
-                          }
-                        , { path = "src/B.elm"
-                          , source = """
-                              module B exposing (x, y, z)
-                              x = 1
-                              y = 2
-                              z = 3
-                              """
-                          }
-                        ]
-                    , review = YourConvention.review
-                    , expectedErrors =
-                        [ { path = "src/A/B.elm"
-                          , message = "message"
-                          , details = [ "details" ]
-                          , range = Review.Test.Under "where it's located"
-                          , fixedFiles = []
-                          }
-                        ]
-                    }
-                        |> Review.Test.run
-                )
-            ]
-
-The extra indentation specified by the first line will be stripped of all the provided source strings.
-
-You can also specify a custom project config in case you need to test a package
-or want to add dependencies (elm/core is automatically part of every tested project)
-
-    import Review.Test
     import Test exposing (Test)
     import DebugForbid
 
@@ -212,36 +166,13 @@ or want to add dependencies (elm/core is automatically part of every tested proj
                         [ { path = "src/A.elm"
                           , source = """
                                 module A exposing (a)
+                                import Html
                                 a =
                                     Debug.log "some" "message"
                                 """
                           }
                         ]
                     , projectConfiguration =
-                        { elmJson = """
-                            {
-                                "type": "application",
-                                "source-directories": [
-                                    "src"
-                                ],
-                                "elm-version": "0.19.1",
-                                "dependencies": {
-                                    "direct": {
-                                        "elm/core": "1.0.5",
-                                        "elm/html": "1.0.0"
-                                    },
-                                    "indirect": {
-                                    }
-                                },
-                                "test-dependencies": {
-                                    "direct": {},
-                                    "indirect": {}
-                                }
-                            }
-                            """
-                        , directDependencies =
-                            [ ..elm html elm.json and docs.json copied from elm home.. ]
-                        }
                     , review = DebugForbid.review
                     , expectedErrors =
                         [ { path = "src/A.elm"
@@ -261,9 +192,15 @@ or want to add dependencies (elm/core is automatically part of every tested proj
                         ]
                     }
                         |> Review.Test.run
-
                 )
             ]
+
+The extra indentation specified by the first line will be stripped of all the provided source strings.
+
+You can also specify a custom project config in case you need to test a package
+or want to add dependencies (elm/core is automatically part of every tested project)
+by supplying the raw sources for the `elm.json` and the direct dependency `docs.json`
+and `elm.json` you can find in your elm root folder.
 
 -}
 run :
