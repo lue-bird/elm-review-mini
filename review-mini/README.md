@@ -1,4 +1,4 @@
-[`elm-review-mini`](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/latest/) configuration and CLI (requires the latest `node.js` and `npm` to be installed).
+[`elm-review-mini`](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/latest/) configuration and CLI setup (requires the latest `node.js` and `npm` to be installed).
 Before the first run,
 ```bash
 npm install --prefix review-mini
