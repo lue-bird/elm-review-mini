@@ -170,6 +170,7 @@ export function startWatching(elmPorts: ElmPorts) {
                     })
                     readLineInterface.question("To apply these edits, enter y. To reject, enter n: ")
                         .then(async (response) => {
+                            readLineInterface.close()
                             if (response === "y") {
                                 await Promise.all(
                                     fromElm.value.fix.fixedSources
