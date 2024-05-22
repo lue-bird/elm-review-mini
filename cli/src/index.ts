@@ -44,55 +44,6 @@ export function startWatching(elmPorts: ElmPorts) {
         elmPorts.fromJs.send(eventData)
     }
 
-    function readDirectDependencies(elmJsonProject: any): Promise<{ elmJson: any, docsJson: any }[]> {
-        const directDependencyPaths: string[] =
-            elmJsonProject["type"] === "package" ?
-                Object.entries(elmJsonProject["dependencies"])
-                    .map(([name, versionConstraint]: [string, string]) =>
-                        path.join(elmHomePackages, name, versionConstraint.substring(0, versionConstraint.indexOf(" ")))
-                    )
-                : Object.entries(elmJsonProject["dependencies"]["direct"])
-                    .map(([name, version]: [string, string]) =>
-                        path.join(elmHomePackages, name, version)
-                    )
-        return Promise.all(
-            directDependencyPaths
-                .map(packageDirectory =>
-                    Promise.all([
-                        fs.promises.readFile(
-                            path.resolve(packageDirectory, "elm.json"),
-                            { encoding: "utf8" }
-                        ),
-                        fs.promises.readFile(
-                            path.resolve(packageDirectory, "docs.json"),
-                            { encoding: "utf8" }
-                        )
-                    ])
-                        .then(([elmJson, docsJson]) => ({
-                            elmJson: JSON.parse(elmJson),
-                            docsJson: JSON.parse(docsJson)
-                        }))
-                )
-        )
-    }
-
-    function elmJsonSourceDirectoryRelativePaths(elmJsonProject: any) {
-        return elmJsonProject["type"] === "application" ?
-            elmJsonProject["source-directories"]
-                .map((sourceDirectoryPath: string) => sourceDirectoryPath)
-            : // elmJsonProject["type"] === "package"
-            ["src"]
-    }
-
-    function readAllContainedFilePaths(directoryPath: string): Promise<string[]> {
-        return fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
-            .then(fileNames =>
-                fileNames
-                    .filter(dirent => dirent.isFile())
-                    .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
-            )
-    }
-
     elmPorts.toJs.subscribe(async function (fromElm: { tag: string, value: any }) {
         // console.log("elm → js: ", fromElm)
         switch (fromElm.tag) {
@@ -101,13 +52,11 @@ export function startWatching(elmPorts: ElmPorts) {
                     path.resolve(process.cwd(), "elm.json"),
                     { encoding: "utf8" }
                 )
-
                 const elmJsonProject = JSON.parse(elmJsonSource)
 
                 const sourceDirectoryPaths: string[] =
                     elmJsonSourceDirectoryRelativePaths(elmJsonProject)
-                        .map((relativeSourceDirectoryPath: string) => path.resolve(process.cwd(), relativeSourceDirectoryPath))
-
+                        .map(relative => path.resolve(process.cwd(), relative))
 
                 const modules: { path: string, source: string }[] =
                     await Promise.all(
@@ -143,6 +92,7 @@ export function startWatching(elmPorts: ElmPorts) {
                     extraPaths.filter(path => fs.lstatSync(path).isDirectory())
                 const extraFilePaths =
                     extraPaths.filter(path => fs.lstatSync(path).isFile())
+
                 const allExtraFiles: { path: string, source: string }[] =
                     await Promise.all(
                         extraDirectoryPaths
@@ -173,8 +123,8 @@ export function startWatching(elmPorts: ElmPorts) {
                     }
                 })
 
-                watchDirectories({
-                    directoryPaths: sourceDirectoryPaths,
+                watchPaths({
+                    paths: sourceDirectoryPaths,
                     onAddOrChange: async (fullPath) => {
                         sendToElm({
                             tag: "ModuleAddedOrChanged",
@@ -185,12 +135,14 @@ export function startWatching(elmPorts: ElmPorts) {
                         })
                     },
                     onDelete: async (fullPath) => {
-                        sendToElm({ tag: "ModuleRemoved", value: { path: path.relative(process.cwd(), fullPath) } })
+                        sendToElm({
+                            tag: "ModuleRemoved",
+                            value: { path: path.relative(process.cwd(), fullPath) }
+                        })
                     }
-                }
-                )
-                watchDirectories({
-                    directoryPaths: extraDirectoryPaths.concat(extraFilePaths),
+                })
+                watchPaths({
+                    paths: extraPaths,
                     onAddOrChange: async (fullPath) => {
                         sendToElm({
                             tag: "ExtraFileAddedOrChanged",
@@ -245,10 +197,58 @@ export function startWatching(elmPorts: ElmPorts) {
     })
 }
 
+function elmJsonSourceDirectoryRelativePaths(elmJsonProject: any): string[] {
+    return elmJsonProject["type"] === "application" ?
+        elmJsonProject["source-directories"]
+        : // elmJsonProject["type"] === "package"
+        ["src"]
+}
 
-function watchDirectories(
+function readDirectDependencies(elmJsonProject: any): Promise<{ elmJson: any, docsJson: any }[]> {
+    const directDependencyPaths: string[] =
+        elmJsonProject["type"] === "package" ?
+            Object.entries(elmJsonProject["dependencies"])
+                .map(([name, versionConstraint]: [string, string]) =>
+                    path.join(elmHomePackages, name, versionConstraint.substring(0, versionConstraint.indexOf(" ")))
+                )
+            : Object.entries(elmJsonProject["dependencies"]["direct"])
+                .map(([name, version]: [string, string]) =>
+                    path.join(elmHomePackages, name, version)
+                )
+    return Promise.all(
+        directDependencyPaths
+            .map(packageDirectory =>
+                Promise.all([
+                    fs.promises.readFile(
+                        path.resolve(packageDirectory, "elm.json"),
+                        { encoding: "utf8" }
+                    ),
+                    fs.promises.readFile(
+                        path.resolve(packageDirectory, "docs.json"),
+                        { encoding: "utf8" }
+                    )
+                ])
+                    .then(([elmJson, docsJson]) => ({
+                        elmJson: JSON.parse(elmJson),
+                        docsJson: JSON.parse(docsJson)
+                    }))
+            )
+    )
+}
+
+function readAllContainedFilePaths(directoryPath: string): Promise<string[]> {
+    return fs.promises.readdir(directoryPath, { recursive: true, encoding: "utf8", withFileTypes: true })
+        .then(fileNames =>
+            fileNames
+                .filter(dirent => dirent.isFile())
+                .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
+        )
+}
+
+
+function watchPaths(
     watch: {
-        directoryPaths: string[],
+        paths: string[],
         onDelete: (fullPath: string) => Promise<void>,
         onAddOrChange: (fullPath: string) => Promise<void>
     }
@@ -256,10 +256,10 @@ function watchDirectories(
     // most editors chunk up their file edits in 2, see
     // https://stackoverflow.com/questions/12978924/fs-watch-fired-twice-when-i-change-the-watched-file
     let debounced = true
-    watch.directoryPaths
-        .forEach(directoryPath => {
+    watch.paths
+        .forEach(directoryOrFilePath => {
             fs.watch(
-                directoryPath,
+                directoryOrFilePath,
                 { recursive: true, encoding: "utf8" },
                 async (_event, fileName) => {
                     if (debounced) {
@@ -268,7 +268,7 @@ function watchDirectories(
                             const currentTime = new Date()
                             console.log(`\n\n\n------ files changed at ${currentTime.getHours()}:${currentTime.getMinutes()}:${currentTime.getSeconds()}, reviewing again\n\n\n`)
                             console.clear()
-                            const fullPath = path.join(directoryPath, fileName)
+                            const fullPath = path.join(directoryOrFilePath, fileName)
                             if (fs.existsSync(fullPath)) {
                                 await watch.onAddOrChange(fullPath)
                             } else {
