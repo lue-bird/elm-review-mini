@@ -9,6 +9,7 @@ import ModuleAndExposesAreUsed
 import ModuleExposingIsExplicit
 import ModuleNameWithUnderscoreForbid
 import ModuleValueOrFunctionIsTypeAnnotated
+import RecordTypeAliasConstructorFunctionIsNotUsed
 import Review
 import Review.Test
 import Test exposing (Test)
@@ -26,6 +27,7 @@ tests =
         , importExposingIsExplicitTests
         , debugIsNotUsedTests
         , commentDoesNotUseCertainWordsTests
+        , recordTypeAliasConstructorFunctionIsNotUsedTests
         ]
 
 
@@ -2019,6 +2021,274 @@ commentDoesNotUseCertainWordsTests =
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
                       , range = Review.Test.Under "TODO"
                       , fixedFiles = []
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        ]
+
+
+recordTypeAliasConstructorFunctionIsNotUsedTests : Test
+recordTypeAliasConstructorFunctionIsNotUsedTests =
+    Test.describe "RecordTypeAliasConstructorFunctionIsNotUsed"
+        [ Test.test "normal function calls and variant calls are not reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                        module A exposing (a)
+
+                        a =
+                            [ Just { name = "Franziska" }
+                            , just { name = "Enes" }
+                            ]
+                            """
+                      }
+                    ]
+                , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
+                , expectedErrors = []
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "local fully applied record type alias constructor function use is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            type alias User =
+                                { name : String, age : Int }
+
+                            a =
+                                User "Ellabel" 80
+                            """
+                      }
+                    ]
+                , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "record type alias constructor function is used"
+                      , details =
+                            [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
+                            , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
+                            ]
+                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                module A exposing (a)
+
+                                type alias User =
+                                    { name : String, age : Int }
+
+                                a =
+                                    { name =
+                                         "Ellabel"
+                                    , age =
+                                                   80
+                                    }
+                                """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "imported fully applied record type alias constructor function use is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            import User
+
+                            a =
+                                User.User "Ellabel" 80
+                            """
+                      }
+                    , { path = "src/User.elm"
+                      , source = """
+                            module User exposing (User)
+                            
+                            type alias User =
+                                { name : String, age : Int }
+                            """
+                      }
+                    ]
+                , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "record type alias constructor function is used"
+                      , details =
+                            [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
+                            , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
+                            ]
+                      , range = Review.Test.Under "User.User"
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                    module A exposing (a)
+
+                                    import User
+
+                                    a =
+                                        { name =
+                                                  "Ellabel"
+                                        , age =
+                                                            80
+                                        }
+                                    """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "local non-applied record type alias constructor function use is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            type alias User =
+                                { name : String, age : Int }
+
+                            a =
+                                User
+                            """
+                      }
+                    ]
+                , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "record type alias constructor function is used"
+                      , details =
+                            [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
+                            , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
+                            ]
+                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                module A exposing (a)
+
+                                type alias User =
+                                    { name : String, age : Int }
+
+                                a =
+                                    (\\name age ->
+                                    { name = name
+                                    , age = age
+                                    }
+                                    )
+                                """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "local partially-applied record type alias constructor function use is reported"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            type alias User =
+                                { name : String, age : Int }
+
+                            a =
+                                User "Bob"
+                            """
+                      }
+                    ]
+                , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "record type alias constructor function is used"
+                      , details =
+                            [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
+                            , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
+                            ]
+                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                module A exposing (a)
+
+                                type alias User =
+                                    { name : String, age : Int }
+
+                                a =
+                                    (\\age ->
+                                    { name =
+                                         "Bob"
+                                    , age = age
+                                    }
+                                    )
+                                """
+                              }
+                            ]
+                      }
+                    ]
+                }
+                    |> Review.Test.run
+            )
+        , Test.test "local non-applied record type alias constructor function use is reported where field names and some _-suffixed already exist in scope"
+            (\() ->
+                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                , files =
+                    [ { path = "src/A.elm"
+                      , source = """
+                            module A exposing (a)
+
+                            type alias User =
+                                { name : String, age : Int }
+
+                            a age age_ =
+                                User
+                            """
+                      }
+                    ]
+                , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
+                , expectedErrors =
+                    [ { path = "src/A.elm"
+                      , message = "record type alias constructor function is used"
+                      , details =
+                            [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
+                            , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
+                            ]
+                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , fixedFiles =
+                            [ { path = "src/A.elm"
+                              , source = """
+                                module A exposing (a)
+
+                                type alias User =
+                                    { name : String, age : Int }
+
+                                a age age_ =
+                                    (\\name age__ ->
+                                    { name = name
+                                    , age = age__
+                                    }
+                                    )
+                                """
+                              }
+                            ]
                       }
                     ]
                 }

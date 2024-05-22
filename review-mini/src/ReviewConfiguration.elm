@@ -9,6 +9,7 @@ import ModuleValueOrFunctionIsTypeAnnotated
 import DebugIsNotUsed
 import LocalBindingIsUsed
 import CommentDoesNotUseCertainMarks
+import RecordTypeAliasConstructorFunctionIsNotUsed
 
 
 configuration : { extraPaths : List String, reviews : List Review.Review }
@@ -24,5 +25,6 @@ configuration =
         , DebugIsNotUsed.review
         , LocalBindingIsUsed.review
         , CommentDoesNotUseCertainMarks.review [ "TODO" ]
+        , RecordTypeAliasConstructorFunctionIsNotUsed.review
         ]
     }
