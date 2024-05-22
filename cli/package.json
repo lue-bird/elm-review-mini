@@ -19,7 +19,7 @@
     "simplicity"
   ],
   "author": "lue-bird",
-  "license": "MIT",
+  "license": "Unlicense",
   "devDependencies": {
     "@types/node": "^20.12.7",
     "typescript": "^5.4.5"

@@ -1,4 +1,4 @@
-This project is a fork of jfmengels/elm-review of which
+The elm package part of this codebase (everything in `src/`) is a fork of jfmengels/elm-review of which
 smaller bits and pieces ares still present.
 
 Below is its original LICENSE
