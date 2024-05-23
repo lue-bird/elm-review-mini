@@ -19,7 +19,7 @@ import Review
 import Set exposing (Set)
 
 
-{-| Enforces that all imports with exposes specify the member names
+{-| Enforce that all imports with exposes specify the member names
 and don't use the `exposing (..)` syntax to expose everything.
 
 When you import everything from a module without explicitly listing what you actually need,

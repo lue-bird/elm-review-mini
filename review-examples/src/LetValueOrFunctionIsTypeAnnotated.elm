@@ -18,7 +18,7 @@ import Review
 import Set exposing (Set)
 
 
-{-| Enforces that `let in` value/function declarations have a type annotation.
+{-| Enforce that `let in` value/function declarations have a type annotation.
 
 Type annotations help to quickly understand what's expected in the code, and it will help the compiler give better error messages.
 
