@@ -7,7 +7,14 @@ sourceDirectories : Elm.Project.Project -> List String
 sourceDirectories elmJson =
     case elmJson of
         Elm.Project.Application application ->
-            application.dirs |> List.map (\dir -> dir |> removeDotSlashAtBeginning |> pathMakeOSAgnostic |> endWithSlash)
+            application.dirs
+                |> List.map
+                    (\directoryPath ->
+                        directoryPath
+                            |> removeDotSlashAtBeginning
+                            |> pathMakeOSAgnostic
+                            |> endWithSlash
+                    )
 
         Elm.Project.Package _ ->
             [ "src/" ]
@@ -19,18 +26,18 @@ pathMakeOSAgnostic =
 
 
 removeDotSlashAtBeginning : String -> String
-removeDotSlashAtBeginning dir =
-    if String.startsWith "./" dir then
-        String.dropLeft 2 dir
+removeDotSlashAtBeginning directoryPath =
+    if directoryPath |> String.startsWith "./" then
+        String.dropLeft 2 directoryPath
 
     else
-        dir
+        directoryPath
 
 
 endWithSlash : String -> String
-endWithSlash dir =
-    if String.endsWith "/" dir then
-        dir
+endWithSlash directoryPath =
+    if directoryPath |> String.endsWith "/" then
+        directoryPath
 
     else
-        dir ++ "/"
+        directoryPath ++ "/"
