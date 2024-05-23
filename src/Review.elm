@@ -1067,8 +1067,16 @@ expressionSubsWithBindings =
             Elm.Syntax.Expression.ParenthesizedExpression expr ->
                 [ expr |> withoutBindings ]
 
-            Elm.Syntax.Expression.OperatorApplication _ _ left right ->
-                [ left |> withoutBindings, right |> withoutBindings ]
+            Elm.Syntax.Expression.OperatorApplication _ direction left right ->
+                case direction of
+                    Elm.Syntax.Infix.Left ->
+                        [ left |> withoutBindings, right |> withoutBindings ]
+
+                    Elm.Syntax.Infix.Right ->
+                        [ right |> withoutBindings, left |> withoutBindings ]
+
+                    Elm.Syntax.Infix.Non ->
+                        [ left |> withoutBindings, right |> withoutBindings ]
 
             Elm.Syntax.Expression.IfBlock cond then_ else_ ->
                 [ cond |> withoutBindings
