@@ -27,7 +27,7 @@ import Set exposing (Set)
 import Set.LocalExtra
 
 
-{-| Reports using a record type alias constructor function
+{-| Report using a record type alias constructor function
 and suggests a fix that converts it a record.
 [Read about why](https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why).
 
