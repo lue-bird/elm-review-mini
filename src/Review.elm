@@ -102,6 +102,7 @@ import ElmCoreDependency
 import FastDict
 import FastDictLocalExtra
 import FastSet
+import FastSetLocalExtra
 import ListLocalExtra
 import Unicode
 
@@ -1234,13 +1235,12 @@ packageElmJsonExposedModules : Elm.Project.Exposed -> FastSet.Set Elm.Syntax.Mod
 packageElmJsonExposedModules exposed =
     case exposed of
         Elm.Project.ExposedList list ->
-            list |> List.map elmJsonModuleNameToSyntax |> FastSet.fromList
+            list |> FastSetLocalExtra.fromListMap elmJsonModuleNameToSyntax
 
         Elm.Project.ExposedDict dict ->
             dict
                 |> List.concatMap (\( _, moduleNames ) -> moduleNames)
-                |> List.map elmJsonModuleNameToSyntax
-                |> FastSet.fromList
+                |> FastSetLocalExtra.fromListMap elmJsonModuleNameToSyntax
 
 
 elmJsonModuleNameToSyntax : Elm.Module.Name -> Elm.Syntax.ModuleName.ModuleName
@@ -1316,24 +1316,23 @@ moduleExposes syntaxFile =
         moduleTypesWithVariantNames : FastDict.Dict String (FastSet.Set String)
         moduleTypesWithVariantNames =
             syntaxFile.declarations
-                |> List.filterMap
-                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                |> List.foldl
+                    (\(Elm.Syntax.Node.Node _ declaration) soFar ->
                         case declaration of
                             Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
-                                ( choiceTypeDeclaration.name |> Elm.Syntax.Node.value
-                                , choiceTypeDeclaration.constructors
-                                    |> List.map
-                                        (\(Elm.Syntax.Node.Node _ constructor) ->
-                                            constructor.name |> Elm.Syntax.Node.value
+                                soFar
+                                    |> FastDict.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
+                                        (choiceTypeDeclaration.constructors
+                                            |> FastSetLocalExtra.fromListMap
+                                                (\(Elm.Syntax.Node.Node _ constructor) ->
+                                                    constructor.name |> Elm.Syntax.Node.value
+                                                )
                                         )
-                                    |> FastSet.fromList
-                                )
-                                    |> Just
 
                             _ ->
-                                Nothing
+                                soFar
                     )
-                |> FastDict.fromList
+                    FastDict.empty
     in
     case syntaxFile.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.exposingList of
         Elm.Syntax.Exposing.Explicit topLevelExposeList ->
@@ -1401,23 +1400,25 @@ moduleInterfaceExposes :
     -> { simpleNames : FastSet.Set String, typesWithVariantNames : FastDict.Dict String (FastSet.Set String) }
 moduleInterfaceExposes moduleInterface =
     { simpleNames =
-        (moduleInterface.aliases |> List.map .name)
-            ++ (moduleInterface.binops
-                    |> List.map
+        FastSet.union (moduleInterface.aliases |> FastSetLocalExtra.fromListMap .name)
+            (FastSet.union
+                (moduleInterface.binops
+                    |> FastSetLocalExtra.fromListMap
                         (\infixOperator -> "(" ++ infixOperator.name ++ ")")
-               )
-            ++ (moduleInterface.unions
-                    |> List.filterMap
-                        (\choiceTypeInterface ->
+                )
+                (moduleInterface.unions
+                    |> List.foldl
+                        (\choiceTypeInterface soFar ->
                             case choiceTypeInterface.tags of
                                 [] ->
-                                    choiceTypeInterface.name |> Just
+                                    soFar |> FastSet.insert choiceTypeInterface.name
 
                                 _ :: _ ->
-                                    Nothing
+                                    soFar
                         )
-               )
-            |> FastSet.fromList
+                        FastSet.empty
+                )
+            )
     , typesWithVariantNames =
         moduleInterface.unions
             |> List.foldl
@@ -1430,8 +1431,7 @@ moduleInterfaceExposes moduleInterface =
                             soFar
                                 |> FastDict.insert choiceTypeInterface.name
                                     ((variantInterface0 :: variantInterface1Up)
-                                        |> List.map (\( variantName, _ ) -> variantName)
-                                        |> FastSet.fromList
+                                        |> FastSetLocalExtra.fromListMap (\( variantName, _ ) -> variantName)
                                     )
                 )
                 FastDict.empty
