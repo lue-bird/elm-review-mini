@@ -37,10 +37,10 @@ import ElmJson.LocalExtra
 import Expect
 import FastDict
 import FastDictLocalExtra
+import FastSet
 import Json.Decode
 import ListLocalExtra
 import Review
-import Set exposing (Set)
 
 
 {-| The default project after `elm init` minus the `elm/html` and `elm/browser` dependencies.
@@ -562,22 +562,22 @@ invalidExpectedErrorsIn project =
                     (path |> String.endsWith ".elm")
                         && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
 
-            modulePaths : Set String
+            modulePaths : FastSet.Set String
             modulePaths =
                 project.files
                     |> List.map .path
                     |> List.filter (\path -> path |> pathIsModule)
-                    |> Set.fromList
+                    |> FastSet.fromList
 
-            projectPaths : Set String
+            projectPaths : FastSet.Set String
             projectPaths =
-                (project.files |> List.map .path |> Set.fromList)
-                    |> Set.insert "elm.json"
+                (project.files |> List.map .path |> FastSet.fromList)
+                    |> FastSet.insert "elm.json"
         in
         [ expectedErrors
             |> List.filterMap
                 (\expectedErrorsAtPath ->
-                    if projectPaths |> Set.member expectedErrorsAtPath.path then
+                    if projectPaths |> FastSet.member expectedErrorsAtPath.path then
                         Nothing
 
                     else
@@ -613,7 +613,7 @@ invalidExpectedErrorsIn project =
         , expectedErrors
             |> List.concatMap
                 (\expectedFileErrors ->
-                    if modulePaths |> Set.member expectedFileErrors.path then
+                    if modulePaths |> FastSet.member expectedFileErrors.path then
                         expectedFileErrors.errors
                             |> List.concatMap
                                 (\expectedError ->

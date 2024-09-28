@@ -14,8 +14,8 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
+import FastSet
 import Review
-import Set exposing (Set)
 
 
 {-| Enforce that `let in` value/function declarations have a type annotation.

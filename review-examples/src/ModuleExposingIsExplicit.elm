@@ -15,8 +15,8 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
+import FastSet
 import Review
-import Set exposing (Set)
 
 
 {-| Enforce that all module exposes specify the member names
@@ -57,8 +57,8 @@ type alias Knowledge =
     { exposingEverythingByModulePath :
         FastDict.Dict
             String
-            { choiceTypeNames : Set String
-            , simpleNames : Set String
+            { choiceTypeNames : FastSet.Set String
+            , simpleNames : FastSet.Set String
             , moduleName : Elm.Syntax.ModuleName.ModuleName
             , dotsRange : Elm.Syntax.Range.Range
             }
@@ -130,8 +130,8 @@ report knowledge =
 moduleMembersThatCanBeExposed :
     Elm.Syntax.File.File
     ->
-        { simpleNames : Set String
-        , choiceTypeNames : Set String
+        { simpleNames : FastSet.Set String
+        , choiceTypeNames : FastSet.Set String
         }
 moduleMembersThatCanBeExposed syntaxFile =
     syntaxFile.declarations
@@ -141,14 +141,14 @@ moduleMembersThatCanBeExposed syntaxFile =
                     Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
                         { soFar
                             | choiceTypeNames =
-                                soFar.choiceTypeNames |> Set.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
+                                soFar.choiceTypeNames |> FastSet.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
                         }
 
                     Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
                         { soFar
                             | simpleNames =
                                 soFar.simpleNames
-                                    |> Set.insert
+                                    |> FastSet.insert
                                         (valueOrFunctionDeclaration.declaration
                                             |> Elm.Syntax.Node.value
                                             |> .name
@@ -159,38 +159,38 @@ moduleMembersThatCanBeExposed syntaxFile =
                     Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
                         { soFar
                             | simpleNames =
-                                soFar.simpleNames |> Set.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
+                                soFar.simpleNames |> FastSet.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
                         }
 
                     Elm.Syntax.Declaration.PortDeclaration signature ->
                         { soFar
                             | simpleNames =
-                                soFar.simpleNames |> Set.insert (signature.name |> Elm.Syntax.Node.value)
+                                soFar.simpleNames |> FastSet.insert (signature.name |> Elm.Syntax.Node.value)
                         }
 
                     Elm.Syntax.Declaration.InfixDeclaration symbol ->
                         { soFar
                             | simpleNames =
-                                soFar.simpleNames |> Set.insert (symbol.function |> Elm.Syntax.Node.value)
+                                soFar.simpleNames |> FastSet.insert (symbol.function |> Elm.Syntax.Node.value)
                         }
 
                     -- invalid elm
                     Elm.Syntax.Declaration.Destructuring _ _ ->
                         soFar
             )
-            { choiceTypeNames = Set.empty, simpleNames = Set.empty }
+            { choiceTypeNames = FastSet.empty, simpleNames = FastSet.empty }
 
 
 explicitExposesToString :
-    { choiceTypeNames : Set String
-    , simpleNames : Set String
+    { choiceTypeNames : FastSet.Set String
+    , simpleNames : FastSet.Set String
     }
     -> String
 explicitExposesToString explicitExposes =
-    Set.union
+    FastSet.union
         explicitExposes.simpleNames
         (explicitExposes.choiceTypeNames
-            |> Set.map (\choiceTypeName -> choiceTypeName ++ "(..)")
+            |> FastSet.map (\choiceTypeName -> choiceTypeName ++ "(..)")
         )
-        |> Set.toList
+        |> FastSet.toList
         |> String.join ", "

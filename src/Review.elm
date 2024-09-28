@@ -102,8 +102,8 @@ import Elm.Syntax.TypeAnnotation
 import ElmCoreDependency
 import FastDict
 import FastDictLocalExtra
+import FastSet
 import ListLocalExtra
-import Set exposing (Set)
 import Unicode
 
 
@@ -1338,18 +1338,18 @@ typeSubs =
 {-| The set of modules in [`Elm-Project.Exposed`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Exposed)
 (the `exposed-modules` field in a package elm.json)
 -}
-packageElmJsonExposedModules : Elm.Project.Exposed -> Set Elm.Syntax.ModuleName.ModuleName
+packageElmJsonExposedModules : Elm.Project.Exposed -> FastSet.Set Elm.Syntax.ModuleName.ModuleName
 packageElmJsonExposedModules =
     \exposed ->
         case exposed of
             Elm.Project.ExposedList list ->
-                list |> List.map elmJsonModuleNameToSyntax |> Set.fromList
+                list |> List.map elmJsonModuleNameToSyntax |> FastSet.fromList
 
             Elm.Project.ExposedDict dict ->
                 dict
                     |> List.concatMap (\( _, moduleNames ) -> moduleNames)
                     |> List.map elmJsonModuleNameToSyntax
-                    |> Set.fromList
+                    |> FastSet.fromList
 
 
 elmJsonModuleNameToSyntax : Elm.Module.Name -> Elm.Syntax.ModuleName.ModuleName
@@ -1410,20 +1410,21 @@ findModuleDocumentationBeforeCutOffLine cutOffLine comments =
 
   - `typesWithVariantNames`: names of types that expose their variants with `(..)`
     paired with what variant names are actually meant by `..`.
-    It's provided as a [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/).
-    I strongly recommend using it too for your writing your review instead of `Dict`
-    because `Dict.union` and friends have performance footguns you shouldn't need to worry about
+
+The `Dict` and `Set` are from [`miniBill/elm-fast-dict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/).
+I strongly recommend using it too for your writing your review instead of `Dict`
+because `Dict.union` and friends have performance footguns you shouldn't need to worry about
 
 -}
 moduleExposes :
     Elm.Syntax.File.File
     ->
-        { simpleNames : Set String
-        , typesWithVariantNames : FastDict.Dict String (Set String)
+        { simpleNames : FastSet.Set String
+        , typesWithVariantNames : FastDict.Dict String (FastSet.Set String)
         }
 moduleExposes syntaxFile =
     let
-        moduleTypesWithVariantNames : FastDict.Dict String (Set String)
+        moduleTypesWithVariantNames : FastDict.Dict String (FastSet.Set String)
         moduleTypesWithVariantNames =
             syntaxFile.declarations
                 |> List.filterMap
@@ -1436,7 +1437,7 @@ moduleExposes syntaxFile =
                                         (\(Elm.Syntax.Node.Node _ constructor) ->
                                             constructor.name |> Elm.Syntax.Node.value
                                         )
-                                    |> Set.fromList
+                                    |> FastSet.fromList
                                 )
                                     |> Just
 
@@ -1448,14 +1449,14 @@ moduleExposes syntaxFile =
     case syntaxFile.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.exposingList of
         Elm.Syntax.Exposing.Explicit topLevelExposeList ->
             let
-                visibleExposes : { simpleNames : Set String, typesExposingVariants : Set String }
+                visibleExposes : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
                 visibleExposes =
                     topLevelExposeList |> topLevelExposeListToExposes
             in
             { simpleNames = visibleExposes.simpleNames
             , typesWithVariantNames =
                 visibleExposes.typesExposingVariants
-                    |> Set.foldl
+                    |> FastSet.foldl
                         (\choiceTypeName soFar ->
                             case moduleTypesWithVariantNames |> FastDict.get choiceTypeName of
                                 Nothing ->
@@ -1478,7 +1479,7 @@ moduleExposes syntaxFile =
 
                                 Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
                                     soFar
-                                        |> Set.insert
+                                        |> FastSet.insert
                                             (valueOrFunctionDeclaration.declaration
                                                 |> Elm.Syntax.Node.value
                                                 |> .name
@@ -1486,19 +1487,19 @@ moduleExposes syntaxFile =
                                             )
 
                                 Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
-                                    soFar |> Set.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
+                                    soFar |> FastSet.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
 
                                 Elm.Syntax.Declaration.PortDeclaration signature ->
-                                    soFar |> Set.insert (signature.name |> Elm.Syntax.Node.value)
+                                    soFar |> FastSet.insert (signature.name |> Elm.Syntax.Node.value)
 
                                 Elm.Syntax.Declaration.InfixDeclaration symbol ->
-                                    soFar |> Set.insert (symbol.function |> Elm.Syntax.Node.value)
+                                    soFar |> FastSet.insert (symbol.function |> Elm.Syntax.Node.value)
 
                                 -- invalid elm
                                 Elm.Syntax.Declaration.Destructuring _ _ ->
                                     soFar
                         )
-                        Set.empty
+                        FastSet.empty
             , typesWithVariantNames = moduleTypesWithVariantNames
             }
 
@@ -1508,7 +1509,7 @@ from [`Review.inspectDirectDependencies`](#inspectDirectDependencies)
 -}
 moduleInterfaceExposes :
     Elm.Docs.Module
-    -> { simpleNames : Set String, typesWithVariantNames : FastDict.Dict String (Set String) }
+    -> { simpleNames : FastSet.Set String, typesWithVariantNames : FastDict.Dict String (FastSet.Set String) }
 moduleInterfaceExposes =
     \moduleInterface ->
         { simpleNames =
@@ -1529,7 +1530,7 @@ moduleInterfaceExposes =
                     )
             ]
                 |> List.concat
-                |> Set.fromList
+                |> FastSet.fromList
         , typesWithVariantNames =
             moduleInterface.unions
                 |> List.filterMap
@@ -1542,7 +1543,7 @@ moduleInterfaceExposes =
                                 ( choiceTypeInterface.name
                                 , (variantInterface0 :: variantInterface1Up)
                                     |> List.map (\( variantName, _ ) -> variantName)
-                                    |> Set.fromList
+                                    |> FastSet.fromList
                                 )
                                     |> Just
                     )
@@ -1558,7 +1559,7 @@ moduleInterfaceExposes =
 -}
 topLevelExposeListToExposes :
     List (Elm.Syntax.Node.Node Elm.Syntax.Exposing.TopLevelExpose)
-    -> { simpleNames : Set String, typesExposingVariants : Set String }
+    -> { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
 topLevelExposeListToExposes =
     \topLevelExposeSet ->
         topLevelExposeSet
@@ -1569,36 +1570,36 @@ topLevelExposeListToExposes =
                             case choiceTypeExpose.open of
                                 Nothing ->
                                     { soFar
-                                        | simpleNames = soFar.simpleNames |> Set.insert choiceTypeExpose.name
+                                        | simpleNames = soFar.simpleNames |> FastSet.insert choiceTypeExpose.name
                                     }
 
                                 Just _ ->
                                     { soFar
                                         | typesExposingVariants =
                                             soFar.typesExposingVariants
-                                                |> Set.insert choiceTypeExpose.name
+                                                |> FastSet.insert choiceTypeExpose.name
                                     }
 
                         Elm.Syntax.Exposing.FunctionExpose valueOrFunctionName ->
                             { soFar
                                 | simpleNames =
-                                    soFar.simpleNames |> Set.insert valueOrFunctionName
+                                    soFar.simpleNames |> FastSet.insert valueOrFunctionName
                             }
 
                         Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
                             { soFar
                                 | simpleNames =
-                                    soFar.simpleNames |> Set.insert exposeName
+                                    soFar.simpleNames |> FastSet.insert exposeName
                             }
 
                         Elm.Syntax.Exposing.InfixExpose symbol ->
                             { soFar
                                 | simpleNames =
-                                    soFar.simpleNames |> Set.insert ([ "(", symbol, ")" ] |> String.concat)
+                                    soFar.simpleNames |> FastSet.insert ([ "(", symbol, ")" ] |> String.concat)
                             }
                 )
-                { simpleNames = Set.empty
-                , typesExposingVariants = Set.empty
+                { simpleNames = FastSet.empty
+                , typesExposingVariants = FastSet.empty
                 }
 
 
@@ -1612,7 +1613,7 @@ determineModuleOrigin :
     FastDict.Dict
         Elm.Syntax.ModuleName.ModuleName
         { alias : Maybe String
-        , exposes : Set String -- includes names of variants
+        , exposes : FastSet.Set String -- includes names of variants
         }
     -> (( Elm.Syntax.ModuleName.ModuleName, String ) -> Maybe Elm.Syntax.ModuleName.ModuleName)
 determineModuleOrigin imports =
@@ -1650,7 +1651,7 @@ determineModuleOrigin imports =
                                 imports
                                     |> FastDictLocalExtra.firstJustMap
                                         (\importModuleName import_ ->
-                                            if import_.exposes |> Set.member unqualifiedName then
+                                            if import_.exposes |> FastSet.member unqualifiedName then
                                                 importModuleName |> Just
 
                                             else
@@ -1685,23 +1686,23 @@ importsToExplicit :
     { moduleExposes :
         FastDict.Dict
             Elm.Syntax.ModuleName.ModuleName
-            { typesWithVariantNames : FastDict.Dict String (Set String)
-            , simpleNames : Set String
+            { typesWithVariantNames : FastDict.Dict String (FastSet.Set String)
+            , simpleNames : FastSet.Set String
             }
     , importsExposingAll : List { moduleName : Elm.Syntax.ModuleName.ModuleName, alias : Maybe String }
     , importsExposingExplicit :
         List
             { moduleName : Elm.Syntax.ModuleName.ModuleName
             , alias : Maybe String
-            , typesExposingVariants : Set String
-            , simpleNames : Set String
+            , typesExposingVariants : FastSet.Set String
+            , simpleNames : FastSet.Set String
             }
     }
     ->
         FastDict.Dict
             Elm.Syntax.ModuleName.ModuleName
             { alias : Maybe String
-            , exposes : Set String -- includes names of variants
+            , exposes : FastSet.Set String -- includes names of variants
             }
 importsToExplicit info =
     let
@@ -1709,7 +1710,7 @@ importsToExplicit info =
             FastDict.Dict
                 Elm.Syntax.ModuleName.ModuleName
                 { alias : Maybe String
-                , exposes : Set String -- includes names of variants
+                , exposes : FastSet.Set String -- includes names of variants
                 }
         explicitImportsExposingAllAndDefaultOnes =
             info.importsExposingAll
@@ -1722,18 +1723,18 @@ importsToExplicit info =
                                 , exposes =
                                     case info |> .moduleExposes |> FastDict.get import_.moduleName of
                                         Just actualExposes ->
-                                            Set.union actualExposes.simpleNames
+                                            FastSet.union actualExposes.simpleNames
                                                 (actualExposes.typesWithVariantNames
                                                     |> FastDict.foldl
                                                         (\typeName variantNames soFar ->
-                                                            Set.union variantNames
-                                                                (soFar |> Set.insert typeName)
+                                                            FastSet.union variantNames
+                                                                (soFar |> FastSet.insert typeName)
                                                         )
-                                                        Set.empty
+                                                        FastSet.empty
                                                 )
 
                                         Nothing ->
-                                            Set.empty
+                                            FastSet.empty
                                 }
                     )
                     implicitImports
@@ -1748,25 +1749,25 @@ importsToExplicit info =
                         , exposes =
                             case info |> .moduleExposes |> FastDict.get import_.moduleName of
                                 Just moduleExposeInfo ->
-                                    Set.union
+                                    FastSet.union
                                         import_.simpleNames
                                         (import_.typesExposingVariants
-                                            |> Set.foldl
+                                            |> FastSet.foldl
                                                 (\typeExpose soFar ->
-                                                    Set.union
+                                                    FastSet.union
                                                         (moduleExposeInfo
                                                             |> .typesWithVariantNames
                                                             |> FastDict.get typeExpose
-                                                            |> Maybe.withDefault Set.empty
+                                                            |> Maybe.withDefault FastSet.empty
                                                         )
                                                         soFar
-                                                        |> Set.insert typeExpose
+                                                        |> FastSet.insert typeExpose
                                                 )
-                                                Set.empty
+                                                FastSet.empty
                                         )
 
                                 Nothing ->
-                                    Set.empty
+                                    FastSet.empty
                         }
             )
             explicitImportsExposingAllAndDefaultOnes
@@ -1796,7 +1797,7 @@ implicitImports :
     FastDict.Dict
         Elm.Syntax.ModuleName.ModuleName
         { alias : Maybe String
-        , exposes : Set String -- includes names of variants
+        , exposes : FastSet.Set String -- includes names of variants
         }
 implicitImports =
     [ ( [ "Basics" ]
@@ -1868,19 +1869,19 @@ implicitImports =
             , "Never"
             , "never"
             ]
-                |> Set.fromList
+                |> FastSet.fromList
         }
       )
-    , ( [ "List" ], { alias = Nothing, exposes = Set.fromList [ "(::)", "List" ] } )
-    , ( [ "Maybe" ], { alias = Nothing, exposes = Set.fromList [ "Maybe", "Just", "Nothing" ] } )
-    , ( [ "Result" ], { alias = Nothing, exposes = Set.fromList [ "Result", "Ok", "Err" ] } )
-    , ( [ "String" ], { alias = Nothing, exposes = Set.singleton "String" } )
-    , ( [ "Char" ], { alias = Nothing, exposes = Set.singleton "Char" } )
-    , ( [ "Tuple" ], { alias = Nothing, exposes = Set.empty } )
-    , ( [ "Debug" ], { alias = Nothing, exposes = Set.empty } )
-    , ( [ "Platform" ], { alias = Nothing, exposes = Set.singleton "Program" } )
-    , ( [ "Platform", "Cmd" ], { alias = Just "Cmd", exposes = Set.singleton "Cmd" } )
-    , ( [ "Platform", "Sub" ], { alias = Just "Sub", exposes = Set.singleton "Sub" } )
+    , ( [ "List" ], { alias = Nothing, exposes = FastSet.fromList [ "(::)", "List" ] } )
+    , ( [ "Maybe" ], { alias = Nothing, exposes = FastSet.fromList [ "Maybe", "Just", "Nothing" ] } )
+    , ( [ "Result" ], { alias = Nothing, exposes = FastSet.fromList [ "Result", "Ok", "Err" ] } )
+    , ( [ "String" ], { alias = Nothing, exposes = FastSet.singleton "String" } )
+    , ( [ "Char" ], { alias = Nothing, exposes = FastSet.singleton "Char" } )
+    , ( [ "Tuple" ], { alias = Nothing, exposes = FastSet.empty } )
+    , ( [ "Debug" ], { alias = Nothing, exposes = FastSet.empty } )
+    , ( [ "Platform" ], { alias = Nothing, exposes = FastSet.singleton "Program" } )
+    , ( [ "Platform", "Cmd" ], { alias = Just "Cmd", exposes = FastSet.singleton "Cmd" } )
+    , ( [ "Platform", "Sub" ], { alias = Just "Sub", exposes = FastSet.singleton "Sub" } )
     ]
         |> FastDict.fromList
 
@@ -1888,26 +1889,26 @@ implicitImports =
 mergeInImport :
     { moduleName : Elm.Syntax.ModuleName.ModuleName
     , alias : Maybe String
-    , exposes : Set String
+    , exposes : FastSet.Set String
     }
     ->
         (FastDict.Dict
             Elm.Syntax.ModuleName.ModuleName
             { alias : Maybe String
-            , exposes : Set String -- includes names of variants
+            , exposes : FastSet.Set String -- includes names of variants
             }
          ->
             FastDict.Dict
                 Elm.Syntax.ModuleName.ModuleName
                 { alias : Maybe String
-                , exposes : Set String -- includes names of variants
+                , exposes : FastSet.Set String -- includes names of variants
                 }
         )
 mergeInImport importInfoToAdd imports =
     FastDict.update importInfoToAdd.moduleName
         (\existingImport ->
             let
-                newImportInfo : { alias : Maybe String, exposes : Set String }
+                newImportInfo : { alias : Maybe String, exposes : FastSet.Set String }
                 newImportInfo =
                     case existingImport of
                         Nothing ->
@@ -1923,7 +1924,7 @@ mergeInImport importInfoToAdd imports =
 
                                     Nothing ->
                                         importInfoToAdd.alias
-                            , exposes = Set.union import_.exposes importInfoToAdd.exposes
+                            , exposes = FastSet.union import_.exposes importInfoToAdd.exposes
                             }
             in
             Just newImportInfo

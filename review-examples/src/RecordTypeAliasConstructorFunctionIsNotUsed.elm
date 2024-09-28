@@ -2,7 +2,7 @@ module RecordTypeAliasConstructorFunctionIsNotUsed exposing (review)
 
 {-|
 
-@docs rule
+@docs review
 
 -}
 
@@ -22,9 +22,9 @@ import Elm.Syntax.TypeAnnotation
 import Elm.Type
 import FastDict
 import FastDict.LocalExtra
+import FastSet
+import FastSet.LocalExtra
 import Review
-import Set exposing (Set)
-import Set.LocalExtra
 
 
 {-| Report using a record type alias constructor function
@@ -72,8 +72,8 @@ type alias Knowledge =
     { moduleExposes :
         FastDict.Dict
             Elm.Syntax.ModuleName.ModuleName
-            { simpleNames : Set String
-            , typesWithVariantNames : FastDict.Dict String (Set String)
+            { simpleNames : FastSet.Set String
+            , typesWithVariantNames : FastDict.Dict String (FastSet.Set String)
             }
     , recordTypeAliasDeclarations :
         FastDict.Dict
@@ -92,16 +92,16 @@ type alias Knowledge =
                 List
                     { moduleName : Elm.Syntax.ModuleName.ModuleName
                     , alias : Maybe String
-                    , simpleNames : Set String
-                    , typesExposingVariants : Set String
+                    , simpleNames : FastSet.Set String
+                    , typesExposingVariants : FastSet.Set String
                     }
-            , moduleDeclaredNames : Set String
+            , moduleDeclaredNames : FastSet.Set String
             , possibleTypeAliasConstructorUses :
                 List
                     { qualification : Elm.Syntax.ModuleName.ModuleName
                     , unqualifiedName : String
                     , referenceRange : Elm.Syntax.Range.Range
-                    , bindingsInScope : Set String
+                    , bindingsInScope : FastSet.Set String
                     , directCallRange : Elm.Syntax.Range.Range
                     , directCallArguments : List { source : String, startColumn : Int }
                     }
@@ -217,7 +217,7 @@ moduleDataToKnowledge =
             , moduleName = moduleName
             , moduleDeclaredNames =
                 moduleData.syntax.declarations
-                    |> Set.LocalExtra.unionFromListMap
+                    |> FastSet.LocalExtra.unionFromListMap
                         (\(Elm.Syntax.Node.Node _ declaration) ->
                             declaration |> Declaration.LocalExtra.declaredNames
                         )
@@ -247,7 +247,7 @@ moduleDataToKnowledge =
                                     Nothing
 
                                 Nothing ->
-                                    { simpleNames = Set.empty, typesExposingVariants = Set.empty }
+                                    { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
                                         |> Just
 
                                 Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
@@ -276,7 +276,7 @@ moduleDataToKnowledge =
                                                 |> Elm.Syntax.Node.value
                                                 |> .arguments
                                                 |> List.concatMap Review.patternBindings
-                                                |> Set.fromList
+                                                |> FastSet.fromList
                                             )
                                         |> List.map
                                             (\possibleTypeAliasConstructorUse ->
@@ -305,14 +305,14 @@ moduleDataToKnowledge =
 
 
 expressionPossibleTypeAliasConstructorUsesWithBindingsInScope :
-    Set String
+    FastSet.Set String
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
     ->
         List
             { qualification : Elm.Syntax.ModuleName.ModuleName
             , unqualifiedName : String
             , referenceRange : Elm.Syntax.Range.Range
-            , bindingsInScope : Set String
+            , bindingsInScope : FastSet.Set String
             , directCallRange : Elm.Syntax.Range.Range
             , directCallArguments : List { range : Elm.Syntax.Range.Range }
             }
@@ -340,7 +340,7 @@ expressionPossibleTypeAliasConstructorUsesWithBindingsInScope outerBindingsInSco
                             { qualification : Elm.Syntax.ModuleName.ModuleName
                             , unqualifiedName : String
                             , referenceRange : Elm.Syntax.Range.Range
-                            , bindingsInScope : Set String
+                            , bindingsInScope : FastSet.Set String
                             , directCallRange : Elm.Syntax.Range.Range
                             , directCallArguments : List { range : Elm.Syntax.Range.Range }
                             }
@@ -355,7 +355,7 @@ expressionPossibleTypeAliasConstructorUsesWithBindingsInScope outerBindingsInSco
                                             (\sub ->
                                                 sub.expressionNode
                                                     |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
-                                                        (Set.union (sub.bindings |> Set.fromList) outerBindingsInScope)
+                                                        (FastSet.union (sub.bindings |> FastSet.fromList) outerBindingsInScope)
                                             )
                                 )
                 in
@@ -384,7 +384,7 @@ expressionPossibleTypeAliasConstructorUsesWithBindingsInScope outerBindingsInSco
                         (\sub ->
                             sub.expressionNode
                                 |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
-                                    (Set.union (sub.bindings |> Set.fromList) outerBindingsInScope)
+                                    (FastSet.union (sub.bindings |> FastSet.fromList) outerBindingsInScope)
                         )
 
 
@@ -408,7 +408,7 @@ report knowledge =
                     explicitImports :
                         FastDict.Dict
                             Elm.Syntax.ModuleName.ModuleName
-                            { alias : Maybe String, exposes : Set String }
+                            { alias : Maybe String, exposes : FastSet.Set String }
                     explicitImports =
                         { moduleExposes = knowledge.moduleExposes
                         , importsExposingAll = possibleTypeAliasConstructorUsesInModule.importsExposingAll
@@ -434,15 +434,15 @@ report knowledge =
 
                                 Just usedRecordTypeAlias ->
                                     let
-                                        reservedInScope : Set String
+                                        reservedInScope : FastSet.Set String
                                         reservedInScope =
                                             possibleTypeAliasConstructorUse.bindingsInScope
-                                                |> Set.union
+                                                |> FastSet.union
                                                     (explicitImports
                                                         |> FastDict.LocalExtra.unionToSetMap
                                                             (\_ imported -> imported.exposes)
                                                     )
-                                                |> Set.union possibleTypeAliasConstructorUsesInModule.moduleDeclaredNames
+                                                |> FastSet.union possibleTypeAliasConstructorUsesInModule.moduleDeclaredNames
                                     in
                                     { path = possibleTypeAliasConstructorUsesInModule.modulePath
                                     , message = "record type alias constructor function is used"
@@ -463,7 +463,7 @@ report knowledge =
                                                             (\argumentName ->
                                                                 argumentName
                                                                     |> disambiguateFromSet
-                                                                        (Set.union reservedInScope possibleTypeAliasConstructorUsesInModule.moduleDeclaredNames)
+                                                                        (FastSet.union reservedInScope possibleTypeAliasConstructorUsesInModule.moduleDeclaredNames)
                                                             )
 
                                                 baseIndentation : String
@@ -521,10 +521,10 @@ report knowledge =
             )
 
 
-disambiguateFromSet : Set String -> (String -> String)
+disambiguateFromSet : FastSet.Set String -> (String -> String)
 disambiguateFromSet forbiddenNamesSet =
     \name ->
-        if forbiddenNamesSet |> Set.member name then
+        if forbiddenNamesSet |> FastSet.member name then
             (name ++ "_") |> disambiguateFromSet forbiddenNamesSet
 
         else

@@ -1,7 +1,7 @@
 module FastDict.LocalExtra exposing (excludeKeys, firstJustMap, justsToListMap, justsToSetMap, keys, toListMap, unionFromListMap, unionFromListWithMap, unionToSetMap, unionWith)
 
 import FastDict
-import Set exposing (Set)
+import FastSet
 
 
 unionFromListWithMap :
@@ -91,7 +91,7 @@ justsToListMap keyValueToMaybeElement =
                 []
 
 
-justsToSetMap : (key -> value -> Maybe comparableElement) -> (FastDict.Dict key value -> Set comparableElement)
+justsToSetMap : (key -> value -> Maybe comparableElement) -> (FastDict.Dict key value -> FastSet.Set comparableElement)
 justsToSetMap keyValueToMaybeElement =
     \fastDict ->
         fastDict
@@ -102,34 +102,34 @@ justsToSetMap keyValueToMaybeElement =
                             soFar
 
                         Just element ->
-                            soFar |> Set.insert element
+                            soFar |> FastSet.insert element
                 )
-                Set.empty
+                FastSet.empty
 
 
-unionToSetMap : (key -> value -> Set comparableElement) -> (FastDict.Dict key value -> Set comparableElement)
+unionToSetMap : (key -> value -> FastSet.Set comparableElement) -> (FastDict.Dict key value -> FastSet.Set comparableElement)
 unionToSetMap keyValueToMaybeElement =
     \fastDict ->
         fastDict
             |> FastDict.foldl
                 (\key value soFar ->
-                    Set.union (keyValueToMaybeElement key value) soFar
+                    FastSet.union (keyValueToMaybeElement key value) soFar
                 )
-                Set.empty
+                FastSet.empty
 
 
-toSetMap : (key -> value -> comparableElement) -> (FastDict.Dict key value -> Set comparableElement)
+toSetMap : (key -> value -> comparableElement) -> (FastDict.Dict key value -> FastSet.Set comparableElement)
 toSetMap keyValueToMaybeElement =
     \fastDict ->
         fastDict
             |> FastDict.foldl
                 (\key value soFar ->
-                    soFar |> Set.insert (keyValueToMaybeElement key value)
+                    soFar |> FastSet.insert (keyValueToMaybeElement key value)
                 )
-                Set.empty
+                FastSet.empty
 
 
-keys : FastDict.Dict comparableKey value_ -> Set comparableKey
+keys : FastDict.Dict comparableKey value_ -> FastSet.Set comparableKey
 keys =
     \fastDict ->
         fastDict |> toSetMap (\key _ -> key)
@@ -163,10 +163,10 @@ toListMap keyValueToElement =
 
 
 excludeKeys :
-    Set comparableKey
+    FastSet.Set comparableKey
     -> (FastDict.Dict comparableKey value -> FastDict.Dict comparableKey value)
 excludeKeys keysToRemove =
     \dict ->
         dict
             |> FastDict.filter
-                (\key _ -> not (keysToRemove |> Set.member key))
+                (\key _ -> not (keysToRemove |> FastSet.member key))

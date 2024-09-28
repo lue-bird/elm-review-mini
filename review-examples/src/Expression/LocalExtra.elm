@@ -6,10 +6,10 @@ import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
 import FastDict.LocalExtra
+import FastSet
+import FastSet.LocalExtra
 import Pattern.LocalExtra
 import Review
-import Set exposing (Set)
-import Set.LocalExtra
 import Type.LocalExtra
 
 
@@ -30,8 +30,8 @@ identifiers =
                         |> identifiers
                         |> FastDict.LocalExtra.excludeKeys
                             (lambda.args
-                                |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
-                                |> Set.map (\variable -> ( [], variable ))
+                                |> FastSet.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
+                                |> FastSet.map (\variable -> ( [], variable ))
                             )
                     )
 
@@ -48,7 +48,7 @@ identifiers =
                                         |> FastDict.LocalExtra.excludeKeys
                                             (patternNode
                                                 |> Pattern.LocalExtra.variables
-                                                |> Set.map (\variable -> ( [], variable ))
+                                                |> FastSet.map (\variable -> ( [], variable ))
                                             )
                                     )
                             )
@@ -57,10 +57,10 @@ identifiers =
 
             Elm.Syntax.Expression.LetExpression letIn ->
                 let
-                    variablesForWholeLetIn : Set String
+                    variablesForWholeLetIn : FastSet.Set String
                     variablesForWholeLetIn =
                         letIn.declarations
-                            |> Set.LocalExtra.unionFromListMap
+                            |> FastSet.LocalExtra.unionFromListMap
                                 (\(Elm.Syntax.Node.Node _ letDeclaration) ->
                                     case letDeclaration of
                                         Elm.Syntax.Expression.LetFunction letFunction ->
@@ -68,7 +68,7 @@ identifiers =
                                                 |> Elm.Syntax.Node.value
                                                 |> .name
                                                 |> Elm.Syntax.Node.value
-                                                |> Set.singleton
+                                                |> FastSet.singleton
 
                                         Elm.Syntax.Expression.LetDestructuring patternNode _ ->
                                             patternNode |> Pattern.LocalExtra.variables
@@ -78,7 +78,7 @@ identifiers =
                     (letIn.expression
                         |> identifiers
                         |> FastDict.LocalExtra.excludeKeys
-                            (variablesForWholeLetIn |> Set.map (\variable -> ( [], variable )))
+                            (variablesForWholeLetIn |> FastSet.map (\variable -> ( [], variable )))
                     )
                     (letIn.declarations
                         |> FastDict.LocalExtra.unionFromListWithMap
@@ -86,7 +86,7 @@ identifiers =
                                 letDeclaration
                                     |> letDeclarationIdentifiers
                                     |> FastDict.LocalExtra.excludeKeys
-                                        (variablesForWholeLetIn |> Set.map (\variable -> ( [], variable )))
+                                        (variablesForWholeLetIn |> FastSet.map (\variable -> ( [], variable )))
                             )
                             (++)
                     )
@@ -129,9 +129,9 @@ letDeclarationIdentifiers =
                         (letValueOrFunctionDeclaration.declaration
                             |> Elm.Syntax.Node.value
                             |> .arguments
-                            |> Set.LocalExtra.unionFromListMap
+                            |> FastSet.LocalExtra.unionFromListMap
                                 (\patternNode -> patternNode |> Pattern.LocalExtra.variables)
-                            |> Set.map (\variable -> ( [], variable ))
+                            |> FastSet.map (\variable -> ( [], variable ))
                         )
                 ]
                     |> FastDict.LocalExtra.unionFromListWithMap identity (++)

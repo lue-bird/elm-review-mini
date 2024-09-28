@@ -15,8 +15,8 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FastDict
+import FastSet
 import Review
-import Set exposing (Set)
 
 
 {-| Enforce that all imports with exposes specify the member names
@@ -60,8 +60,8 @@ type alias Knowledge =
     { exposesByModuleName :
         FastDict.Dict
             Elm.Syntax.ModuleName.ModuleName
-            { choiceTypesExposingVariants : Set String
-            , simpleNames : Set String
+            { choiceTypesExposingVariants : FastSet.Set String
+            , simpleNames : FastSet.Set String
             }
     , importsExposingEverything :
         List
@@ -88,7 +88,7 @@ moduleDataToKnowledge moduleData =
     in
     { exposesByModuleName =
         let
-            exposes : { simpleNames : Set String, typesExposingVariants : Set String }
+            exposes : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
             exposes =
                 case moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.exposingList of
                     Elm.Syntax.Exposing.Explicit topLevelExposeList ->
@@ -125,8 +125,8 @@ moduleDataToKnowledge moduleData =
 moduleMembersAsExplicitExposing :
     Elm.Syntax.File.File
     ->
-        { simpleNames : Set String
-        , typesExposingVariants : Set String
+        { simpleNames : FastSet.Set String
+        , typesExposingVariants : FastSet.Set String
         }
 moduleMembersAsExplicitExposing syntaxFile =
     syntaxFile.declarations
@@ -136,14 +136,14 @@ moduleMembersAsExplicitExposing syntaxFile =
                     Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
                         { soFar
                             | typesExposingVariants =
-                                soFar.typesExposingVariants |> Set.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
+                                soFar.typesExposingVariants |> FastSet.insert (choiceTypeDeclaration.name |> Elm.Syntax.Node.value)
                         }
 
                     Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
                         { soFar
                             | simpleNames =
                                 soFar.simpleNames
-                                    |> Set.insert
+                                    |> FastSet.insert
                                         (valueOrFunctionDeclaration.declaration
                                             |> Elm.Syntax.Node.value
                                             |> .name
@@ -154,13 +154,13 @@ moduleMembersAsExplicitExposing syntaxFile =
                     Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
                         { soFar
                             | simpleNames =
-                                soFar.simpleNames |> Set.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
+                                soFar.simpleNames |> FastSet.insert (typeAliasDeclaration.name |> Elm.Syntax.Node.value)
                         }
 
                     Elm.Syntax.Declaration.PortDeclaration signature ->
                         { soFar
                             | simpleNames =
-                                soFar.simpleNames |> Set.insert (signature.name |> Elm.Syntax.Node.value)
+                                soFar.simpleNames |> FastSet.insert (signature.name |> Elm.Syntax.Node.value)
                         }
 
                     -- not supported
@@ -170,7 +170,7 @@ moduleMembersAsExplicitExposing syntaxFile =
                     Elm.Syntax.Declaration.Destructuring _ _ ->
                         soFar
             )
-            { typesExposingVariants = Set.empty, simpleNames = Set.empty }
+            { typesExposingVariants = FastSet.empty, simpleNames = FastSet.empty }
 
 
 report : Knowledge -> List Review.Error
@@ -203,13 +203,13 @@ report knowledge =
 
 
 explicitExposesToString :
-    { choiceTypesExposingVariants : Set String
-    , simpleNames : Set String
+    { choiceTypesExposingVariants : FastSet.Set String
+    , simpleNames : FastSet.Set String
     }
     -> String
 explicitExposesToString explicitExposes =
-    Set.union
+    FastSet.union
         explicitExposes.simpleNames
-        (explicitExposes.choiceTypesExposingVariants |> Set.map (\choiceTypeName -> choiceTypeName ++ "(..)"))
-        |> Set.toList
+        (explicitExposes.choiceTypesExposingVariants |> FastSet.map (\choiceTypeName -> choiceTypeName ++ "(..)"))
+        |> FastSet.toList
         |> String.join ", "

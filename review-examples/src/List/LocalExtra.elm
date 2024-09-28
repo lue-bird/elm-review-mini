@@ -1,20 +1,20 @@
 module List.LocalExtra exposing (firstJustMap, justsToSetMap, toSetMap, unionToSetMap)
 
-import Set exposing (Set)
+import FastSet
 
 
-toSetMap : (element -> comparableSetElement) -> (List element -> Set comparableSetElement)
+toSetMap : (element -> comparableSetElement) -> (List element -> FastSet.Set comparableSetElement)
 toSetMap keyValueToMaybeElement =
     \fastDict ->
         fastDict
             |> List.foldl
                 (\element soFar ->
-                    soFar |> Set.insert (keyValueToMaybeElement element)
+                    soFar |> FastSet.insert (keyValueToMaybeElement element)
                 )
-                Set.empty
+                FastSet.empty
 
 
-justsToSetMap : (element -> Maybe comparableSetElement) -> (List element -> Set comparableSetElement)
+justsToSetMap : (element -> Maybe comparableSetElement) -> (List element -> FastSet.Set comparableSetElement)
 justsToSetMap keyValueToMaybeSetElement =
     \fastDict ->
         fastDict
@@ -25,20 +25,20 @@ justsToSetMap keyValueToMaybeSetElement =
                             soFar
 
                         Just setElement ->
-                            soFar |> Set.insert setElement
+                            soFar |> FastSet.insert setElement
                 )
-                Set.empty
+                FastSet.empty
 
 
-unionToSetMap : (element -> Set comparableSetElement) -> (List element -> Set comparableSetElement)
+unionToSetMap : (element -> FastSet.Set comparableSetElement) -> (List element -> FastSet.Set comparableSetElement)
 unionToSetMap keyValueToMaybeSetElement =
     \fastDict ->
         fastDict
             |> List.foldl
                 (\element soFar ->
-                    Set.union (keyValueToMaybeSetElement element) soFar
+                    FastSet.union (keyValueToMaybeSetElement element) soFar
                 )
-                Set.empty
+                FastSet.empty
 
 
 firstJustMap : (element -> Maybe found) -> (List element -> Maybe found)

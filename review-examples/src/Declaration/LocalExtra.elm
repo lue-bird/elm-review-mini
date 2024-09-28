@@ -8,15 +8,15 @@ import Elm.Syntax.Range
 import Expression.LocalExtra
 import FastDict
 import FastDict.LocalExtra
+import FastSet
+import FastSet.LocalExtra
 import Pattern.LocalExtra
-import Set exposing (Set)
-import Set.LocalExtra
 import Type.LocalExtra
 
 
 {-| Declared names (+ possible variant names)
 -}
-declaredNames : Elm.Syntax.Declaration.Declaration -> Set String
+declaredNames : Elm.Syntax.Declaration.Declaration -> FastSet.Set String
 declaredNames =
     \declaration ->
         case declaration of
@@ -25,26 +25,26 @@ declaredNames =
                     |> Elm.Syntax.Node.value
                     |> .name
                     |> Elm.Syntax.Node.value
-                    |> Set.singleton
+                    |> FastSet.singleton
 
             Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
-                typeAliasDeclaration.name |> Elm.Syntax.Node.value |> Set.singleton
+                typeAliasDeclaration.name |> Elm.Syntax.Node.value |> FastSet.singleton
 
             Elm.Syntax.Declaration.CustomTypeDeclaration variantType ->
                 variantType.constructors
                     |> List.map (\(Elm.Syntax.Node.Node _ variant) -> variant.name |> Elm.Syntax.Node.value)
-                    |> Set.fromList
-                    |> Set.insert (variantType.name |> Elm.Syntax.Node.value)
+                    |> FastSet.fromList
+                    |> FastSet.insert (variantType.name |> Elm.Syntax.Node.value)
 
             Elm.Syntax.Declaration.PortDeclaration signature ->
-                signature.name |> Elm.Syntax.Node.value |> Set.singleton
+                signature.name |> Elm.Syntax.Node.value |> FastSet.singleton
 
             Elm.Syntax.Declaration.InfixDeclaration infixDeclaration ->
-                infixDeclaration.operator |> Elm.Syntax.Node.value |> Set.singleton
+                infixDeclaration.operator |> Elm.Syntax.Node.value |> FastSet.singleton
 
             -- invalid
             Elm.Syntax.Declaration.Destructuring _ _ ->
-                Set.empty
+                FastSet.empty
 
 
 identifierUses :
@@ -75,8 +75,8 @@ identifierUses =
                     |> Expression.LocalExtra.identifiers
                     |> FastDict.LocalExtra.excludeKeys
                         (argumentPatterns
-                            |> Set.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
-                            |> Set.map (\unqualified -> ( [], unqualified ))
+                            |> FastSet.LocalExtra.unionFromListMap Pattern.LocalExtra.variables
+                            |> FastSet.map (\unqualified -> ( [], unqualified ))
                         )
                 , argumentPatterns
                     |> Pattern.LocalExtra.listIdentifierUses

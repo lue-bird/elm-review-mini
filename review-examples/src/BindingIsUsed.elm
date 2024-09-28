@@ -19,9 +19,9 @@ import Elm.Syntax.Range
 import Expression.LocalExtra
 import FastDict
 import FastDict.LocalExtra
+import FastSet
 import Pattern.LocalExtra
 import Review
-import Set exposing (Set)
 
 
 {-| Report introduced names that are associated with a thing but never referenced:
@@ -134,7 +134,7 @@ type alias Knowledge =
     , usedUnqualifiedIdentifiers :
         FastDict.Dict
             Elm.Syntax.ModuleName.ModuleName
-            (Set String)
+            (FastSet.Set String)
     , moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations :
         List
             { modulePath : String
@@ -147,7 +147,7 @@ type alias Knowledge =
 
 
 type alias InnerLocalBindingsKnowledge =
-    { unqualifiedReferences : Set String
+    { unqualifiedReferences : FastSet.Set String
     , unusedPatternVariables :
         List
             { variableName : String
@@ -189,7 +189,7 @@ moduleToKnowledge =
                                 _ ->
                                     { unusedPatternVariables = []
                                     , unusedLetDeclaredValuesAndFunctions = []
-                                    , unqualifiedReferences = Set.empty
+                                    , unqualifiedReferences = FastSet.empty
                                     }
                         )
 
@@ -197,7 +197,7 @@ moduleToKnowledge =
             moduleName =
                 moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
 
-            moduleExposes : { simpleNames : Set String, typesWithVariantNames : FastDict.Dict String (Set String) }
+            moduleExposes : { simpleNames : FastSet.Set String, typesWithVariantNames : FastDict.Dict String (FastSet.Set String) }
             moduleExposes =
                 moduleData.syntax |> Review.moduleExposes
         in
@@ -235,12 +235,12 @@ moduleToKnowledge =
                     (\( qualification, unqualifiedName ) _ soFar ->
                         case qualification of
                             [] ->
-                                soFar |> Set.insert unqualifiedName
+                                soFar |> FastSet.insert unqualifiedName
 
                             _ :: _ ->
                                 soFar
                     )
-                    Set.empty
+                    FastSet.empty
                 |> FastDict.singleton moduleName
         , moduleLocalValueAndFunctionAndTypeAliasAndChoiceTypeAndVariantDeclarations =
             moduleData.syntax.declarations
@@ -254,7 +254,7 @@ moduleToKnowledge =
                                             |> Elm.Syntax.Node.value
                                             |> .name
                                 in
-                                if moduleExposes.simpleNames |> Set.member unqualifiedName then
+                                if moduleExposes.simpleNames |> FastSet.member unqualifiedName then
                                     []
 
                                 else
@@ -265,7 +265,7 @@ moduleToKnowledge =
                                         |> List.singleton
 
                             Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
-                                if moduleExposes.simpleNames |> Set.member (typeAliasDeclaration.name |> Elm.Syntax.Node.value) then
+                                if moduleExposes.simpleNames |> FastSet.member (typeAliasDeclaration.name |> Elm.Syntax.Node.value) then
                                     []
 
                                 else
@@ -285,7 +285,7 @@ moduleToKnowledge =
                                             []
 
                                         [ Elm.Syntax.Node.Node _ onlyVariant ] ->
-                                            if moduleExposes.simpleNames |> Set.member (choiceTypeDeclaration.name |> Elm.Syntax.Node.value) then
+                                            if moduleExposes.simpleNames |> FastSet.member (choiceTypeDeclaration.name |> Elm.Syntax.Node.value) then
                                                 []
 
                                             else
@@ -360,7 +360,7 @@ moduleKnowledgeAddVariablesUnusedIn outerVariables =
             (outerVariables
                 |> List.filter
                     (\variable ->
-                        not (expressionInnerKnowledge.unqualifiedReferences |> Set.member variable.variableName)
+                        not (expressionInnerKnowledge.unqualifiedReferences |> FastSet.member variable.variableName)
                     )
             )
                 ++ expressionInnerKnowledge.unusedPatternVariables
@@ -385,7 +385,7 @@ moduleKnowledgeAddLetDeclaresValuesAndFunctionsUnusedIn outerLetDeclaredValuesAn
             (outerLetDeclaredValuesAndFunctions
                 |> List.filter
                     (\variable ->
-                        not (expressionInnerKnowledge.unqualifiedReferences |> Set.member variable.name)
+                        not (expressionInnerKnowledge.unqualifiedReferences |> FastSet.member variable.name)
                     )
             )
                 ++ expressionInnerKnowledge.unusedLetDeclaredValuesAndFunctions
@@ -402,7 +402,7 @@ flatInnerLocalBindingsKnowledgeMap elementToExpressionKnowledge =
                 (\expressionNode soFar ->
                     innerLocalBindingsKnowledgeMerge soFar (expressionNode |> elementToExpressionKnowledge)
                 )
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
@@ -411,7 +411,7 @@ flatInnerLocalBindingsKnowledgeMap elementToExpressionKnowledge =
 innerLocalBindingsKnowledgeMerge : InnerLocalBindingsKnowledge -> InnerLocalBindingsKnowledge -> InnerLocalBindingsKnowledge
 innerLocalBindingsKnowledgeMerge knowledge soFar =
     { unqualifiedReferences =
-        Set.union knowledge.unqualifiedReferences
+        FastSet.union knowledge.unqualifiedReferences
             soFar.unqualifiedReferences
     , unusedPatternVariables =
         knowledge.unusedPatternVariables
@@ -429,7 +429,7 @@ expressionToModuleKnowledge =
     \(Elm.Syntax.Node.Node expressionRange expression) ->
         case expression of
             Elm.Syntax.Expression.UnitExpr ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
@@ -443,13 +443,13 @@ expressionToModuleKnowledge =
             Elm.Syntax.Expression.FunctionOrValue qualification unqualified ->
                 case qualification of
                     _ :: _ ->
-                        { unqualifiedReferences = Set.empty
+                        { unqualifiedReferences = FastSet.empty
                         , unusedPatternVariables = []
                         , unusedLetDeclaredValuesAndFunctions = []
                         }
 
                     [] ->
-                        { unqualifiedReferences = unqualified |> Set.singleton
+                        { unqualifiedReferences = unqualified |> FastSet.singleton
                         , unusedPatternVariables = []
                         , unusedLetDeclaredValuesAndFunctions = []
                         }
@@ -461,31 +461,31 @@ expressionToModuleKnowledge =
                     )
 
             Elm.Syntax.Expression.PrefixOperator _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
 
             Elm.Syntax.Expression.Operator _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
 
             Elm.Syntax.Expression.Integer _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
 
             Elm.Syntax.Expression.Hex _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
 
             Elm.Syntax.Expression.Floatable _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
@@ -494,13 +494,13 @@ expressionToModuleKnowledge =
                 negated |> expressionToModuleKnowledge
 
             Elm.Syntax.Expression.Literal _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
 
             Elm.Syntax.Expression.CharLiteral _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
@@ -624,7 +624,7 @@ expressionToModuleKnowledge =
                 record |> expressionToModuleKnowledge
 
             Elm.Syntax.Expression.RecordAccessFunction _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
@@ -637,7 +637,7 @@ expressionToModuleKnowledge =
                         )
 
             Elm.Syntax.Expression.GLSLExpression _ ->
-                { unqualifiedReferences = Set.empty
+                { unqualifiedReferences = FastSet.empty
                 , unusedPatternVariables = []
                 , unusedLetDeclaredValuesAndFunctions = []
                 }
@@ -703,7 +703,7 @@ report knowledge =
                         Nothing
 
                     Just usedUnqualifiedIdentifiersInModule ->
-                        if usedUnqualifiedIdentifiersInModule |> Set.member moduleLocalBinding.unqualifiedName then
+                        if usedUnqualifiedIdentifiersInModule |> FastSet.member moduleLocalBinding.unqualifiedName then
                             Nothing
 
                         else

@@ -16,9 +16,9 @@ import Elm.Syntax.Range
 import Expression.LocalExtra
 import FastDict
 import FastDict.LocalExtra
+import FastSet
 import List.LocalExtra
 import Review
-import Set exposing (Set)
 
 
 {-| Report using a member of [the `Debug` module](https://dark.elm.dmy.fr/packages/elm/core/latest/Debug)
@@ -118,7 +118,7 @@ moduleDataToKnowledge moduleData =
                     )
     in
     let
-        moduleDeclaredValueOrFunctionNames : Set String
+        moduleDeclaredValueOrFunctionNames : FastSet.Set String
         moduleDeclaredValueOrFunctionNames =
             moduleData.syntax.declarations
                 |> List.LocalExtra.justsToSetMap
@@ -156,7 +156,7 @@ moduleDataToKnowledge moduleData =
                                 in
                                 (qualification == maximumQualification)
                                     || ((debugImport.exposes |> List.member debugFunctionName)
-                                            && not (moduleDeclaredValueOrFunctionNames |> Set.member debugFunctionName)
+                                            && not (moduleDeclaredValueOrFunctionNames |> FastSet.member debugFunctionName)
                                             && (qualification == [])
                                        )
                        )
@@ -174,7 +174,7 @@ moduleDataToKnowledge moduleData =
                                     |> Expression.LocalExtra.identifiers
                                     |> FastDict.LocalExtra.excludeKeys
                                         (moduleDeclaredValueOrFunctionNames
-                                            |> Set.map (\unqualified -> ( [], unqualified ))
+                                            |> FastSet.map (\unqualified -> ( [], unqualified ))
                                         )
 
                             _ ->

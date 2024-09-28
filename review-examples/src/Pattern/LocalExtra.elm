@@ -6,10 +6,10 @@ import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import FastDict
 import FastDict.LocalExtra
+import FastSet
+import FastSet.LocalExtra
 import List.LocalExtra
 import Review
-import Set exposing (Set)
-import Set.LocalExtra
 
 
 identifierUsesMerge :
@@ -110,7 +110,7 @@ qualifiedToString =
 
 {-| Recursively find all bindings in the pattern
 -}
-variables : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> Set String
+variables : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> FastSet.Set String
 variables =
     \patternNode -> patternNode |> variablesAndRanges |> List.LocalExtra.toSetMap (\variable -> variable.variableName)
 
