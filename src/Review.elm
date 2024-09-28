@@ -1864,7 +1864,7 @@ potentially failing with a [`SourceEditError`](#SourceEditError)
 -}
 sourceApplyEdits : List SourceEdit -> String -> Result SourceEditError String
 sourceApplyEdits fixes sourceCode =
-    if containRangeCollisions fixes then
+    if fixes |> sourceEditsContainRangeCollisions then
         FixHasCollisionsInRanges |> Err
 
     else
@@ -1894,21 +1894,23 @@ applyFixSingle fixToApply lines =
             let
                 linesBefore : List String
                 linesBefore =
-                    List.take (replace.range.start.row - 1) lines
+                    lines |> List.take (replace.range.start.row - 1)
 
                 linesAfter : List String
                 linesAfter =
-                    List.drop replace.range.end.row lines
+                    lines |> List.drop replace.range.end.row
 
                 startLine : String
                 startLine =
-                    ListLocalExtra.elementAtIndex (replace.range.start.row - 1) lines
+                    lines
+                        |> ListLocalExtra.elementAtIndex (replace.range.start.row - 1)
                         |> Maybe.withDefault ""
                         |> Unicode.left (replace.range.start.column - 1)
 
                 endLine : String
                 endLine =
-                    ListLocalExtra.elementAtIndex (replace.range.end.row - 1) lines
+                    lines
+                        |> ListLocalExtra.elementAtIndex (replace.range.end.row - 1)
                         |> Maybe.withDefault ""
                         |> Unicode.dropLeft (replace.range.end.column - 1)
             in
@@ -1921,9 +1923,13 @@ applyFixSingle fixToApply lines =
                 ++ linesAfter
 
 
-containRangeCollisions : List SourceEdit -> Bool
-containRangeCollisions fixes =
-    fixes |> List.map fixRange |> ListLocalExtra.anyPair rangesCollide
+sourceEditsContainRangeCollisions : List SourceEdit -> Bool
+sourceEditsContainRangeCollisions fixes =
+    fixes
+        |> ListLocalExtra.anyPair
+            (\edit0 edit1 ->
+                rangesCollide (edit0 |> fixRange) (edit1 |> fixRange)
+            )
 
 
 rangesCollide : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range -> Bool
