@@ -87,84 +87,83 @@ type alias FileReviewError =
 
 
 eventToSendToJsToJson : EventToSendToJs -> Json.Encode.Value
-eventToSendToJsToJson =
-    \eventToBeSentToJs ->
-        case eventToBeSentToJs of
-            InitialFilesRequested initialFileRequest ->
-                Json.Encode.object
-                    [ ( "tag", "InitialFilesRequested" |> Json.Encode.string )
-                    , ( "value"
-                      , Json.Encode.object
-                            [ ( "extraPaths"
-                              , initialFileRequest.extraPaths |> Json.Encode.list Json.Encode.string
-                              )
-                            ]
-                      )
-                    ]
+eventToSendToJsToJson eventToBeSentToJs =
+    case eventToBeSentToJs of
+        InitialFilesRequested initialFileRequest ->
+            Json.Encode.object
+                [ ( "tag", "InitialFilesRequested" |> Json.Encode.string )
+                , ( "value"
+                  , Json.Encode.object
+                        [ ( "extraPaths"
+                          , initialFileRequest.extraPaths |> Json.Encode.list Json.Encode.string
+                          )
+                        ]
+                  )
+                ]
 
-            ErrorsReceived errorsToSend ->
-                Json.Encode.object
-                    [ ( "tag", "ErrorsReceived" |> Json.Encode.string )
-                    , ( "value"
-                      , case errorsToSend.errors of
-                            AllUnfixable allUnfixable ->
-                                Json.Encode.object
-                                    [ ( "display"
-                                      , allUnfixable
-                                            |> FastDictLocalExtra.concatToListMap
-                                                (\path errors ->
-                                                    let
-                                                        pathSource : String
-                                                        pathSource =
-                                                            errorsToSend.projectFilesByPath
-                                                                |> FastDict.get path
-                                                                |> Maybe.withDefault ""
-                                                    in
-                                                    errors
-                                                        |> List.map
-                                                            (\error ->
-                                                                { path = path
-                                                                , range = error.range
-                                                                , message = error.message
-                                                                , details = error.details
-                                                                , fixedSources = []
-                                                                }
-                                                                    |> errorDisplay pathSource
-                                                            )
-                                                )
-                                            |> String.join "\n\n\n"
-                                            |> Json.Encode.string
-                                      )
-                                    , ( "fix", Json.Encode.null )
-                                    ]
-
-                            Fixable fixable ->
-                                Json.Encode.object
-                                    [ ( "display", fixable.fixable |> errorDisplay fixable.fixable.source |> Json.Encode.string )
-                                    , ( "fix"
-                                      , Json.Encode.object
-                                            [ ( "path", fixable.fixable.path |> Json.Encode.string )
-                                            , ( "fixedSources"
-                                              , fixable.fixable.fixedSources
-                                                    |> Json.Encode.list
-                                                        (\fileFix ->
-                                                            Json.Encode.object
-                                                                [ ( "path", fileFix.path |> Json.Encode.string )
-                                                                , ( "source", fileFix.fixedSource |> Json.Encode.string )
-                                                                ]
+        ErrorsReceived errorsToSend ->
+            Json.Encode.object
+                [ ( "tag", "ErrorsReceived" |> Json.Encode.string )
+                , ( "value"
+                  , case errorsToSend.errors of
+                        AllUnfixable allUnfixable ->
+                            Json.Encode.object
+                                [ ( "display"
+                                  , allUnfixable
+                                        |> FastDictLocalExtra.concatToListMap
+                                            (\path errors ->
+                                                let
+                                                    pathSource : String
+                                                    pathSource =
+                                                        errorsToSend.projectFilesByPath
+                                                            |> FastDict.get path
+                                                            |> Maybe.withDefault ""
+                                                in
+                                                errors
+                                                    |> List.map
+                                                        (\error ->
+                                                            { path = path
+                                                            , range = error.range
+                                                            , message = error.message
+                                                            , details = error.details
+                                                            , fixedSources = []
+                                                            }
+                                                                |> errorDisplay pathSource
                                                         )
-                                              )
-                                            ]
-                                      )
-                                    ]
-                      )
-                    ]
+                                            )
+                                        |> String.join "\n\n\n"
+                                        |> Json.Encode.string
+                                  )
+                                , ( "fix", Json.Encode.null )
+                                ]
 
-            ProblemEncountered problem ->
-                Json.Encode.object
-                    [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
-                    , ( "value", problem |> Json.Encode.string )
-                    ]
+                        Fixable fixable ->
+                            Json.Encode.object
+                                [ ( "display", fixable.fixable |> errorDisplay fixable.fixable.source |> Json.Encode.string )
+                                , ( "fix"
+                                  , Json.Encode.object
+                                        [ ( "path", fixable.fixable.path |> Json.Encode.string )
+                                        , ( "fixedSources"
+                                          , fixable.fixable.fixedSources
+                                                |> Json.Encode.list
+                                                    (\fileFix ->
+                                                        Json.Encode.object
+                                                            [ ( "path", fileFix.path |> Json.Encode.string )
+                                                            , ( "source", fileFix.fixedSource |> Json.Encode.string )
+                                                            ]
+                                                    )
+                                          )
+                                        ]
+                                  )
+                                ]
+                  )
+                ]
+
+        ProblemEncountered problem ->
+            Json.Encode.object
+                [ ( "tag", "ProblemEncountered" |> Json.Encode.string )
+                , ( "value", problem |> Json.Encode.string )
+                ]
 
 
 errorDisplay :
@@ -183,44 +182,41 @@ errorDisplay :
                     }
         }
     -> String
-errorDisplay source =
-    \error ->
-        [ error.message |> Ansi.cyan |> Ansi.bold
-        , "  in "
-        , error.path
-        , ":"
-        , error.range.start.row |> String.fromInt
-        , ":"
-        , error.range.start.column |> String.fromInt
-        , "\n\n"
-        , codeExtract source error.range
-            |> String.split "\n"
-            |> List.map (\line -> "|   " ++ line)
-            |> String.join "\n"
-        , "\n\n"
-        , error.details |> String.join "\n\n"
-        , case error.fixedSources of
-            [] ->
-                ""
+errorDisplay source error =
+    (error.message |> Ansi.cyan |> Ansi.bold)
+        ++ "  in "
+        ++ error.path
+        ++ ":"
+        ++ (error.range.start.row |> String.fromInt)
+        ++ ":"
+        ++ (error.range.start.column |> String.fromInt)
+        ++ "\n\n"
+        ++ (codeExtract source error.range
+                |> String.split "\n"
+                |> List.map (\line -> "|   " ++ line)
+                |> String.join "\n"
+           )
+        ++ "\n\n"
+        ++ (error.details |> String.join "\n\n")
+        ++ (case error.fixedSources of
+                [] ->
+                    ""
 
-            fixedSource0 :: fixedSource1Up ->
-                "I can fix this for you by changing\n"
-                    ++ ((fixedSource0 :: fixedSource1Up)
-                            |> List.map
-                                (\fileFixedSource ->
-                                    [ "in "
-                                    , fileFixedSource.path
-                                    , "\n\n"
-                                    , sourceHighlightDifferentLines
-                                        fileFixedSource.originalSource
-                                        fileFixedSource.fixedSource
-                                    ]
-                                        |> String.concat
-                                )
-                            |> String.join "\n\n"
-                       )
-        ]
-            |> String.concat
+                fixedSource0 :: fixedSource1Up ->
+                    "\n\nI can fix this for you by changing\n"
+                        ++ ((fixedSource0 :: fixedSource1Up)
+                                |> List.map
+                                    (\fileFixedSource ->
+                                        "in "
+                                            ++ fileFixedSource.path
+                                            ++ "\n\n"
+                                            ++ sourceHighlightDifferentLines
+                                                fileFixedSource.originalSource
+                                                fileFixedSource.fixedSource
+                                    )
+                                |> String.join "\n\n"
+                           )
+           )
 
 
 sourceHighlightDifferentLines : String -> String -> String
@@ -238,33 +234,31 @@ sourceHighlightDifferentLines aString bString =
                             Diff.NoChange line ->
                                 { soFar
                                     | continuousNoChangeLinesReversed =
-                                        soFar.continuousNoChangeLinesReversed |> (::) line
+                                        line :: soFar.continuousNoChangeLinesReversed
                                 }
 
                             Diff.Added line ->
                                 { continuousNoChangeLinesReversed = []
                                 , highlighted =
-                                    [ soFar.highlighted
-                                    , soFar.continuousNoChangeLinesReversed
-                                        |> List.reverse
-                                        |> continuousNoChangeLinesCollapse
-                                    , "\n"
-                                    , Ansi.green ("|   " ++ line)
-                                    ]
-                                        |> String.concat
+                                    soFar.highlighted
+                                        ++ (soFar.continuousNoChangeLinesReversed
+                                                |> List.reverse
+                                                |> continuousNoChangeLinesCollapse
+                                           )
+                                        ++ "\n"
+                                        ++ Ansi.green ("|   " ++ line)
                                 }
 
                             Diff.Removed line ->
                                 { continuousNoChangeLinesReversed = []
                                 , highlighted =
-                                    [ soFar.highlighted
-                                    , soFar.continuousNoChangeLinesReversed
-                                        |> List.reverse
-                                        |> continuousNoChangeLinesCollapse
-                                    , "\n"
-                                    , Ansi.red ("|   " ++ line)
-                                    ]
-                                        |> String.concat
+                                    soFar.highlighted
+                                        ++ (soFar.continuousNoChangeLinesReversed
+                                                |> List.reverse
+                                                |> continuousNoChangeLinesCollapse
+                                           )
+                                        ++ "\n"
+                                        ++ Ansi.red ("|   " ++ line)
                                 }
                     )
                     { continuousNoChangeLinesReversed = [], highlighted = "" }
@@ -274,40 +268,33 @@ sourceHighlightDifferentLines aString bString =
             highlightedAndFinalNoChangeLines.highlighted
 
         Just nextNoChangeLine ->
-            [ highlightedAndFinalNoChangeLines.highlighted
-            , "\n|   "
-            , nextNoChangeLine
-            ]
-                |> String.concat
+            highlightedAndFinalNoChangeLines.highlighted
+                ++ "\n|   "
+                ++ nextNoChangeLine
 
 
 continuousNoChangeLinesCollapse : List String -> String
-continuousNoChangeLinesCollapse =
-    \noChangeLines ->
-        case noChangeLines of
-            [] ->
-                ""
+continuousNoChangeLinesCollapse noChangeLines =
+    case noChangeLines of
+        [] ->
+            ""
 
-            [ onlyNoChangeLine ] ->
-                "|   " ++ onlyNoChangeLine
+        [ onlyNoChangeLine ] ->
+            "|   " ++ onlyNoChangeLine
 
-            [ noChangeLine0, noChangeLine1 ] ->
-                [ "|   "
-                , noChangeLine0
-                , "\n"
-                , "|   "
-                , noChangeLine1
-                ]
-                    |> String.concat
+        [ noChangeLine0, noChangeLine1 ] ->
+            "|   "
+                ++ noChangeLine0
+                ++ "\n"
+                ++ "|   "
+                ++ noChangeLine1
 
-            noChangeLine0 :: _ :: noChangeLine2 :: noChangeLine3Up ->
-                [ "|   "
-                , noChangeLine0
-                , "\n⋮\n"
-                , "|   "
-                , noChangeLine3Up |> ListLocalExtra.last |> Maybe.withDefault noChangeLine2
-                ]
-                    |> String.concat
+        noChangeLine0 :: _ :: noChangeLine2 :: noChangeLine3Up ->
+            "|   "
+                ++ noChangeLine0
+                ++ "\n⋮\n"
+                ++ "|   "
+                ++ (noChangeLine3Up |> ListLocalExtra.last |> Maybe.withDefault noChangeLine2)
 
 
 codeExtract : String -> Elm.Syntax.Range.Range -> String
@@ -385,18 +372,17 @@ getIndexOfFirstNonSpace string =
 
 
 withErrorHighlightedRange : { start : Int, end : Int } -> (String -> String)
-withErrorHighlightedRange lineRange =
-    \lineContent ->
-        [ lineContent |> Unicode.left (lineRange.start - 1)
-        , lineContent
-            |> Unicode.dropLeft (lineRange.start - 1)
-            |> Unicode.left (lineRange.end - lineRange.start)
-            |> Ansi.backgroundRed
-        , lineContent
-            |> Unicode.dropLeft
-                (lineRange.start - 1 + lineRange.end - lineRange.start)
-        ]
-            |> String.concat
+withErrorHighlightedRange lineRange lineContent =
+    (lineContent |> Unicode.left (lineRange.start - 1))
+        ++ (lineContent
+                |> Unicode.dropLeft (lineRange.start - 1)
+                |> Unicode.left (lineRange.end - lineRange.start)
+                |> Ansi.backgroundRed
+           )
+        ++ (lineContent
+                |> Unicode.dropLeft
+                    (lineRange.start - 1 + lineRange.end - lineRange.start)
+           )
 
 
 {-| Run reviews, re-running on file changes.
@@ -448,6 +434,20 @@ initialStateAndCommand config =
     )
 
 
+failedToParsePathsMessage : List String -> String
+failedToParsePathsMessage pathsThatFailedToParse =
+    case pathsThatFailedToParse of
+        [ onlyPathThatFailedToParse ] ->
+            "module at path "
+                ++ onlyPathThatFailedToParse
+                ++ " failed to parse"
+
+        nonSinglePathsThatFailedToParse ->
+            "modules at paths "
+                ++ (nonSinglePathsThatFailedToParse |> String.join " and ")
+                ++ " failed to parse"
+
+
 reactToEvent :
     { configuration : { reviews : List Review.Review, extraPaths : List String }
     , toJs : Json.Encode.Value -> Cmd Never
@@ -455,62 +455,97 @@ reactToEvent :
     }
     -> ProgramEvent
     -> (ProgramState -> ( ProgramState, List EventToSendToJs ))
-reactToEvent config event =
-    \state ->
-        case event of
-            InitialFilesReceived initialFiles ->
-                case initialFiles.modules |> allModuleFilesToWithParsedSyntax of
-                    Err pathsThatFailedToParse ->
-                        ( state
-                        , ProblemEncountered
-                            ([ "module(s) at path(s) "
-                             , pathsThatFailedToParse |> String.join " and "
-                             , " failed to parse"
-                             ]
-                                |> String.concat
-                            )
-                            |> List.singleton
-                        )
+reactToEvent config event state =
+    case event of
+        InitialFilesReceived initialFiles ->
+            case initialFiles.modules |> allModuleFilesToWithParsedSyntax of
+                Err pathsThatFailedToParse ->
+                    ( state
+                    , [ ProblemEncountered
+                            (failedToParsePathsMessage pathsThatFailedToParse)
+                      ]
+                    )
 
-                    Ok modules ->
-                        let
-                            initialFilesByPath : FastDict.Dict String String
-                            initialFilesByPath =
-                                FastDict.union
-                                    (initialFiles.extraFiles
-                                        |> FastDictLocalExtra.fromListMap
-                                            (\file -> { key = file.path, value = file.source })
-                                    )
-                                    (initialFiles.modules
-                                        |> FastDictLocalExtra.fromListMap
-                                            (\file -> { key = file.path, value = file.source })
-                                    )
+                Ok modules ->
+                    let
+                        initialFilesByPath : FastDict.Dict String String
+                        initialFilesByPath =
+                            FastDict.union
+                                (initialFiles.extraFiles
+                                    |> FastDictLocalExtra.fromListMap
+                                        (\file -> { key = file.path, value = file.source })
+                                )
+                                (initialFiles.modules
+                                    |> FastDictLocalExtra.fromListMap
+                                        (\file -> { key = file.path, value = file.source })
+                                )
 
-                            runResult :
-                                { errorsByPath : FastDict.Dict String (List FileReviewError)
-                                , nextRuns : List Review.Run
+                        runResult :
+                            { errorsByPath : FastDict.Dict String (List FileReviewError)
+                            , nextRuns : List Review.Run
+                            }
+                        runResult =
+                            { addedOrChangedModules = modules
+                            , addedOrChangedExtraFiles = initialFiles.extraFiles
+                            , directDependencies = initialFiles.directDependencies
+                            , elmJson = initialFiles.elmJson
+                            , removedExtraFilePaths = []
+                            , removedModulePaths = []
+                            }
+                                |> reviewRunList config.configuration.reviews
+
+                        maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                        maybeNextFixableErrorOrAllUnfixable =
+                            runResult.errorsByPath
+                                |> errorsByPathToNextFixableErrorOrAll
+                                    { elmJsonSource = initialFiles.elmJson.source
+                                    , filesByPath = initialFilesByPath
+                                    }
+                    in
+                    ( HavingRunReviewsPreviously
+                        { nextRuns = runResult.nextRuns
+                        , availableErrorsOnReject =
+                            case maybeNextFixableErrorOrAllUnfixable of
+                                Nothing ->
+                                    FastDict.empty
+
+                                Just (AllUnfixable _) ->
+                                    FastDict.empty
+
+                                Just (Fixable nextFixable) ->
+                                    nextFixable.otherErrors
+                        , elmJson = initialFiles.elmJson
+                        , filesByPath = initialFilesByPath
+                        }
+                    , case maybeNextFixableErrorOrAllUnfixable of
+                        Nothing ->
+                            []
+
+                        Just nextFixableErrorOrAllUnfixable ->
+                            [ ErrorsReceived
+                                { projectFilesByPath =
+                                    initialFilesByPath
+                                        |> FastDict.insert "elm.json" initialFiles.elmJson.source
+                                , errors = nextFixableErrorOrAllUnfixable
                                 }
-                            runResult =
-                                { addedOrChangedModules = modules
-                                , addedOrChangedExtraFiles = initialFiles.extraFiles
-                                , directDependencies = initialFiles.directDependencies
-                                , elmJson = initialFiles.elmJson
-                                , removedExtraFilePaths = []
-                                , removedModulePaths = []
-                                }
-                                    |> reviewRunList config.configuration.reviews
+                            ]
+                    )
 
-                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                            maybeNextFixableErrorOrAllUnfixable =
-                                runResult.errorsByPath
-                                    |> errorsByPathToNextFixableErrorOrAll
-                                        { elmJsonSource = initialFiles.elmJson.source
-                                        , filesByPath = initialFilesByPath
-                                        }
-                        in
-                        ( HavingRunReviewsPreviously
-                            { nextRuns = runResult.nextRuns
-                            , availableErrorsOnReject =
+        ErrorFixRejected ->
+            case state of
+                HavingRunReviewsPreviously havingRunReviewsPreviously ->
+                    let
+                        maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                        maybeNextFixableErrorOrAllUnfixable =
+                            havingRunReviewsPreviously.availableErrorsOnReject
+                                |> errorsByPathToNextFixableErrorOrAll
+                                    { elmJsonSource = havingRunReviewsPreviously.elmJson.source
+                                    , filesByPath = havingRunReviewsPreviously.filesByPath
+                                    }
+                    in
+                    ( HavingRunReviewsPreviously
+                        { havingRunReviewsPreviously
+                            | availableErrorsOnReject =
                                 case maybeNextFixableErrorOrAllUnfixable of
                                     Nothing ->
                                         FastDict.empty
@@ -520,38 +555,71 @@ reactToEvent config event =
 
                                     Just (Fixable nextFixable) ->
                                         nextFixable.otherErrors
-                            , elmJson = initialFiles.elmJson
-                            , filesByPath = initialFilesByPath
-                            }
-                        , case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                []
+                        }
+                    , case maybeNextFixableErrorOrAllUnfixable of
+                        Nothing ->
+                            []
 
-                            Just nextFixableErrorOrAllUnfixable ->
-                                ErrorsReceived
-                                    { projectFilesByPath =
-                                        initialFilesByPath
-                                            |> FastDict.insert "elm.json" initialFiles.elmJson.source
-                                    , errors = nextFixableErrorOrAllUnfixable
+                        Just nextFixableErrorOrAllUnfixable ->
+                            [ ErrorsReceived
+                                { projectFilesByPath =
+                                    havingRunReviewsPreviously.filesByPath
+                                        |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                , errors = nextFixableErrorOrAllUnfixable
+                                }
+                            ]
+                    )
+
+                unexpectedState ->
+                    ( unexpectedState, [] )
+
+        ModuleAddedOrChanged moduleAddedOrChangedPathAndSource ->
+            case state of
+                HavingRunReviewsPreviously havingRunReviewsPreviously ->
+                    case moduleAddedOrChangedPathAndSource |> moduleFileToWithParsedSyntax of
+                        Err () ->
+                            ( HavingRunReviewsPreviously havingRunReviewsPreviously
+                            , [ ProblemEncountered
+                                    (failedToParsePathsMessage [ moduleAddedOrChangedPathAndSource.path ])
+                              ]
+                            )
+
+                        Ok moduleAddedOrChanged ->
+                            let
+                                filesByPathWithAddedOrChanged : FastDict.Dict String String
+                                filesByPathWithAddedOrChanged =
+                                    havingRunReviewsPreviously.filesByPath
+                                        |> FastDict.insert moduleAddedOrChanged.path moduleAddedOrChanged.source
+
+                                runResult :
+                                    { errorsByPath : FastDict.Dict String (List FileReviewError)
+                                    , nextRuns : List Review.Run
                                     }
-                                    |> List.singleton
-                        )
+                                runResult =
+                                    { addedOrChangedExtraFiles = []
+                                    , addedOrChangedModules = [ moduleAddedOrChanged ]
+                                    , directDependencies = []
+                                    , elmJson = havingRunReviewsPreviously.elmJson
+                                    , removedExtraFilePaths = []
+                                    , removedModulePaths = []
+                                    }
+                                        |> reviewRunList
+                                            (List.map2 reviewWithRun
+                                                havingRunReviewsPreviously.nextRuns
+                                                config.configuration.reviews
+                                            )
 
-            ErrorFixRejected ->
-                case state of
-                    HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                        let
-                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                            maybeNextFixableErrorOrAllUnfixable =
-                                havingRunReviewsPreviously.availableErrorsOnReject
-                                    |> errorsByPathToNextFixableErrorOrAll
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = havingRunReviewsPreviously.filesByPath
-                                        }
-                        in
-                        ( HavingRunReviewsPreviously
-                            { havingRunReviewsPreviously
-                                | availableErrorsOnReject =
+                                maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                                maybeNextFixableErrorOrAllUnfixable =
+                                    runResult.errorsByPath
+                                        |> errorsByPathToNextFixableErrorOrAll
+                                            { elmJsonSource = havingRunReviewsPreviously.elmJson.source
+                                            , filesByPath = filesByPathWithAddedOrChanged
+                                            }
+                            in
+                            ( HavingRunReviewsPreviously
+                                { nextRuns = runResult.nextRuns
+                                , availableErrorsOnReject =
                                     case maybeNextFixableErrorOrAllUnfixable of
                                         Nothing ->
                                             FastDict.empty
@@ -561,322 +629,242 @@ reactToEvent config event =
 
                                         Just (Fixable nextFixable) ->
                                             nextFixable.otherErrors
+                                , elmJson = havingRunReviewsPreviously.elmJson
+                                , filesByPath = filesByPathWithAddedOrChanged
+                                }
+                            , case maybeNextFixableErrorOrAllUnfixable of
+                                Nothing ->
+                                    []
+
+                                Just nextFixableErrorOrAllUnfixable ->
+                                    [ ErrorsReceived
+                                        { projectFilesByPath =
+                                            filesByPathWithAddedOrChanged
+                                                |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                        , errors = nextFixableErrorOrAllUnfixable
+                                        }
+                                    ]
+                            )
+
+                unexpectedState ->
+                    ( unexpectedState, [] )
+
+        ModuleRemoved moduleRemoved ->
+            case state of
+                HavingRunReviewsPreviously havingRunReviewsPreviously ->
+                    let
+                        filesByPathWithRemoved : FastDict.Dict String String
+                        filesByPathWithRemoved =
+                            havingRunReviewsPreviously.filesByPath
+                                |> FastDict.remove moduleRemoved.path
+
+                        runResult :
+                            { errorsByPath : FastDict.Dict String (List FileReviewError)
+                            , nextRuns : List Review.Run
                             }
-                        , case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                []
-
-                            Just nextFixableErrorOrAllUnfixable ->
-                                ErrorsReceived
-                                    { projectFilesByPath =
-                                        havingRunReviewsPreviously.filesByPath
-                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
-                                    , errors = nextFixableErrorOrAllUnfixable
-                                    }
-                                    |> List.singleton
-                        )
-
-                    unexpectedState ->
-                        ( unexpectedState, [] )
-
-            ModuleAddedOrChanged moduleAddedOrChangedPathAndSource ->
-                case state of
-                    HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                        case moduleAddedOrChangedPathAndSource |> moduleFileToWithParsedSyntax of
-                            Err () ->
-                                ( HavingRunReviewsPreviously havingRunReviewsPreviously
-                                , ProblemEncountered
-                                    ([ "module at path "
-                                     , moduleAddedOrChangedPathAndSource.path
-                                     , " failed to parse"
-                                     ]
-                                        |> String.concat
+                        runResult =
+                            { addedOrChangedExtraFiles = []
+                            , addedOrChangedModules = []
+                            , directDependencies = []
+                            , elmJson = havingRunReviewsPreviously.elmJson
+                            , removedExtraFilePaths = []
+                            , removedModulePaths = [ moduleRemoved.path ]
+                            }
+                                |> reviewRunList
+                                    (List.map2 reviewWithRun
+                                        havingRunReviewsPreviously.nextRuns
+                                        config.configuration.reviews
                                     )
-                                    |> List.singleton
-                                )
 
-                            Ok moduleAddedOrChanged ->
-                                let
-                                    filesByPathWithAddedOrChanged : FastDict.Dict String String
-                                    filesByPathWithAddedOrChanged =
-                                        havingRunReviewsPreviously.filesByPath
-                                            |> FastDict.insert moduleAddedOrChanged.path moduleAddedOrChanged.source
+                        maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                        maybeNextFixableErrorOrAllUnfixable =
+                            runResult.errorsByPath
+                                |> errorsByPathToNextFixableErrorOrAll
+                                    { elmJsonSource = havingRunReviewsPreviously.elmJson.source
+                                    , filesByPath = filesByPathWithRemoved
+                                    }
+                    in
+                    ( HavingRunReviewsPreviously
+                        { nextRuns = runResult.nextRuns
+                        , availableErrorsOnReject =
+                            case maybeNextFixableErrorOrAllUnfixable of
+                                Nothing ->
+                                    FastDict.empty
 
-                                    runResult :
-                                        { errorsByPath : FastDict.Dict String (List FileReviewError)
-                                        , nextRuns : List Review.Run
-                                        }
-                                    runResult =
-                                        { addedOrChangedExtraFiles = []
-                                        , addedOrChangedModules = [ moduleAddedOrChanged ]
-                                        , directDependencies = []
-                                        , elmJson = havingRunReviewsPreviously.elmJson
-                                        , removedExtraFilePaths = []
-                                        , removedModulePaths = []
-                                        }
-                                            |> reviewRunList
-                                                (List.map2 reviewWithRun
-                                                    havingRunReviewsPreviously.nextRuns
-                                                    config.configuration.reviews
-                                                )
+                                Just (AllUnfixable _) ->
+                                    FastDict.empty
 
-                                    maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                                    maybeNextFixableErrorOrAllUnfixable =
-                                        runResult.errorsByPath
-                                            |> errorsByPathToNextFixableErrorOrAll
-                                                { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                                , filesByPath = filesByPathWithAddedOrChanged
-                                                }
-                                in
-                                ( HavingRunReviewsPreviously
-                                    { nextRuns = runResult.nextRuns
-                                    , availableErrorsOnReject =
-                                        case maybeNextFixableErrorOrAllUnfixable of
-                                            Nothing ->
-                                                FastDict.empty
+                                Just (Fixable nextFixable) ->
+                                    nextFixable.otherErrors
+                        , elmJson = havingRunReviewsPreviously.elmJson
+                        , filesByPath = filesByPathWithRemoved
+                        }
+                    , case maybeNextFixableErrorOrAllUnfixable of
+                        Nothing ->
+                            []
 
-                                            Just (AllUnfixable _) ->
-                                                FastDict.empty
+                        Just nextFixableErrorOrAllUnfixable ->
+                            [ ErrorsReceived
+                                { projectFilesByPath =
+                                    filesByPathWithRemoved
+                                        |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                , errors = nextFixableErrorOrAllUnfixable
+                                }
+                            ]
+                    )
 
-                                            Just (Fixable nextFixable) ->
-                                                nextFixable.otherErrors
-                                    , elmJson = havingRunReviewsPreviously.elmJson
+                unexpectedState ->
+                    ( unexpectedState, [] )
+
+        ExtraFileAddedOrChanged fileAddedOrChanged ->
+            case state of
+                HavingRunReviewsPreviously havingRunReviewsPreviously ->
+                    let
+                        filesByPathWithAddedOrChanged : FastDict.Dict String String
+                        filesByPathWithAddedOrChanged =
+                            havingRunReviewsPreviously.filesByPath
+                                |> FastDict.insert fileAddedOrChanged.path fileAddedOrChanged.source
+
+                        runResult :
+                            { errorsByPath : FastDict.Dict String (List FileReviewError)
+                            , nextRuns : List Review.Run
+                            }
+                        runResult =
+                            { addedOrChangedExtraFiles = [ fileAddedOrChanged ]
+                            , addedOrChangedModules = []
+                            , directDependencies = []
+                            , elmJson = havingRunReviewsPreviously.elmJson
+                            , removedExtraFilePaths = []
+                            , removedModulePaths = []
+                            }
+                                |> reviewRunList
+                                    (List.map2 reviewWithRun
+                                        havingRunReviewsPreviously.nextRuns
+                                        config.configuration.reviews
+                                    )
+
+                        maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                        maybeNextFixableErrorOrAllUnfixable =
+                            runResult.errorsByPath
+                                |> errorsByPathToNextFixableErrorOrAll
+                                    { elmJsonSource = havingRunReviewsPreviously.elmJson.source
                                     , filesByPath = filesByPathWithAddedOrChanged
                                     }
-                                , case maybeNextFixableErrorOrAllUnfixable of
-                                    Nothing ->
-                                        []
+                    in
+                    ( HavingRunReviewsPreviously
+                        { nextRuns = runResult.nextRuns
+                        , availableErrorsOnReject =
+                            case maybeNextFixableErrorOrAllUnfixable of
+                                Nothing ->
+                                    FastDict.empty
 
-                                    Just nextFixableErrorOrAllUnfixable ->
-                                        ErrorsReceived
-                                            { projectFilesByPath =
-                                                filesByPathWithAddedOrChanged
-                                                    |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
-                                            , errors = nextFixableErrorOrAllUnfixable
-                                            }
-                                            |> List.singleton
-                                )
+                                Just (AllUnfixable _) ->
+                                    FastDict.empty
 
-                    unexpectedState ->
-                        ( unexpectedState, [] )
+                                Just (Fixable nextFixable) ->
+                                    nextFixable.otherErrors
+                        , elmJson = havingRunReviewsPreviously.elmJson
+                        , filesByPath = filesByPathWithAddedOrChanged
+                        }
+                    , case maybeNextFixableErrorOrAllUnfixable of
+                        Nothing ->
+                            []
 
-            ModuleRemoved moduleRemoved ->
-                case state of
-                    HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                        let
-                            filesByPathWithRemoved : FastDict.Dict String String
-                            filesByPathWithRemoved =
-                                havingRunReviewsPreviously.filesByPath
-                                    |> FastDict.remove moduleRemoved.path
-
-                            runResult :
-                                { errorsByPath : FastDict.Dict String (List FileReviewError)
-                                , nextRuns : List Review.Run
+                        Just nextFixableErrorOrAllUnfixable ->
+                            [ ErrorsReceived
+                                { projectFilesByPath =
+                                    filesByPathWithAddedOrChanged
+                                        |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                , errors = nextFixableErrorOrAllUnfixable
                                 }
-                            runResult =
-                                { addedOrChangedExtraFiles = []
-                                , addedOrChangedModules = []
-                                , directDependencies = []
-                                , elmJson = havingRunReviewsPreviously.elmJson
-                                , removedExtraFilePaths = []
-                                , removedModulePaths = [ moduleRemoved.path ]
-                                }
-                                    |> reviewRunList
-                                        (List.map2 reviewWithRun
-                                            havingRunReviewsPreviously.nextRuns
-                                            config.configuration.reviews
-                                        )
+                            ]
+                    )
 
-                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                            maybeNextFixableErrorOrAllUnfixable =
-                                runResult.errorsByPath
-                                    |> errorsByPathToNextFixableErrorOrAll
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithRemoved
-                                        }
-                        in
-                        ( HavingRunReviewsPreviously
-                            { nextRuns = runResult.nextRuns
-                            , availableErrorsOnReject =
-                                case maybeNextFixableErrorOrAllUnfixable of
-                                    Nothing ->
-                                        FastDict.empty
+                unexpectedState ->
+                    ( unexpectedState, [] )
 
-                                    Just (AllUnfixable _) ->
-                                        FastDict.empty
+        ExtraFileRemoved fileRemoved ->
+            case state of
+                HavingRunReviewsPreviously havingRunReviewsPreviously ->
+                    let
+                        filesByPathWithRemoved : FastDict.Dict String String
+                        filesByPathWithRemoved =
+                            havingRunReviewsPreviously.filesByPath
+                                |> FastDict.remove fileRemoved.path
 
-                                    Just (Fixable nextFixable) ->
-                                        nextFixable.otherErrors
-                            , elmJson = havingRunReviewsPreviously.elmJson
-                            , filesByPath = filesByPathWithRemoved
+                        runResult :
+                            { errorsByPath : FastDict.Dict String (List FileReviewError)
+                            , nextRuns : List Review.Run
                             }
-                        , case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                []
-
-                            Just nextFixableErrorOrAllUnfixable ->
-                                ErrorsReceived
-                                    { projectFilesByPath =
-                                        filesByPathWithRemoved
-                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
-                                    , errors = nextFixableErrorOrAllUnfixable
-                                    }
-                                    |> List.singleton
-                        )
-
-                    unexpectedState ->
-                        ( unexpectedState, [] )
-
-            ExtraFileAddedOrChanged fileAddedOrChanged ->
-                case state of
-                    HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                        let
-                            filesByPathWithAddedOrChanged : FastDict.Dict String String
-                            filesByPathWithAddedOrChanged =
-                                havingRunReviewsPreviously.filesByPath
-                                    |> FastDict.insert fileAddedOrChanged.path fileAddedOrChanged.source
-
-                            runResult :
-                                { errorsByPath : FastDict.Dict String (List FileReviewError)
-                                , nextRuns : List Review.Run
-                                }
-                            runResult =
-                                { addedOrChangedExtraFiles = [ fileAddedOrChanged ]
-                                , addedOrChangedModules = []
-                                , directDependencies = []
-                                , elmJson = havingRunReviewsPreviously.elmJson
-                                , removedExtraFilePaths = []
-                                , removedModulePaths = []
-                                }
-                                    |> reviewRunList
-                                        (List.map2 reviewWithRun
-                                            havingRunReviewsPreviously.nextRuns
-                                            config.configuration.reviews
-                                        )
-
-                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                            maybeNextFixableErrorOrAllUnfixable =
-                                runResult.errorsByPath
-                                    |> errorsByPathToNextFixableErrorOrAll
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithAddedOrChanged
-                                        }
-                        in
-                        ( HavingRunReviewsPreviously
-                            { nextRuns = runResult.nextRuns
-                            , availableErrorsOnReject =
-                                case maybeNextFixableErrorOrAllUnfixable of
-                                    Nothing ->
-                                        FastDict.empty
-
-                                    Just (AllUnfixable _) ->
-                                        FastDict.empty
-
-                                    Just (Fixable nextFixable) ->
-                                        nextFixable.otherErrors
+                        runResult =
+                            { addedOrChangedExtraFiles = []
+                            , addedOrChangedModules = []
+                            , directDependencies = []
                             , elmJson = havingRunReviewsPreviously.elmJson
-                            , filesByPath = filesByPathWithAddedOrChanged
+                            , removedExtraFilePaths = [ fileRemoved.path ]
+                            , removedModulePaths = []
                             }
-                        , case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                []
+                                |> reviewRunList
+                                    (List.map2 reviewWithRun
+                                        havingRunReviewsPreviously.nextRuns
+                                        config.configuration.reviews
+                                    )
 
-                            Just nextFixableErrorOrAllUnfixable ->
-                                ErrorsReceived
-                                    { projectFilesByPath =
-                                        filesByPathWithAddedOrChanged
-                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
-                                    , errors = nextFixableErrorOrAllUnfixable
+                        maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
+                        maybeNextFixableErrorOrAllUnfixable =
+                            runResult.errorsByPath
+                                |> errorsByPathToNextFixableErrorOrAll
+                                    { elmJsonSource = havingRunReviewsPreviously.elmJson.source
+                                    , filesByPath = filesByPathWithRemoved
                                     }
-                                    |> List.singleton
-                        )
+                    in
+                    ( HavingRunReviewsPreviously
+                        { nextRuns = runResult.nextRuns
+                        , availableErrorsOnReject =
+                            case maybeNextFixableErrorOrAllUnfixable of
+                                Nothing ->
+                                    FastDict.empty
 
-                    unexpectedState ->
-                        ( unexpectedState, [] )
+                                Just (AllUnfixable _) ->
+                                    FastDict.empty
 
-            ExtraFileRemoved fileRemoved ->
-                case state of
-                    HavingRunReviewsPreviously havingRunReviewsPreviously ->
-                        let
-                            filesByPathWithRemoved : FastDict.Dict String String
-                            filesByPathWithRemoved =
-                                havingRunReviewsPreviously.filesByPath
-                                    |> FastDict.remove fileRemoved.path
+                                Just (Fixable nextFixable) ->
+                                    nextFixable.otherErrors
+                        , elmJson = havingRunReviewsPreviously.elmJson
+                        , filesByPath = filesByPathWithRemoved
+                        }
+                    , case maybeNextFixableErrorOrAllUnfixable of
+                        Nothing ->
+                            []
 
-                            runResult :
-                                { errorsByPath : FastDict.Dict String (List FileReviewError)
-                                , nextRuns : List Review.Run
+                        Just nextFixableErrorOrAllUnfixable ->
+                            [ ErrorsReceived
+                                { projectFilesByPath =
+                                    filesByPathWithRemoved
+                                        |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
+                                , errors = nextFixableErrorOrAllUnfixable
                                 }
-                            runResult =
-                                { addedOrChangedExtraFiles = []
-                                , addedOrChangedModules = []
-                                , directDependencies = []
-                                , elmJson = havingRunReviewsPreviously.elmJson
-                                , removedExtraFilePaths = [ fileRemoved.path ]
-                                , removedModulePaths = []
-                                }
-                                    |> reviewRunList
-                                        (List.map2 reviewWithRun
-                                            havingRunReviewsPreviously.nextRuns
-                                            config.configuration.reviews
-                                        )
+                            ]
+                    )
 
-                            maybeNextFixableErrorOrAllUnfixable : Maybe NextFixableOrAllUnfixable
-                            maybeNextFixableErrorOrAllUnfixable =
-                                runResult.errorsByPath
-                                    |> errorsByPathToNextFixableErrorOrAll
-                                        { elmJsonSource = havingRunReviewsPreviously.elmJson.source
-                                        , filesByPath = filesByPathWithRemoved
-                                        }
-                        in
-                        ( HavingRunReviewsPreviously
-                            { nextRuns = runResult.nextRuns
-                            , availableErrorsOnReject =
-                                case maybeNextFixableErrorOrAllUnfixable of
-                                    Nothing ->
-                                        FastDict.empty
+                unexpectedState ->
+                    ( unexpectedState, [] )
 
-                                    Just (AllUnfixable _) ->
-                                        FastDict.empty
-
-                                    Just (Fixable nextFixable) ->
-                                        nextFixable.otherErrors
-                            , elmJson = havingRunReviewsPreviously.elmJson
-                            , filesByPath = filesByPathWithRemoved
-                            }
-                        , case maybeNextFixableErrorOrAllUnfixable of
-                            Nothing ->
-                                []
-
-                            Just nextFixableErrorOrAllUnfixable ->
-                                ErrorsReceived
-                                    { projectFilesByPath =
-                                        filesByPathWithRemoved
-                                            |> FastDict.insert "elm.json" havingRunReviewsPreviously.elmJson.source
-                                    , errors = nextFixableErrorOrAllUnfixable
-                                    }
-                                    |> List.singleton
-                        )
-
-                    unexpectedState ->
-                        ( unexpectedState, [] )
-
-            JsEventJsonFailedToDecode jsonDecodeError ->
-                ( state
-                , ProblemEncountered
+        JsEventJsonFailedToDecode jsonDecodeError ->
+            ( state
+            , [ ProblemEncountered
                     ("bug: failed to decode json event from the js CLI"
                         ++ (jsonDecodeError |> Json.Decode.errorToString)
                     )
-                    |> List.singleton
-                )
+              ]
+            )
 
 
 reviewWithRun : Review.Run -> (Review -> Review)
-reviewWithRun nextRun =
-    \review ->
-        { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
-        , run = nextRun
-        }
+reviewWithRun nextRun review =
+    { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
+    , run = nextRun
+    }
 
 
 reviewRunList :
@@ -908,7 +896,12 @@ reviewRunList reviews project =
             |> List.foldl
                 (\runResultForReview soFar ->
                     FastDictLocalExtra.unionWith (\new already -> new ++ already)
-                        runResultForReview.errorsByPath
+                        (runResultForReview.errorsByPath
+                            |> FastDict.map
+                                (\_ errors ->
+                                    errors |> List.sortWith (\a b -> Elm.Syntax.Range.compare a.range b.range)
+                                )
+                        )
                         soFar
                 )
                 FastDict.empty
@@ -920,182 +913,178 @@ errorsByPathToNextFixableErrorOrAll :
     { elmJsonSource : String, filesByPath : FastDict.Dict String String }
     -> FastDict.Dict String (List FileReviewError)
     -> Maybe NextFixableOrAllUnfixable
-errorsByPathToNextFixableErrorOrAll project =
-    \errorsByPath ->
-        let
-            sourceAtPath : String -> Maybe String
-            sourceAtPath path =
-                case path of
-                    "elmJson" ->
-                        project.elmJsonSource |> Just
+errorsByPathToNextFixableErrorOrAll project errorsByPath =
+    let
+        sourceAtPath : String -> Maybe String
+        sourceAtPath path =
+            case path of
+                "elm.json" ->
+                    project.elmJsonSource |> Just
 
-                    filePath ->
-                        project.filesByPath |> FastDict.get filePath
+                filePath ->
+                    project.filesByPath |> FastDict.get filePath
 
-            nextFixableErrorOrAll :
-                { fixable :
-                    Maybe
-                        { source : String
-                        , fixedSources : List { path : String, fixedSource : String, originalSource : String }
-                        , message : String
-                        , details : List String
-                        , range : Elm.Syntax.Range.Range
-                        , path : String
-                        }
-                , otherErrors : FastDict.Dict String (List FileReviewError)
-                }
-            nextFixableErrorOrAll =
-                errorsByPath
-                    |> FastDict.foldl
-                        (\path errors soFar ->
-                            let
-                                errorsFixableErrorOrAll :
-                                    { fixable :
-                                        Maybe
-                                            { source : String
-                                            , fixedSources : List { path : String, fixedSource : String, originalSource : String }
-                                            , message : String
-                                            , details : List String
-                                            , range : Elm.Syntax.Range.Range
-                                            , path : String
-                                            }
-                                    , otherErrors : List FileReviewError
-                                    }
-                                errorsFixableErrorOrAll =
-                                    case soFar.fixable of
-                                        Just soFarFix ->
-                                            { fixable = soFarFix |> Just, otherErrors = errors }
+        nextFixableErrorOrAll :
+            { fixable :
+                Maybe
+                    { source : String
+                    , fixedSources : List { path : String, fixedSource : String, originalSource : String }
+                    , message : String
+                    , details : List String
+                    , range : Elm.Syntax.Range.Range
+                    , path : String
+                    }
+            , otherErrors : FastDict.Dict String (List FileReviewError)
+            }
+        nextFixableErrorOrAll =
+            errorsByPath
+                |> FastDict.foldl
+                    (\path errors soFar ->
+                        let
+                            errorsFixableErrorOrAll :
+                                { fixable :
+                                    Maybe
+                                        { source : String
+                                        , fixedSources : List { path : String, fixedSource : String, originalSource : String }
+                                        , message : String
+                                        , details : List String
+                                        , range : Elm.Syntax.Range.Range
+                                        , path : String
+                                        }
+                                , otherErrors : List FileReviewError
+                                }
+                            errorsFixableErrorOrAll =
+                                case soFar.fixable of
+                                    Just soFarFix ->
+                                        { fixable = soFarFix |> Just, otherErrors = errors }
 
-                                        Nothing ->
-                                            case sourceAtPath path of
-                                                Nothing ->
-                                                    { fixable = Nothing, otherErrors = [] }
+                                    Nothing ->
+                                        case sourceAtPath path of
+                                            Nothing ->
+                                                { fixable = Nothing, otherErrors = [] }
 
-                                                Just pathSource ->
-                                                    errors
-                                                        |> List.foldl
-                                                            (\error errorsResultSoFar ->
-                                                                if error.fixEditsByPath |> FastDict.isEmpty then
-                                                                    { fixable = Nothing
-                                                                    , otherErrors = errorsResultSoFar.otherErrors |> (::) error
-                                                                    }
+                                            Just pathSource ->
+                                                errors
+                                                    |> List.foldl
+                                                        (\error errorsResultSoFar ->
+                                                            if error.fixEditsByPath |> FastDict.isEmpty then
+                                                                { fixable = Nothing
+                                                                , otherErrors = error :: errorsResultSoFar.otherErrors
+                                                                }
 
-                                                                else
-                                                                    let
-                                                                        maybeFixedSources : Maybe (List { path : String, fixedSource : String, originalSource : String })
-                                                                        maybeFixedSources =
-                                                                            error.fixEditsByPath
-                                                                                |> FastDict.foldl
-                                                                                    (\fixPath fileEdits maybeFixedSourcesSoFar ->
-                                                                                        case maybeFixedSourcesSoFar of
-                                                                                            Nothing ->
-                                                                                                Nothing
+                                                            else
+                                                                let
+                                                                    maybeFixedSources : Maybe (List { path : String, fixedSource : String, originalSource : String })
+                                                                    maybeFixedSources =
+                                                                        error.fixEditsByPath
+                                                                            |> FastDict.foldl
+                                                                                (\fixPath fileEdits maybeFixedSourcesSoFar ->
+                                                                                    case maybeFixedSourcesSoFar of
+                                                                                        Nothing ->
+                                                                                            Nothing
 
-                                                                                            Just soFarFixedSources ->
-                                                                                                case sourceAtPath fixPath of
-                                                                                                    Nothing ->
-                                                                                                        Nothing
+                                                                                        Just soFarFixedSources ->
+                                                                                            case sourceAtPath fixPath of
+                                                                                                Nothing ->
+                                                                                                    Nothing
 
-                                                                                                    Just sourceToFix ->
-                                                                                                        case sourceToFix |> Review.sourceApplyEdits fileEdits of
-                                                                                                            Ok fixedSource ->
-                                                                                                                soFarFixedSources
-                                                                                                                    |> (::)
-                                                                                                                        { path = fixPath
-                                                                                                                        , fixedSource = fixedSource
-                                                                                                                        , originalSource = sourceToFix
-                                                                                                                        }
-                                                                                                                    |> Just
+                                                                                                Just sourceToFix ->
+                                                                                                    case sourceToFix |> Review.sourceApplyEdits fileEdits of
+                                                                                                        Ok fixedSource ->
+                                                                                                            { path = fixPath
+                                                                                                            , fixedSource = fixedSource
+                                                                                                            , originalSource = sourceToFix
+                                                                                                            }
+                                                                                                                :: soFarFixedSources
+                                                                                                                |> Just
 
-                                                                                                            Err _ ->
-                                                                                                                Nothing
-                                                                                    )
-                                                                                    (Just [])
-                                                                    in
-                                                                    case maybeFixedSources of
-                                                                        Nothing ->
-                                                                            { fixable = Nothing
-                                                                            , otherErrors = errorsResultSoFar.otherErrors |> (::) error
+                                                                                                        Err _ ->
+                                                                                                            Nothing
+                                                                                )
+                                                                                (Just [])
+                                                                in
+                                                                case maybeFixedSources of
+                                                                    Nothing ->
+                                                                        { fixable = Nothing
+                                                                        , otherErrors = error :: errorsResultSoFar.otherErrors
+                                                                        }
+
+                                                                    Just fixedSources ->
+                                                                        { fixable =
+                                                                            { source = pathSource
+                                                                            , fixedSources = fixedSources
+                                                                            , message = error.message
+                                                                            , details = error.details
+                                                                            , range = error.range
+                                                                            , path = path
                                                                             }
-
-                                                                        Just fixedSources ->
-                                                                            { fixable =
-                                                                                { source = pathSource
-                                                                                , fixedSources = fixedSources
-                                                                                , message = error.message
-                                                                                , details = error.details
-                                                                                , range = error.range
-                                                                                , path = path
-                                                                                }
-                                                                                    |> Just
-                                                                            , otherErrors = errorsResultSoFar.otherErrors
-                                                                            }
-                                                            )
-                                                            { fixable = Nothing
-                                                            , otherErrors = []
-                                                            }
-                            in
-                            { fixable = errorsFixableErrorOrAll.fixable
-                            , otherErrors = soFar.otherErrors |> FastDict.insert path errorsFixableErrorOrAll.otherErrors
-                            }
-                        )
-                        { fixable = Nothing
-                        , otherErrors = FastDict.empty
+                                                                                |> Just
+                                                                        , otherErrors = errorsResultSoFar.otherErrors
+                                                                        }
+                                                        )
+                                                        { fixable = Nothing
+                                                        , otherErrors = []
+                                                        }
+                        in
+                        { fixable = errorsFixableErrorOrAll.fixable
+                        , otherErrors = soFar.otherErrors |> FastDict.insert path errorsFixableErrorOrAll.otherErrors
                         }
-        in
-        case ( nextFixableErrorOrAll.fixable, nextFixableErrorOrAll.otherErrors |> FastDictLocalExtra.all (\_ errors -> errors |> List.isEmpty) ) of
-            ( Nothing, True ) ->
-                Nothing
+                    )
+                    { fixable = Nothing
+                    , otherErrors = FastDict.empty
+                    }
+    in
+    case ( nextFixableErrorOrAll.fixable, nextFixableErrorOrAll.otherErrors |> FastDictLocalExtra.all (\_ errors -> errors |> List.isEmpty) ) of
+        ( Nothing, True ) ->
+            Nothing
 
-            ( Just fixable, _ ) ->
-                Fixable { fixable = fixable, otherErrors = nextFixableErrorOrAll.otherErrors }
-                    |> Just
+        ( Just fixable, _ ) ->
+            Fixable { fixable = fixable, otherErrors = nextFixableErrorOrAll.otherErrors }
+                |> Just
 
-            ( Nothing, False ) ->
-                AllUnfixable nextFixableErrorOrAll.otherErrors
-                    |> Just
+        ( Nothing, False ) ->
+            AllUnfixable nextFixableErrorOrAll.otherErrors
+                |> Just
 
 
 moduleFileToWithParsedSyntax : { source : String, path : String } -> Result () { path : String, source : String, syntax : Elm.Syntax.File.File }
-moduleFileToWithParsedSyntax =
-    \moduleFile ->
-        case moduleFile.source |> Elm.Parser.parseToFile of
-            Err _ ->
-                Err ()
+moduleFileToWithParsedSyntax moduleFile =
+    case moduleFile.source |> Elm.Parser.parseToFile of
+        Err _ ->
+            Err ()
 
-            Ok syntax ->
-                { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
-                    |> Ok
+        Ok syntax ->
+            { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
+                |> Ok
 
 
 allModuleFilesToWithParsedSyntax :
     List { source : String, path : String }
     -> Result (List String) (List { path : String, source : String, syntax : Elm.Syntax.File.File })
-allModuleFilesToWithParsedSyntax =
-    \moduleFiles ->
-        moduleFiles
-            |> List.foldl
-                (\moduleFile soFar ->
-                    case moduleFile.source |> Elm.Parser.parseToFile of
-                        Err _ ->
-                            case soFar of
-                                Ok _ ->
-                                    Err [ moduleFile.path ]
+allModuleFilesToWithParsedSyntax moduleFiles =
+    moduleFiles
+        |> List.foldl
+            (\moduleFile soFar ->
+                case moduleFile.source |> Elm.Parser.parseToFile of
+                    Err _ ->
+                        case soFar of
+                            Ok _ ->
+                                Err [ moduleFile.path ]
 
-                                Err soFarErrorPaths ->
-                                    Err (soFarErrorPaths |> (::) moduleFile.path)
+                            Err soFarErrorPaths ->
+                                Err (moduleFile.path :: soFarErrorPaths)
 
-                        Ok syntax ->
-                            case soFar of
-                                Err soFarErrorPaths ->
-                                    Err soFarErrorPaths
+                    Ok syntax ->
+                        case soFar of
+                            Err soFarErrorPaths ->
+                                Err soFarErrorPaths
 
-                                Ok soFarWithParsedSyntax ->
-                                    soFarWithParsedSyntax
-                                        |> (::) { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
-                                        |> Ok
-                )
-                ([] |> Ok)
+                            Ok soFarWithParsedSyntax ->
+                                { path = moduleFile.path, source = moduleFile.source, syntax = syntax }
+                                    :: soFarWithParsedSyntax
+                                    |> Ok
+            )
+            ([] |> Ok)
 
 
 listen :
@@ -1104,17 +1093,16 @@ listen :
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
     }
     -> (ProgramState -> Sub ProgramEvent)
-listen config =
-    \_ ->
-        config.fromJs
-            (\fromJs ->
-                case fromJs |> Json.Decode.decodeValue eventJsonDecoder of
-                    Err decodeError ->
-                        JsEventJsonFailedToDecode decodeError
+listen config _ =
+    config.fromJs
+        (\fromJs ->
+            case fromJs |> Json.Decode.decodeValue eventJsonDecoder of
+                Err decodeError ->
+                    JsEventJsonFailedToDecode decodeError
 
-                    Ok event ->
-                        event
-            )
+                Ok event ->
+                    event
+        )
 
 
 eventJsonDecoder : Json.Decode.Decoder ProgramEvent

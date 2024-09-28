@@ -117,7 +117,7 @@ tests =
                         [ { path = "src/A.elm"
                           , message = "misspelled fruits.com"
                           , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                          , range = Review.Test.Under "\"the name is obviously frits.com\""
+                          , range = Review.Test.Under "frits.com"
                           , fixedFiles = []
                           }
                         ]

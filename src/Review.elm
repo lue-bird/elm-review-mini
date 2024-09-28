@@ -53,16 +53,15 @@ E.g. to find all `as` pattern ranges
     findAllAsPatternRanges :
         Elm.Syntax.Node.Node ELm.Syntax.Pattern.Pattern
         -> List ELm.Syntax.Range.Range
-    findAllAsPatternRanges =
-        \patternNode ->
-            (case patternNode of
-                Elm.Syntax.Node.Node asRange (Elm.Syntax.Pattern.AsPattern _ _) ->
-                    [ asRange ]
+    findAllAsPatternRanges patternNode =
+        (case patternNode of
+            Elm.Syntax.Node.Node asRange (Elm.Syntax.Pattern.AsPattern _ _) ->
+                [ asRange ]
 
-                _ ->
-                    []
-            )
-                ++ (patternNode |> Review.patternSubs |> List.concatMap findAllAsPatternRanges)
+            _ ->
+                []
+        )
+            ++ (patternNode |> Review.patternSubs |> List.concatMap findAllAsPatternRanges)
 
 This fine control allows you to e.g. skip visiting certain parts that you already accounted for.
 
@@ -384,31 +383,27 @@ create review =
         toKnowledges =
             review.inspect |> inspectToToKnowledges
 
-        knowledgesFoldToMaybe : List knowledge -> Maybe knowledge
-        knowledgesFoldToMaybe =
-            \knowledges ->
-                case knowledges of
-                    [] ->
-                        Nothing
+        knowledgesFoldMapToMaybe : (element -> knowledge) -> List element -> Maybe knowledge
+        knowledgesFoldMapToMaybe elementToKnowledge knowledges =
+            case knowledges of
+                [] ->
+                    Nothing
 
-                    one :: others ->
-                        others |> List.foldl review.knowledgeMerge one |> Just
+                one :: others ->
+                    others
+                        |> List.foldl
+                            (\element soFar ->
+                                soFar |> review.knowledgeMerge (element |> elementToKnowledge)
+                            )
+                            (one |> elementToKnowledge)
+                        |> Just
 
         moduleToMaybeKnowledge :
             { path : String, source : String, syntax : Elm.Syntax.File.File }
             -> Maybe { path : String, knowledge : knowledge }
         moduleToMaybeKnowledge moduleFile =
-            let
-                moduleData : { path : String, source : String, syntax : Elm.Syntax.File.File }
-                moduleData =
-                    { path = moduleFile.path
-                    , source = moduleFile.source
-                    , syntax = moduleFile.syntax |> syntaxFileSanitize
-                    }
-            in
             toKnowledges.moduleToKnowledge
-                |> List.map (\f -> f moduleData)
-                |> knowledgesFoldToMaybe
+                |> knowledgesFoldMapToMaybe (\f -> f moduleFile)
                 |> Maybe.map
                     (\foldedKnowledge ->
                         { path = moduleFile.path
@@ -430,8 +425,7 @@ create review =
 
                                 Nothing ->
                                     toKnowledges.elmJsonToKnowledge
-                                        |> List.map (\f -> f project.elmJson)
-                                        |> knowledgesFoldToMaybe
+                                        |> knowledgesFoldMapToMaybe (\f -> f project.elmJson)
 
                         directDependenciesKnowledgeAndCache : Maybe knowledge
                         directDependenciesKnowledgeAndCache =
@@ -448,8 +442,7 @@ create review =
                                                 |> ListLocalExtra.consJust ElmCoreDependency.parsed
                                     in
                                     toKnowledges.directDependenciesToKnowledge
-                                        |> List.map (\f -> f directDependenciesData)
-                                        |> knowledgesFoldToMaybe
+                                        |> knowledgesFoldMapToMaybe (\f -> f directDependenciesData)
 
                         moduleKnowledges : List { path : String, knowledge : knowledge }
                         moduleKnowledges =
@@ -457,7 +450,7 @@ create review =
                                 (\_ new soFar -> soFar |> ListLocalExtra.consJust new)
                                 (\_ new _ soFar -> soFar |> ListLocalExtra.consJust new)
                                 (\path knowledgeCache soFar ->
-                                    soFar |> (::) { path = path, knowledge = knowledgeCache }
+                                    { path = path, knowledge = knowledgeCache } :: soFar
                                 )
                                 (project.addedOrChangedModules
                                     |> FastDictLocalExtra.fromListMap
@@ -477,8 +470,7 @@ create review =
                             -> Maybe { path : String, knowledge : knowledge }
                         extraFileToMaybeKnowledge fileInfo =
                             toKnowledges.extraFileToKnowledge
-                                |> List.map (\f -> f fileInfo)
-                                |> knowledgesFoldToMaybe
+                                |> knowledgesFoldMapToMaybe (\f -> f fileInfo)
                                 |> Maybe.map
                                     (\foldedKnowledge ->
                                         { path = fileInfo.path
@@ -492,7 +484,7 @@ create review =
                                 (\_ new soFar -> soFar |> ListLocalExtra.consJust new)
                                 (\_ new _ soFar -> soFar |> ListLocalExtra.consJust new)
                                 (\path knowledgeCache soFar ->
-                                    soFar |> (::) { path = path, knowledge = knowledgeCache }
+                                    { path = path, knowledge = knowledgeCache } :: soFar
                                 )
                                 (project.addedOrChangedExtraFiles
                                     |> FastDictLocalExtra.fromListMap
@@ -515,7 +507,7 @@ create review =
                                 |> ListLocalExtra.consJust directDependenciesKnowledgeAndCache
                                 |> ListLocalExtra.consJust elmJsonKnowledgeAndCache
                     in
-                    case allKnowledges |> knowledgesFoldToMaybe of
+                    case allKnowledges |> knowledgesFoldMapToMaybe Basics.identity of
                         Nothing ->
                             { errorsByPath = FastDict.empty, nextRun = runWithCache knowledgeCacheEmpty }
 
@@ -529,22 +521,16 @@ create review =
                                                 |> FastDict.update
                                                     error.path
                                                     (\errorsForPathSoFar ->
-                                                        errorsForPathSoFar
-                                                            |> Maybe.withDefault []
-                                                            |> (::)
-                                                                { message = error.message
-                                                                , details = error.details
-                                                                , range = error.range
-                                                                , fixEditsByPath = error.fix |> fixToFileEditsByPath
-                                                                }
+                                                        { message = error.message
+                                                        , details = error.details
+                                                        , range = error.range
+                                                        , fixEditsByPath = error.fix |> fixToFileEditsByPath
+                                                        }
+                                                            :: (errorsForPathSoFar |> Maybe.withDefault [])
                                                             |> Just
                                                     )
                                         )
                                         FastDict.empty
-                                    |> FastDict.map
-                                        (\_ errors ->
-                                            errors |> List.sortWith (\a b -> rangeCompare a.range b.range)
-                                        )
                             , nextRun =
                                 runWithCache
                                     { elmJsonKnowledge = elmJsonKnowledgeAndCache
@@ -573,23 +559,22 @@ create review =
 fixToFileEditsByPath :
     List { path : String, edits : List SourceEdit }
     -> FastDict.Dict String (List SourceEdit)
-fixToFileEditsByPath =
-    \fix ->
-        fix
-            |> List.foldl
-                (\fileFix soFar ->
-                    soFar
-                        |> FastDict.update fileFix.path
-                            (\editsSoFar ->
-                                case fileFix.edits ++ (editsSoFar |> Maybe.withDefault []) of
-                                    [] ->
-                                        Nothing
+fixToFileEditsByPath fix =
+    fix
+        |> List.foldl
+            (\fileFix soFar ->
+                soFar
+                    |> FastDict.update fileFix.path
+                        (\editsSoFar ->
+                            case fileFix.edits ++ (editsSoFar |> Maybe.withDefault []) of
+                                [] ->
+                                    Nothing
 
-                                    edit0 :: edit1Up ->
-                                        (edit0 :: edit1Up) |> Just
-                            )
-                )
-                FastDict.empty
+                                edit0 :: edit1Up ->
+                                    (edit0 :: edit1Up) |> Just
+                        )
+            )
+            FastDict.empty
 
 
 knowledgeCacheEmpty : Cache knowledge_
@@ -609,103 +594,54 @@ inspectToToKnowledges :
         , extraFileToKnowledge : List ({ path : String, source : String } -> knowledge)
         , moduleToKnowledge : List ({ syntax : Elm.Syntax.File.File, source : String, path : String } -> knowledge)
         }
-inspectToToKnowledges =
-    \inspect ->
-        inspect
-            |> List.foldl
-                (\inspectSingle soFar ->
-                    case inspectSingle of
-                        InspectDirectDependencies toKnowledge ->
-                            { soFar
-                                | directDependenciesToKnowledge =
-                                    soFar.directDependenciesToKnowledge |> (::) toKnowledge
-                            }
+inspectToToKnowledges inspect =
+    inspect
+        |> List.foldl
+            (\inspectSingle soFar ->
+                case inspectSingle of
+                    InspectDirectDependencies toKnowledge ->
+                        { directDependenciesToKnowledge =
+                            toKnowledge :: soFar.directDependenciesToKnowledge
+                        , elmJsonToKnowledge = soFar.elmJsonToKnowledge
+                        , extraFileToKnowledge = soFar.extraFileToKnowledge
+                        , moduleToKnowledge = soFar.moduleToKnowledge
+                        }
 
-                        InspectElmJson toKnowledge ->
-                            { soFar
-                                | elmJsonToKnowledge =
-                                    soFar.elmJsonToKnowledge |> (::) toKnowledge
-                            }
+                    InspectElmJson toKnowledge ->
+                        { elmJsonToKnowledge =
+                            toKnowledge :: soFar.elmJsonToKnowledge
+                        , directDependenciesToKnowledge = soFar.directDependenciesToKnowledge
+                        , extraFileToKnowledge = soFar.extraFileToKnowledge
+                        , moduleToKnowledge = soFar.moduleToKnowledge
+                        }
 
-                        InspectExtraFile toKnowledge ->
-                            { soFar
-                                | extraFileToKnowledge =
-                                    soFar.extraFileToKnowledge |> (::) toKnowledge
-                            }
+                    InspectExtraFile toKnowledge ->
+                        { extraFileToKnowledge =
+                            toKnowledge :: soFar.extraFileToKnowledge
+                        , directDependenciesToKnowledge = soFar.directDependenciesToKnowledge
+                        , elmJsonToKnowledge = soFar.elmJsonToKnowledge
+                        , moduleToKnowledge = soFar.moduleToKnowledge
+                        }
 
-                        InspectModule toKnowledge ->
-                            { soFar
-                                | moduleToKnowledge =
-                                    soFar.moduleToKnowledge |> (::) toKnowledge
-                            }
-                )
-                { directDependenciesToKnowledge = []
-                , elmJsonToKnowledge = []
-                , extraFileToKnowledge = []
-                , moduleToKnowledge = []
-                }
+                    InspectModule toKnowledge ->
+                        { moduleToKnowledge =
+                            toKnowledge :: soFar.moduleToKnowledge
+                        , directDependenciesToKnowledge = soFar.directDependenciesToKnowledge
+                        , elmJsonToKnowledge = soFar.elmJsonToKnowledge
+                        , extraFileToKnowledge = soFar.extraFileToKnowledge
+                        }
+            )
+            { directDependenciesToKnowledge = []
+            , elmJsonToKnowledge = []
+            , extraFileToKnowledge = []
+            , moduleToKnowledge = []
+            }
 
 
 dictRemoveKeys : List comparableKey -> (FastDict.Dict comparableKey v -> FastDict.Dict comparableKey v)
-dictRemoveKeys listOfKeysToRemove =
-    \dict ->
-        listOfKeysToRemove
-            |> List.foldl (\key soFar -> soFar |> FastDict.remove key) dict
-
-
-rangeCompare : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range -> Order
-rangeCompare a b =
-    if a.start.row < b.start.row then
-        LT
-
-    else if a.start.row > b.start.row then
-        GT
-
-    else
-    -- Start row is the same from here on
-    if
-        a.start.column < b.start.column
-    then
-        LT
-
-    else if a.start.column > b.start.column then
-        GT
-
-    else
-    -- Start row and column are the same from here on
-    if
-        a.end.row < b.end.row
-    then
-        LT
-
-    else if a.end.row > b.end.row then
-        GT
-
-    else
-    -- Start row and column, and end row are the same from here on
-    if
-        a.end.column < b.end.column
-    then
-        LT
-
-    else if a.end.column > b.end.column then
-        GT
-
-    else
-        EQ
-
-
-syntaxFileSanitize : Elm.Syntax.File.File -> Elm.Syntax.File.File
-syntaxFileSanitize =
-    \syntaxFile ->
-        { syntaxFile
-            | comments =
-                syntaxFile.comments
-                    |> List.sortBy
-                        (\(Elm.Syntax.Node.Node range _) ->
-                            ( range.start.row, range.start.column )
-                        )
-        }
+dictRemoveKeys listOfKeysToRemove dict =
+    listOfKeysToRemove
+        |> List.foldl FastDict.remove dict
 
 
 {-| A problem to report in a given file and range, possibly suggesting a fix with [`SourceEdit`](#SourceEdit)s
@@ -743,13 +679,12 @@ type alias Error =
 
 -}
 ignoreErrorsForPathsWhere : (String -> Bool) -> (Review -> Review)
-ignoreErrorsForPathsWhere filterOut =
-    \review ->
-        { review
-            | ignoreErrorsForPathsWhere =
-                \path ->
-                    (path |> review.ignoreErrorsForPathsWhere) || (path |> filterOut)
-        }
+ignoreErrorsForPathsWhere filterOut review =
+    { run = review.run
+    , ignoreErrorsForPathsWhere =
+        \path ->
+            (path |> review.ignoreErrorsForPathsWhere) || (path |> filterOut)
+    }
 
 
 {-| Review a given project and return the errors reported by the given [`Review`](#Review)
@@ -815,41 +750,8 @@ run :
             , nextRun : Run
             }
         )
-run review =
-    \project ->
-        let
-            runResult :
-                { errorsByPath :
-                    FastDict.Dict
-                        String
-                        (List
-                            { range : Elm.Syntax.Range.Range
-                            , message : String
-                            , details : List String
-                            , fixEditsByPath : FastDict.Dict String (List SourceEdit)
-                            }
-                        )
-                , nextRun : Run
-                }
-            runResult =
-                project |> (review.run |> (\(Run r) -> r))
-        in
-        { nextRun = runResult.nextRun
-        , errorsByPath =
-            runResult.errorsByPath
-                |> FastDict.map
-                    (\_ fileReviewErrors ->
-                        fileReviewErrors
-                            |> List.map
-                                (\fileReviewError ->
-                                    { range = fileReviewError.range
-                                    , message = fileReviewError.message
-                                    , details = fileReviewError.details
-                                    , fixEditsByPath = fileReviewError.fixEditsByPath
-                                    }
-                                )
-                    )
-        }
+run review project =
+    project |> (review.run |> (\(Run r) -> r))
 
 
 {-| Cache for the result of the analysis of an inspected project part (modules, elm.json, extra files, direct dependencies).
@@ -866,55 +768,52 @@ type alias Cache knowledge =
 This can be nice to keep the user's formatting if you just move code around
 -}
 sourceExtractInRange : Elm.Syntax.Range.Range -> (String -> String)
-sourceExtractInRange range =
-    \string ->
-        string
-            |> String.lines
-            |> List.drop (range.start.row - 1)
-            |> List.take (range.end.row - range.start.row + 1)
-            |> ListLocalExtra.lastMap (Unicode.left (range.end.column - 1))
-            |> String.join "\n"
-            |> Unicode.dropLeft (range.start.column - 1)
+sourceExtractInRange range string =
+    string
+        |> String.lines
+        |> List.drop (range.start.row - 1)
+        |> List.take (range.end.row - range.start.row + 1)
+        |> ListLocalExtra.lastMap (Unicode.left (range.end.column - 1))
+        |> String.join "\n"
+        |> Unicode.dropLeft (range.start.column - 1)
 
 
 {-| Find all occurrences of a given section in the source in the case you
 can't access or easily calculate the [range](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Range)
 -}
 sourceRangesOf : String -> (String -> List Elm.Syntax.Range.Range)
-sourceRangesOf sectionToFind =
-    \source ->
-        let
-            sectionToFindLength : Int
-            sectionToFindLength =
-                sectionToFind |> Unicode.length
-        in
-        source
-            |> String.indexes sectionToFind
-            |> List.map
-                (\startOffset ->
-                    { start = startOffset |> sourceOffsetToLocationIn source
-                    , end = (startOffset + sectionToFindLength) |> sourceOffsetToLocationIn source
-                    }
-                )
+sourceRangesOf sectionToFind source =
+    let
+        sectionToFindLength : Int
+        sectionToFindLength =
+            sectionToFind |> Unicode.length
+    in
+    source
+        |> String.indexes sectionToFind
+        |> List.map
+            (\startOffset ->
+                { start = startOffset |> sourceOffsetToLocationIn source
+                , end = (startOffset + sectionToFindLength) |> sourceOffsetToLocationIn source
+                }
+            )
 
 
 sourceOffsetToLocationIn : String -> (Int -> Elm.Syntax.Range.Location)
-sourceOffsetToLocationIn source =
-    \sourceOffset ->
-        let
-            lines : List String
-            lines =
-                source |> Unicode.left sourceOffset |> String.lines
-        in
-        { row = lines |> List.length
-        , column =
-            case lines |> ListLocalExtra.last of
-                Nothing ->
-                    1
+sourceOffsetToLocationIn source sourceOffset =
+    let
+        lines : List String
+        lines =
+            source |> Unicode.left sourceOffset |> String.lines
+    in
+    { row = lines |> List.length
+    , column =
+        case lines |> ListLocalExtra.last of
+            Nothing ->
+                1
 
-                Just lastLine ->
-                    (lastLine |> Unicode.length) + 1
-        }
+            Just lastLine ->
+                (lastLine |> Unicode.length) + 1
+    }
 
 
 {-| All surface-level child [expression](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Expression)s.
@@ -926,103 +825,102 @@ use [`expressionSubsWithBindings`](#expressionSubsWithBindings)
 expressionSubs :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
     -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression)
-expressionSubs =
-    \(Elm.Syntax.Node.Node _ expression) ->
-        case expression of
-            Elm.Syntax.Expression.Application expressions ->
-                expressions
+expressionSubs (Elm.Syntax.Node.Node _ expression) =
+    case expression of
+        Elm.Syntax.Expression.Application expressions ->
+            expressions
 
-            Elm.Syntax.Expression.ListExpr elements ->
-                elements
+        Elm.Syntax.Expression.ListExpr elements ->
+            elements
 
-            Elm.Syntax.Expression.RecordExpr fields ->
-                List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) fields
+        Elm.Syntax.Expression.RecordExpr fields ->
+            List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) fields
 
-            Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
-                List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) setters
+        Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
+            List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr) setters
 
-            Elm.Syntax.Expression.ParenthesizedExpression expr ->
-                [ expr ]
+        Elm.Syntax.Expression.ParenthesizedExpression expr ->
+            [ expr ]
 
-            Elm.Syntax.Expression.OperatorApplication _ direction left right ->
-                case direction of
-                    Elm.Syntax.Infix.Left ->
-                        [ left, right ]
+        Elm.Syntax.Expression.OperatorApplication _ direction left right ->
+            case direction of
+                Elm.Syntax.Infix.Left ->
+                    [ left, right ]
 
-                    Elm.Syntax.Infix.Right ->
-                        [ right, left ]
+                Elm.Syntax.Infix.Right ->
+                    [ right, left ]
 
-                    Elm.Syntax.Infix.Non ->
-                        [ left, right ]
+                Elm.Syntax.Infix.Non ->
+                    [ left, right ]
 
-            Elm.Syntax.Expression.IfBlock cond then_ else_ ->
-                [ cond, then_, else_ ]
+        Elm.Syntax.Expression.IfBlock cond then_ else_ ->
+            [ cond, then_, else_ ]
 
-            Elm.Syntax.Expression.LetExpression letIn ->
-                List.foldr
-                    (\declaration soFar ->
-                        case Elm.Syntax.Node.value declaration of
-                            Elm.Syntax.Expression.LetFunction function ->
-                                (function.declaration
-                                    |> Elm.Syntax.Node.value
-                                    |> .expression
-                                )
-                                    :: soFar
+        Elm.Syntax.Expression.LetExpression letIn ->
+            List.foldr
+                (\declaration soFar ->
+                    case Elm.Syntax.Node.value declaration of
+                        Elm.Syntax.Expression.LetFunction function ->
+                            (function.declaration
+                                |> Elm.Syntax.Node.value
+                                |> .expression
+                            )
+                                :: soFar
 
-                            Elm.Syntax.Expression.LetDestructuring _ expr ->
-                                expr :: soFar
-                    )
-                    [ letIn.expression ]
-                    letIn.declarations
+                        Elm.Syntax.Expression.LetDestructuring _ expr ->
+                            expr :: soFar
+                )
+                [ letIn.expression ]
+                letIn.declarations
 
-            Elm.Syntax.Expression.CaseExpression caseOf ->
-                caseOf.expression
-                    :: List.map (\( _, caseExpression ) -> caseExpression) caseOf.cases
+        Elm.Syntax.Expression.CaseExpression caseOf ->
+            caseOf.expression
+                :: List.map (\( _, caseExpression ) -> caseExpression) caseOf.cases
 
-            Elm.Syntax.Expression.LambdaExpression lambda ->
-                [ lambda.expression ]
+        Elm.Syntax.Expression.LambdaExpression lambda ->
+            [ lambda.expression ]
 
-            Elm.Syntax.Expression.TupledExpression expressions ->
-                expressions
+        Elm.Syntax.Expression.TupledExpression expressions ->
+            expressions
 
-            Elm.Syntax.Expression.Negation expr ->
-                [ expr ]
+        Elm.Syntax.Expression.Negation expr ->
+            [ expr ]
 
-            Elm.Syntax.Expression.RecordAccess expr _ ->
-                [ expr ]
+        Elm.Syntax.Expression.RecordAccess expr _ ->
+            [ expr ]
 
-            Elm.Syntax.Expression.PrefixOperator _ ->
-                []
+        Elm.Syntax.Expression.PrefixOperator _ ->
+            []
 
-            Elm.Syntax.Expression.Operator _ ->
-                []
+        Elm.Syntax.Expression.Operator _ ->
+            []
 
-            Elm.Syntax.Expression.Integer _ ->
-                []
+        Elm.Syntax.Expression.Integer _ ->
+            []
 
-            Elm.Syntax.Expression.Hex _ ->
-                []
+        Elm.Syntax.Expression.Hex _ ->
+            []
 
-            Elm.Syntax.Expression.Floatable _ ->
-                []
+        Elm.Syntax.Expression.Floatable _ ->
+            []
 
-            Elm.Syntax.Expression.Literal _ ->
-                []
+        Elm.Syntax.Expression.Literal _ ->
+            []
 
-            Elm.Syntax.Expression.CharLiteral _ ->
-                []
+        Elm.Syntax.Expression.CharLiteral _ ->
+            []
 
-            Elm.Syntax.Expression.UnitExpr ->
-                []
+        Elm.Syntax.Expression.UnitExpr ->
+            []
 
-            Elm.Syntax.Expression.FunctionOrValue _ _ ->
-                []
+        Elm.Syntax.Expression.FunctionOrValue _ _ ->
+            []
 
-            Elm.Syntax.Expression.RecordAccessFunction _ ->
-                []
+        Elm.Syntax.Expression.RecordAccessFunction _ ->
+            []
 
-            Elm.Syntax.Expression.GLSLExpression _ ->
-                []
+        Elm.Syntax.Expression.GLSLExpression _ ->
+            []
 
 
 withoutBindings :
@@ -1031,9 +929,8 @@ withoutBindings :
         { expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
         , bindings : List String
         }
-withoutBindings =
-    \expressionNode ->
-        { expressionNode = expressionNode, bindings = [] }
+withoutBindings expressionNode =
+    { expressionNode = expressionNode, bindings = [] }
 
 
 {-| Like [`expressionSubs`](#expressionSubs)
@@ -1047,131 +944,130 @@ expressionSubsWithBindings :
             { expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
             , bindings : List String
             }
-expressionSubsWithBindings =
-    \(Elm.Syntax.Node.Node _ expression) ->
-        case expression of
-            Elm.Syntax.Expression.Application expressions ->
-                expressions |> List.map withoutBindings
+expressionSubsWithBindings (Elm.Syntax.Node.Node _ expression) =
+    case expression of
+        Elm.Syntax.Expression.Application expressions ->
+            expressions |> List.map withoutBindings
 
-            Elm.Syntax.Expression.ListExpr elements ->
-                elements |> List.map withoutBindings
+        Elm.Syntax.Expression.ListExpr elements ->
+            elements |> List.map withoutBindings
 
-            Elm.Syntax.Expression.RecordExpr fields ->
-                fields
-                    |> List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr |> withoutBindings)
+        Elm.Syntax.Expression.RecordExpr fields ->
+            fields
+                |> List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr |> withoutBindings)
 
-            Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
-                setters
-                    |> List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr |> withoutBindings)
+        Elm.Syntax.Expression.RecordUpdateExpression _ setters ->
+            setters
+                |> List.map (\(Elm.Syntax.Node.Node _ ( _, expr )) -> expr |> withoutBindings)
 
-            Elm.Syntax.Expression.ParenthesizedExpression expr ->
-                [ expr |> withoutBindings ]
+        Elm.Syntax.Expression.ParenthesizedExpression expr ->
+            [ expr |> withoutBindings ]
 
-            Elm.Syntax.Expression.OperatorApplication _ direction left right ->
-                case direction of
-                    Elm.Syntax.Infix.Left ->
-                        [ left |> withoutBindings, right |> withoutBindings ]
+        Elm.Syntax.Expression.OperatorApplication _ direction left right ->
+            case direction of
+                Elm.Syntax.Infix.Left ->
+                    [ left |> withoutBindings, right |> withoutBindings ]
 
-                    Elm.Syntax.Infix.Right ->
-                        [ right |> withoutBindings, left |> withoutBindings ]
+                Elm.Syntax.Infix.Right ->
+                    [ right |> withoutBindings, left |> withoutBindings ]
 
-                    Elm.Syntax.Infix.Non ->
-                        [ left |> withoutBindings, right |> withoutBindings ]
+                Elm.Syntax.Infix.Non ->
+                    [ left |> withoutBindings, right |> withoutBindings ]
 
-            Elm.Syntax.Expression.IfBlock cond then_ else_ ->
-                [ cond |> withoutBindings
-                , then_ |> withoutBindings
-                , else_ |> withoutBindings
-                ]
+        Elm.Syntax.Expression.IfBlock cond then_ else_ ->
+            [ cond |> withoutBindings
+            , then_ |> withoutBindings
+            , else_ |> withoutBindings
+            ]
 
-            Elm.Syntax.Expression.TupledExpression expressions ->
-                expressions |> List.map withoutBindings
+        Elm.Syntax.Expression.TupledExpression expressions ->
+            expressions |> List.map withoutBindings
 
-            Elm.Syntax.Expression.Negation expr ->
-                [ expr |> withoutBindings ]
+        Elm.Syntax.Expression.Negation expr ->
+            [ expr |> withoutBindings ]
 
-            Elm.Syntax.Expression.RecordAccess expr _ ->
-                [ expr |> withoutBindings ]
+        Elm.Syntax.Expression.RecordAccess expr _ ->
+            [ expr |> withoutBindings ]
 
-            Elm.Syntax.Expression.PrefixOperator _ ->
-                []
+        Elm.Syntax.Expression.PrefixOperator _ ->
+            []
 
-            Elm.Syntax.Expression.Operator _ ->
-                []
+        Elm.Syntax.Expression.Operator _ ->
+            []
 
-            Elm.Syntax.Expression.Integer _ ->
-                []
+        Elm.Syntax.Expression.Integer _ ->
+            []
 
-            Elm.Syntax.Expression.Hex _ ->
-                []
+        Elm.Syntax.Expression.Hex _ ->
+            []
 
-            Elm.Syntax.Expression.Floatable _ ->
-                []
+        Elm.Syntax.Expression.Floatable _ ->
+            []
 
-            Elm.Syntax.Expression.Literal _ ->
-                []
+        Elm.Syntax.Expression.Literal _ ->
+            []
 
-            Elm.Syntax.Expression.CharLiteral _ ->
-                []
+        Elm.Syntax.Expression.CharLiteral _ ->
+            []
 
-            Elm.Syntax.Expression.UnitExpr ->
-                []
+        Elm.Syntax.Expression.UnitExpr ->
+            []
 
-            Elm.Syntax.Expression.FunctionOrValue _ _ ->
-                []
+        Elm.Syntax.Expression.FunctionOrValue _ _ ->
+            []
 
-            Elm.Syntax.Expression.RecordAccessFunction _ ->
-                []
+        Elm.Syntax.Expression.RecordAccessFunction _ ->
+            []
 
-            Elm.Syntax.Expression.GLSLExpression _ ->
-                []
+        Elm.Syntax.Expression.GLSLExpression _ ->
+            []
 
-            Elm.Syntax.Expression.LambdaExpression lambda ->
-                [ { expressionNode = lambda.expression
-                  , bindings =
-                        lambda.args |> List.concatMap patternBindings
-                  }
-                ]
+        Elm.Syntax.Expression.LambdaExpression lambda ->
+            [ { expressionNode = lambda.expression
+              , bindings =
+                    lambda.args |> List.concatMap patternBindings
+              }
+            ]
 
-            Elm.Syntax.Expression.CaseExpression caseOf ->
-                (caseOf.expression |> withoutBindings)
-                    :: (caseOf.cases
-                            |> List.map
-                                (\( patternNode, caseExpressionNode ) ->
-                                    { expressionNode = caseExpressionNode
-                                    , bindings = patternNode |> patternBindings
-                                    }
-                                )
-                       )
+        Elm.Syntax.Expression.CaseExpression caseOf ->
+            (caseOf.expression |> withoutBindings)
+                :: (caseOf.cases
+                        |> List.map
+                            (\( patternNode, caseExpressionNode ) ->
+                                { expressionNode = caseExpressionNode
+                                , bindings = patternNode |> patternBindings
+                                }
+                            )
+                   )
 
-            Elm.Syntax.Expression.LetExpression letIn ->
-                let
-                    variablesForWholeLetIn : List String
-                    variablesForWholeLetIn =
-                        letIn.declarations
-                            |> List.concatMap
-                                (\(Elm.Syntax.Node.Node _ letDeclaration) ->
-                                    case letDeclaration of
-                                        Elm.Syntax.Expression.LetFunction letFunction ->
-                                            letFunction.declaration
-                                                |> Elm.Syntax.Node.value
-                                                |> .name
-                                                |> Elm.Syntax.Node.value
-                                                |> List.singleton
+        Elm.Syntax.Expression.LetExpression letIn ->
+            let
+                variablesForWholeLetIn : List String
+                variablesForWholeLetIn =
+                    letIn.declarations
+                        |> List.concatMap
+                            (\(Elm.Syntax.Node.Node _ letDeclaration) ->
+                                case letDeclaration of
+                                    Elm.Syntax.Expression.LetFunction letFunction ->
+                                        [ letFunction.declaration
+                                            |> Elm.Syntax.Node.value
+                                            |> .name
+                                            |> Elm.Syntax.Node.value
+                                        ]
 
-                                        Elm.Syntax.Expression.LetDestructuring patternNode _ ->
-                                            patternNode |> patternBindings
-                                )
-                in
-                { expressionNode = letIn.expression
-                , bindings = variablesForWholeLetIn
-                }
-                    :: (letIn.declarations
-                            |> List.map
-                                (\(Elm.Syntax.Node.Node _ letDeclaration) ->
-                                    letDeclaration |> letDeclarationExpressionSubsWithBindings
-                                )
-                       )
+                                    Elm.Syntax.Expression.LetDestructuring patternNode _ ->
+                                        patternNode |> patternBindings
+                            )
+            in
+            { expressionNode = letIn.expression
+            , bindings = variablesForWholeLetIn
+            }
+                :: (letIn.declarations
+                        |> List.map
+                            (\(Elm.Syntax.Node.Node _ letDeclaration) ->
+                                letDeclaration |> letDeclarationExpressionSubsWithBindings
+                            )
+                   )
 
 
 letDeclarationExpressionSubsWithBindings :
@@ -1180,20 +1076,19 @@ letDeclarationExpressionSubsWithBindings :
         { expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
         , bindings : List String
         }
-letDeclarationExpressionSubsWithBindings =
-    \letDeclaration ->
-        case letDeclaration of
-            Elm.Syntax.Expression.LetDestructuring _ destructuredExpressionNode ->
-                destructuredExpressionNode |> withoutBindings
+letDeclarationExpressionSubsWithBindings letDeclaration =
+    case letDeclaration of
+        Elm.Syntax.Expression.LetDestructuring _ destructuredExpressionNode ->
+            destructuredExpressionNode |> withoutBindings
 
-            Elm.Syntax.Expression.LetFunction letValueOrFunctionDeclaration ->
-                { expressionNode = letValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value |> .expression
-                , bindings =
-                    letValueOrFunctionDeclaration.declaration
-                        |> Elm.Syntax.Node.value
-                        |> .arguments
-                        |> List.concatMap patternBindings
-                }
+        Elm.Syntax.Expression.LetFunction letValueOrFunctionDeclaration ->
+            { expressionNode = letValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value |> .expression
+            , bindings =
+                letValueOrFunctionDeclaration.declaration
+                    |> Elm.Syntax.Node.value
+                    |> .arguments
+                    |> List.concatMap patternBindings
+            }
 
 
 {-| Recursively find all introduced variables
@@ -1201,54 +1096,53 @@ in the [pattern](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-S
 (like `a` and `b` in `( Just a, { b } )`)
 -}
 patternBindings : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> List String
-patternBindings =
+patternBindings (Elm.Syntax.Node.Node _ pattern) =
     -- IGNORE TCO
-    \(Elm.Syntax.Node.Node _ pattern) ->
-        case pattern of
-            Elm.Syntax.Pattern.VarPattern name ->
-                name |> List.singleton
+    case pattern of
+        Elm.Syntax.Pattern.VarPattern name ->
+            [ name ]
 
-            Elm.Syntax.Pattern.AsPattern afterAsPattern (Elm.Syntax.Node.Node _ name) ->
-                name :: (afterAsPattern |> patternBindings)
+        Elm.Syntax.Pattern.AsPattern afterAsPattern (Elm.Syntax.Node.Node _ name) ->
+            name :: (afterAsPattern |> patternBindings)
 
-            Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
-                inParens |> patternBindings
+        Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
+            inParens |> patternBindings
 
-            Elm.Syntax.Pattern.ListPattern patterns ->
-                patterns |> List.concatMap patternBindings
+        Elm.Syntax.Pattern.ListPattern patterns ->
+            patterns |> List.concatMap patternBindings
 
-            Elm.Syntax.Pattern.TuplePattern patterns ->
-                patterns |> List.concatMap patternBindings
+        Elm.Syntax.Pattern.TuplePattern patterns ->
+            patterns |> List.concatMap patternBindings
 
-            Elm.Syntax.Pattern.RecordPattern fields ->
-                fields |> List.map Elm.Syntax.Node.value
+        Elm.Syntax.Pattern.RecordPattern fields ->
+            fields |> List.map Elm.Syntax.Node.value
 
-            Elm.Syntax.Pattern.NamedPattern _ patterns ->
-                patterns |> List.concatMap patternBindings
+        Elm.Syntax.Pattern.NamedPattern _ patterns ->
+            patterns |> List.concatMap patternBindings
 
-            Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
-                (tailPattern |> patternBindings) ++ (headPattern |> patternBindings)
+        Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
+            (tailPattern |> patternBindings) ++ (headPattern |> patternBindings)
 
-            Elm.Syntax.Pattern.AllPattern ->
-                []
+        Elm.Syntax.Pattern.AllPattern ->
+            []
 
-            Elm.Syntax.Pattern.UnitPattern ->
-                []
+        Elm.Syntax.Pattern.UnitPattern ->
+            []
 
-            Elm.Syntax.Pattern.CharPattern _ ->
-                []
+        Elm.Syntax.Pattern.CharPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.StringPattern _ ->
-                []
+        Elm.Syntax.Pattern.StringPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.IntPattern _ ->
-                []
+        Elm.Syntax.Pattern.IntPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.HexPattern _ ->
-                []
+        Elm.Syntax.Pattern.HexPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.FloatPattern _ ->
-                []
+        Elm.Syntax.Pattern.FloatPattern _ ->
+            []
 
 
 {-| All surface-level child [pattern](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Pattern)s
@@ -1256,53 +1150,52 @@ patternBindings =
 patternSubs :
     Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
     -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
-patternSubs =
-    \(Elm.Syntax.Node.Node _ pattern) ->
-        case pattern of
-            Elm.Syntax.Pattern.VarPattern _ ->
-                []
+patternSubs (Elm.Syntax.Node.Node _ pattern) =
+    case pattern of
+        Elm.Syntax.Pattern.VarPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.AsPattern afterAsPattern _ ->
-                [ afterAsPattern ]
+        Elm.Syntax.Pattern.AsPattern afterAsPattern _ ->
+            [ afterAsPattern ]
 
-            Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
-                [ inParens ]
+        Elm.Syntax.Pattern.ParenthesizedPattern inParens ->
+            [ inParens ]
 
-            Elm.Syntax.Pattern.ListPattern patterns ->
-                patterns
+        Elm.Syntax.Pattern.ListPattern patterns ->
+            patterns
 
-            Elm.Syntax.Pattern.TuplePattern partPatterns ->
-                partPatterns
+        Elm.Syntax.Pattern.TuplePattern partPatterns ->
+            partPatterns
 
-            Elm.Syntax.Pattern.RecordPattern _ ->
-                []
+        Elm.Syntax.Pattern.RecordPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.NamedPattern _ patterns ->
-                patterns
+        Elm.Syntax.Pattern.NamedPattern _ patterns ->
+            patterns
 
-            Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
-                [ headPattern, tailPattern ]
+        Elm.Syntax.Pattern.UnConsPattern headPattern tailPattern ->
+            [ headPattern, tailPattern ]
 
-            Elm.Syntax.Pattern.AllPattern ->
-                []
+        Elm.Syntax.Pattern.AllPattern ->
+            []
 
-            Elm.Syntax.Pattern.UnitPattern ->
-                []
+        Elm.Syntax.Pattern.UnitPattern ->
+            []
 
-            Elm.Syntax.Pattern.CharPattern _ ->
-                []
+        Elm.Syntax.Pattern.CharPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.StringPattern _ ->
-                []
+        Elm.Syntax.Pattern.StringPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.IntPattern _ ->
-                []
+        Elm.Syntax.Pattern.IntPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.HexPattern _ ->
-                []
+        Elm.Syntax.Pattern.HexPattern _ ->
+            []
 
-            Elm.Syntax.Pattern.FloatPattern _ ->
-                []
+        Elm.Syntax.Pattern.FloatPattern _ ->
+            []
 
 
 {-| All surface-level child [type](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-TypeAnnotation)s
@@ -1310,77 +1203,73 @@ patternSubs =
 typeSubs :
     Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
     -> List (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
-typeSubs =
-    \(Elm.Syntax.Node.Node _ type_) ->
-        case type_ of
-            Elm.Syntax.TypeAnnotation.GenericType _ ->
-                []
+typeSubs (Elm.Syntax.Node.Node _ type_) =
+    case type_ of
+        Elm.Syntax.TypeAnnotation.GenericType _ ->
+            []
 
-            Elm.Syntax.TypeAnnotation.Typed _ variantValues ->
-                variantValues
+        Elm.Syntax.TypeAnnotation.Typed _ variantValues ->
+            variantValues
 
-            Elm.Syntax.TypeAnnotation.Unit ->
-                []
+        Elm.Syntax.TypeAnnotation.Unit ->
+            []
 
-            Elm.Syntax.TypeAnnotation.Tupled parts ->
-                parts
+        Elm.Syntax.TypeAnnotation.Tupled parts ->
+            parts
 
-            Elm.Syntax.TypeAnnotation.Record fields ->
-                fields |> List.map (\(Elm.Syntax.Node.Node _ ( _, value )) -> value)
+        Elm.Syntax.TypeAnnotation.Record fields ->
+            fields |> List.map (\(Elm.Syntax.Node.Node _ ( _, value )) -> value)
 
-            Elm.Syntax.TypeAnnotation.GenericRecord _ (Elm.Syntax.Node.Node _ fields) ->
-                fields |> List.map (\(Elm.Syntax.Node.Node _ ( _, value )) -> value)
+        Elm.Syntax.TypeAnnotation.GenericRecord _ (Elm.Syntax.Node.Node _ fields) ->
+            fields |> List.map (\(Elm.Syntax.Node.Node _ ( _, value )) -> value)
 
-            Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation from to ->
-                [ from, to ]
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation from to ->
+            [ from, to ]
 
 
 {-| The set of modules in [`Elm-Project.Exposed`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Project#Exposed)
 (the `exposed-modules` field in a package elm.json)
 -}
 packageElmJsonExposedModules : Elm.Project.Exposed -> FastSet.Set Elm.Syntax.ModuleName.ModuleName
-packageElmJsonExposedModules =
-    \exposed ->
-        case exposed of
-            Elm.Project.ExposedList list ->
-                list |> List.map elmJsonModuleNameToSyntax |> FastSet.fromList
+packageElmJsonExposedModules exposed =
+    case exposed of
+        Elm.Project.ExposedList list ->
+            list |> List.map elmJsonModuleNameToSyntax |> FastSet.fromList
 
-            Elm.Project.ExposedDict dict ->
-                dict
-                    |> List.concatMap (\( _, moduleNames ) -> moduleNames)
-                    |> List.map elmJsonModuleNameToSyntax
-                    |> FastSet.fromList
+        Elm.Project.ExposedDict dict ->
+            dict
+                |> List.concatMap (\( _, moduleNames ) -> moduleNames)
+                |> List.map elmJsonModuleNameToSyntax
+                |> FastSet.fromList
 
 
 elmJsonModuleNameToSyntax : Elm.Module.Name -> Elm.Syntax.ModuleName.ModuleName
-elmJsonModuleNameToSyntax =
-    \elmJsonModuleName ->
-        elmJsonModuleName |> Elm.Module.toString |> String.split "."
+elmJsonModuleNameToSyntax elmJsonModuleName =
+    elmJsonModuleName |> Elm.Module.toString |> String.split "."
 
 
 {-| The module's documentation comment at the top of the file, which can be `Nothing`.
 `elm-syntax` has a weird way of giving you the comments of a file, this helper should make it easier
 -}
 moduleHeaderDocumentation : Elm.Syntax.File.File -> Maybe (Elm.Syntax.Node.Node String)
-moduleHeaderDocumentation =
-    \syntaxFile ->
-        let
-            cutOffLine : Int
-            cutOffLine =
-                case syntaxFile.imports of
-                    [] ->
-                        case syntaxFile.declarations of
-                            [] ->
-                                -- Should not happen, as every module should have at least one declaration
-                                0
+moduleHeaderDocumentation syntaxFile =
+    let
+        cutOffLine : Int
+        cutOffLine =
+            case syntaxFile.imports of
+                [] ->
+                    case syntaxFile.declarations of
+                        [] ->
+                            -- Should not happen, as every module should have at least one declaration
+                            0
 
-                            firstDeclaration :: _ ->
-                                (Elm.Syntax.Node.range firstDeclaration).start.row
+                        firstDeclaration :: _ ->
+                            (Elm.Syntax.Node.range firstDeclaration).start.row
 
-                    firstImport :: _ ->
-                        (Elm.Syntax.Node.range firstImport).start.row
-        in
-        findModuleDocumentationBeforeCutOffLine cutOffLine syntaxFile.comments
+                firstImport :: _ ->
+                    (Elm.Syntax.Node.range firstImport).start.row
+    in
+    findModuleDocumentationBeforeCutOffLine cutOffLine syntaxFile.comments
 
 
 findModuleDocumentationBeforeCutOffLine : Int -> List (Elm.Syntax.Node.Node String) -> Maybe (Elm.Syntax.Node.Node String)
@@ -1510,45 +1399,43 @@ from [`Review.inspectDirectDependencies`](#inspectDirectDependencies)
 moduleInterfaceExposes :
     Elm.Docs.Module
     -> { simpleNames : FastSet.Set String, typesWithVariantNames : FastDict.Dict String (FastSet.Set String) }
-moduleInterfaceExposes =
-    \moduleInterface ->
-        { simpleNames =
-            [ moduleInterface.aliases
-                |> List.map .name
-            , moduleInterface.binops
-                |> List.map
-                    (\infixOperator -> [ "(", infixOperator.name, ")" ] |> String.concat)
-            , moduleInterface.unions
-                |> List.filterMap
-                    (\choiceTypeInterface ->
-                        case choiceTypeInterface.tags of
-                            [] ->
-                                choiceTypeInterface.name |> Just
+moduleInterfaceExposes moduleInterface =
+    { simpleNames =
+        (moduleInterface.aliases |> List.map .name)
+            ++ (moduleInterface.binops
+                    |> List.map
+                        (\infixOperator -> "(" ++ infixOperator.name ++ ")")
+               )
+            ++ (moduleInterface.unions
+                    |> List.filterMap
+                        (\choiceTypeInterface ->
+                            case choiceTypeInterface.tags of
+                                [] ->
+                                    choiceTypeInterface.name |> Just
 
-                            _ :: _ ->
-                                Nothing
-                    )
-            ]
-                |> List.concat
-                |> FastSet.fromList
-        , typesWithVariantNames =
-            moduleInterface.unions
-                |> List.filterMap
-                    (\choiceTypeInterface ->
-                        case choiceTypeInterface.tags of
-                            [] ->
-                                Nothing
+                                _ :: _ ->
+                                    Nothing
+                        )
+               )
+            |> FastSet.fromList
+    , typesWithVariantNames =
+        moduleInterface.unions
+            |> List.foldl
+                (\choiceTypeInterface soFar ->
+                    case choiceTypeInterface.tags of
+                        [] ->
+                            soFar
 
-                            variantInterface0 :: variantInterface1Up ->
-                                ( choiceTypeInterface.name
-                                , (variantInterface0 :: variantInterface1Up)
-                                    |> List.map (\( variantName, _ ) -> variantName)
-                                    |> FastSet.fromList
-                                )
-                                    |> Just
-                    )
-                |> FastDict.fromList
-        }
+                        variantInterface0 :: variantInterface1Up ->
+                            soFar
+                                |> FastDict.insert choiceTypeInterface.name
+                                    ((variantInterface0 :: variantInterface1Up)
+                                        |> List.map (\( variantName, _ ) -> variantName)
+                                        |> FastSet.fromList
+                                    )
+                )
+                FastDict.empty
+    }
 
 
 {-| Collect all exposed members from an explicit exposing list of [visible expose](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/Elm-Syntax-Exposing#TopLevelExpose)s
@@ -1560,47 +1447,46 @@ moduleInterfaceExposes =
 topLevelExposeListToExposes :
     List (Elm.Syntax.Node.Node Elm.Syntax.Exposing.TopLevelExpose)
     -> { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
-topLevelExposeListToExposes =
-    \topLevelExposeSet ->
-        topLevelExposeSet
-            |> List.foldl
-                (\(Elm.Syntax.Node.Node _ expose) soFar ->
-                    case expose of
-                        Elm.Syntax.Exposing.TypeExpose choiceTypeExpose ->
-                            case choiceTypeExpose.open of
-                                Nothing ->
-                                    { soFar
-                                        | simpleNames = soFar.simpleNames |> FastSet.insert choiceTypeExpose.name
-                                    }
+topLevelExposeListToExposes topLevelExposeSet =
+    topLevelExposeSet
+        |> List.foldl
+            (\(Elm.Syntax.Node.Node _ expose) soFar ->
+                case expose of
+                    Elm.Syntax.Exposing.TypeExpose choiceTypeExpose ->
+                        case choiceTypeExpose.open of
+                            Nothing ->
+                                { simpleNames = soFar.simpleNames |> FastSet.insert choiceTypeExpose.name
+                                , typesExposingVariants = soFar.typesExposingVariants
+                                }
 
-                                Just _ ->
-                                    { soFar
-                                        | typesExposingVariants =
-                                            soFar.typesExposingVariants
-                                                |> FastSet.insert choiceTypeExpose.name
-                                    }
+                            Just _ ->
+                                { typesExposingVariants =
+                                    soFar.typesExposingVariants
+                                        |> FastSet.insert choiceTypeExpose.name
+                                , simpleNames = soFar.simpleNames
+                                }
 
-                        Elm.Syntax.Exposing.FunctionExpose valueOrFunctionName ->
-                            { soFar
-                                | simpleNames =
-                                    soFar.simpleNames |> FastSet.insert valueOrFunctionName
-                            }
+                    Elm.Syntax.Exposing.FunctionExpose valueOrFunctionName ->
+                        { simpleNames =
+                            soFar.simpleNames |> FastSet.insert valueOrFunctionName
+                        , typesExposingVariants = soFar.typesExposingVariants
+                        }
 
-                        Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
-                            { soFar
-                                | simpleNames =
-                                    soFar.simpleNames |> FastSet.insert exposeName
-                            }
+                    Elm.Syntax.Exposing.TypeOrAliasExpose exposeName ->
+                        { simpleNames =
+                            soFar.simpleNames |> FastSet.insert exposeName
+                        , typesExposingVariants = soFar.typesExposingVariants
+                        }
 
-                        Elm.Syntax.Exposing.InfixExpose symbol ->
-                            { soFar
-                                | simpleNames =
-                                    soFar.simpleNames |> FastSet.insert ([ "(", symbol, ")" ] |> String.concat)
-                            }
-                )
-                { simpleNames = FastSet.empty
-                , typesExposingVariants = FastSet.empty
-                }
+                    Elm.Syntax.Exposing.InfixExpose symbol ->
+                        { simpleNames =
+                            soFar.simpleNames |> FastSet.insert ("(" ++ symbol ++ ")")
+                        , typesExposingVariants = soFar.typesExposingVariants
+                        }
+            )
+            { simpleNames = FastSet.empty
+            , typesExposingVariants = FastSet.empty
+            }
 
 
 {-| Either the full qualification of a given variant/value/function/type identifier
@@ -1616,50 +1502,49 @@ determineModuleOrigin :
         , exposes : FastSet.Set String -- includes names of variants
         }
     -> (( Elm.Syntax.ModuleName.ModuleName, String ) -> Maybe Elm.Syntax.ModuleName.ModuleName)
-determineModuleOrigin imports =
-    \( qualification, unqualifiedName ) ->
-        case imports |> FastDict.get qualification of
-            Just _ ->
-                qualification |> Just
+determineModuleOrigin imports ( qualification, unqualifiedName ) =
+    case imports |> FastDict.get qualification of
+        Just _ ->
+            qualification |> Just
 
-            Nothing ->
-                let
-                    maybeOriginByAlias : Maybe Elm.Syntax.ModuleName.ModuleName
-                    maybeOriginByAlias =
-                        imports
-                            |> FastDictLocalExtra.firstJustMap
-                                (\importModuleName import_ ->
-                                    case import_.alias of
-                                        Nothing ->
+        Nothing ->
+            let
+                maybeOriginByAlias : Maybe Elm.Syntax.ModuleName.ModuleName
+                maybeOriginByAlias =
+                    imports
+                        |> FastDictLocalExtra.firstJustMap
+                            (\importModuleName import_ ->
+                                case import_.alias of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just alias ->
+                                        if qualification == [ alias ] then
+                                            importModuleName |> Just
+
+                                        else
                                             Nothing
+                            )
+            in
+            case maybeOriginByAlias of
+                Just aliasOriginModuleName ->
+                    aliasOriginModuleName |> Just
 
-                                        Just alias ->
-                                            if qualification == [ alias ] then
-                                                importModuleName |> Just
+                Nothing ->
+                    case qualification of
+                        [] ->
+                            imports
+                                |> FastDictLocalExtra.firstJustMap
+                                    (\importModuleName import_ ->
+                                        if import_.exposes |> FastSet.member unqualifiedName then
+                                            importModuleName |> Just
 
-                                            else
-                                                Nothing
-                                )
-                in
-                case maybeOriginByAlias of
-                    Just aliasOriginModuleName ->
-                        aliasOriginModuleName |> Just
+                                        else
+                                            Nothing
+                                    )
 
-                    Nothing ->
-                        case qualification of
-                            [] ->
-                                imports
-                                    |> FastDictLocalExtra.firstJustMap
-                                        (\importModuleName import_ ->
-                                            if import_.exposes |> FastSet.member unqualifiedName then
-                                                importModuleName |> Just
-
-                                            else
-                                                Nothing
-                                        )
-
-                            _ :: _ ->
-                                Nothing
+                        _ :: _ ->
+                            Nothing
 
 
 {-| Regular elm imports don't tell the whole truth of what names can be used in the module declarations.
@@ -1974,19 +1859,6 @@ fixRange fix =
             replace.range
 
 
-comparePosition : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location -> Order
-comparePosition a b =
-    case compare a.row b.row of
-        EQ ->
-            compare a.column b.column
-
-        LT ->
-            LT
-
-        GT ->
-            GT
-
-
 {-| Try to apply a set of [`SourceEdit`](#SourceEdit)es to the relevant file source,
 potentially failing with a [`SourceEditError`](#SourceEditError)
 -}
@@ -2003,7 +1875,7 @@ sourceApplyEdits fixes sourceCode =
                     |> List.sortWith
                         (\a b ->
                             -- flipped order
-                            comparePosition (b |> fixRange |> .start) (a |> fixRange |> .start)
+                            Elm.Syntax.Range.compareLocations (b |> fixRange |> .start) (a |> fixRange |> .start)
                         )
                     |> List.foldl applyFixSingle (sourceCode |> String.lines)
                     |> String.join "\n"
@@ -2016,39 +1888,38 @@ sourceApplyEdits fixes sourceCode =
 
 
 applyFixSingle : SourceEdit -> (List String -> List String)
-applyFixSingle fixToApply =
-    \lines ->
-        case fixToApply of
-            SourceRangeReplacement replace ->
-                let
-                    linesBefore : List String
-                    linesBefore =
-                        List.take (replace.range.start.row - 1) lines
+applyFixSingle fixToApply lines =
+    case fixToApply of
+        SourceRangeReplacement replace ->
+            let
+                linesBefore : List String
+                linesBefore =
+                    List.take (replace.range.start.row - 1) lines
 
-                    linesAfter : List String
-                    linesAfter =
-                        List.drop replace.range.end.row lines
+                linesAfter : List String
+                linesAfter =
+                    List.drop replace.range.end.row lines
 
-                    startLine : String
-                    startLine =
-                        ListLocalExtra.elementAtIndex (replace.range.start.row - 1) lines
-                            |> Maybe.withDefault ""
-                            |> Unicode.left (replace.range.start.column - 1)
+                startLine : String
+                startLine =
+                    ListLocalExtra.elementAtIndex (replace.range.start.row - 1) lines
+                        |> Maybe.withDefault ""
+                        |> Unicode.left (replace.range.start.column - 1)
 
-                    endLine : String
-                    endLine =
-                        ListLocalExtra.elementAtIndex (replace.range.end.row - 1) lines
-                            |> Maybe.withDefault ""
-                            |> Unicode.dropLeft (replace.range.end.column - 1)
-                in
-                [ linesBefore
-                , replace.replacement
-                    |> String.lines
-                    |> ListLocalExtra.headMap (\replacementFirstLine -> startLine ++ replacementFirstLine)
-                    |> ListLocalExtra.lastMap (\replacementLastLine -> replacementLastLine ++ endLine)
-                , linesAfter
-                ]
-                    |> List.concat
+                endLine : String
+                endLine =
+                    ListLocalExtra.elementAtIndex (replace.range.end.row - 1) lines
+                        |> Maybe.withDefault ""
+                        |> Unicode.dropLeft (replace.range.end.column - 1)
+            in
+            [ linesBefore
+            , replace.replacement
+                |> String.lines
+                |> ListLocalExtra.headMap (\replacementFirstLine -> startLine ++ replacementFirstLine)
+                |> ListLocalExtra.lastMap (\replacementLastLine -> replacementLastLine ++ endLine)
+            , linesAfter
+            ]
+                |> List.concat
 
 
 containRangeCollisions : List SourceEdit -> Bool
@@ -2058,7 +1929,7 @@ containRangeCollisions fixes =
 
 rangesCollide : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range -> Bool
 rangesCollide a b =
-    case comparePosition a.end b.start of
+    case Elm.Syntax.Range.compareLocations a.end b.start of
         LT ->
             False
 
@@ -2066,7 +1937,7 @@ rangesCollide a b =
             False
 
         GT ->
-            case comparePosition b.end a.start of
+            case Elm.Syntax.Range.compareLocations b.end a.start of
                 LT ->
                     False
 

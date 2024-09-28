@@ -21,8 +21,8 @@ sourceDirectories elmJson =
 
 
 pathMakeOSAgnostic : String -> String
-pathMakeOSAgnostic =
-    \path -> path |> String.replace "\\" "/"
+pathMakeOSAgnostic path =
+    path |> String.replace "\\" "/"
 
 
 removeDotSlashAtBeginning : String -> String

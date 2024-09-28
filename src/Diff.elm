@@ -95,12 +95,12 @@ arrayTestDiff arrA arrB =
         -- Elm's Array doesn't allow null element,
         -- so we'll use shifted index to access source.
         getA : Int -> Maybe a
-        getA =
-            \x -> Array.get (x - 1) arrA
+        getA x =
+            Array.get (x - 1) arrA
 
         getB : Int -> Maybe a
-        getB =
-            \y -> Array.get (y - 1) arrB
+        getB y =
+            Array.get (y - 1) arrB
 
         aLength : Int
         aLength =

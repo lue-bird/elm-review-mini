@@ -21,5 +21,5 @@ left n string =
 
 
 length : String -> Int
-length =
-    \string -> string |> String.toList |> List.length
+length string =
+    string |> String.toList |> List.length

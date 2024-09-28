@@ -22,78 +22,73 @@ review =
 moduleDataToKnowledge :
     { moduleData_ | path : String, syntax : Elm.Syntax.File.File }
     -> Knowledge
-moduleDataToKnowledge =
-    \moduleData ->
-        { typosInStrings =
-            moduleData.syntax.declarations
-                |> List.concatMap declarationToTyposInStrings
-                |> List.map
-                    (\typoRange ->
-                        { range = typoRange
-                        , modulePath = moduleData.path
-                        }
-                    )
-        }
+moduleDataToKnowledge moduleData =
+    { typosInStrings =
+        moduleData.syntax.declarations
+            |> List.concatMap declarationToTyposInStrings
+            |> List.map
+                (\typoRange ->
+                    { range = typoRange
+                    , modulePath = moduleData.path
+                    }
+                )
+    }
 
 
 declarationToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
     -> List Elm.Syntax.Range.Range
-declarationToTyposInStrings =
-    \(Elm.Syntax.Node.Node _ declaration) ->
-        case declaration of
-            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                functionDeclaration.declaration
-                    |> Elm.Syntax.Node.value
-                    |> .expression
-                    |> expressionToTyposInStrings
+declarationToTyposInStrings (Elm.Syntax.Node.Node _ declaration) =
+    case declaration of
+        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+            functionDeclaration.declaration
+                |> Elm.Syntax.Node.value
+                |> .expression
+                |> expressionToTyposInStrings
 
-            _ ->
-                []
+        _ ->
+            []
 
 
 expressionToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
     -> List Elm.Syntax.Range.Range
-expressionToTyposInStrings =
-    \expressionNode ->
-        case expressionNode of
-            Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
-                string
-                    |> Review.sourceRangesOf "frits.com"
-                    |> List.map (rangeRelativeTo range.start)
+expressionToTyposInStrings expressionNode =
+    case expressionNode of
+        Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
+            string
+                |> Review.sourceRangesOf "frits.com"
+                |> List.map (rangeRelativeTo range.start)
 
-            nonStringExpressionNode ->
-                nonStringExpressionNode
-                    |> Review.expressionSubs
-                    |> List.concatMap expressionToTyposInStrings
+        nonStringExpressionNode ->
+            nonStringExpressionNode
+                |> Review.expressionSubs
+                |> List.concatMap expressionToTyposInStrings
 
 
 rangeRelativeTo :
     Elm.Syntax.Range.Location
     -> (Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range)
-rangeRelativeTo baseStart =
-    \offsetRange ->
-        { start = offsetRange.start |> locationRelativeTo baseStart
-        , end = offsetRange.end |> locationRelativeTo baseStart
-        }
+rangeRelativeTo baseStart offsetRange =
+    { start = offsetRange.start |> locationRelativeTo baseStart
+    , end = offsetRange.end |> locationRelativeTo baseStart
+    }
 
 
 locationRelativeTo :
     Elm.Syntax.Range.Location
     -> (Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location)
-locationRelativeTo baseStart =
-    \offsetLocation ->
-        case offsetLocation.row of
-            1 ->
-                { row = baseStart.row
-                , column = baseStart.column + offsetLocation.column
-                }
+locationRelativeTo baseStart offsetLocation =
+    case offsetLocation.row of
+        1 ->
+            { row = baseStart.row
+            , column = baseStart.column + offsetLocation.column
+            }
 
-            offsetRowAtLeast2 ->
-                { row = baseStart.row + (offsetRowAtLeast2 - 1)
-                , column = offsetLocation.column
-                }
+        offsetRowAtLeast2 ->
+            { row = baseStart.row + (offsetRowAtLeast2 - 1)
+            , column = offsetLocation.column
+            }
 
 
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge

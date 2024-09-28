@@ -2,17 +2,16 @@ module ListLocalExtra exposing (anyPair, consJust, elementAtIndex, headMap, last
 
 
 last : List a -> Maybe a
-last =
-    \list ->
-        case list of
-            [] ->
-                Nothing
+last list =
+    case list of
+        [] ->
+            Nothing
 
-            [ onlyElement ] ->
-                onlyElement |> Just
+        [ onlyElement ] ->
+            onlyElement |> Just
 
-            _ :: el1 :: el2Up ->
-                (el1 :: el2Up) |> last
+        _ :: el1 :: el2Up ->
+            (el1 :: el2Up) |> last
 
 
 lastMap : (a -> a) -> (List a -> List a)
@@ -26,25 +25,23 @@ lastMap mapper lines =
 
 
 headMap : (a -> a) -> (List a -> List a)
-headMap headChange =
-    \list ->
-        case list of
-            [] ->
-                []
+headMap headChange list =
+    case list of
+        [] ->
+            []
 
-            head :: tail ->
-                (head |> headChange) :: tail
+        head :: tail ->
+            (head |> headChange) :: tail
 
 
 consJust : Maybe a -> (List a -> List a)
-consJust maybeNewHead =
-    \list ->
-        case maybeNewHead of
-            Nothing ->
-                list
+consJust maybeNewHead list =
+    case maybeNewHead of
+        Nothing ->
+            list
 
-            Just newHead ->
-                list |> (::) newHead
+        Just newHead ->
+            newHead :: list
 
 
 anyPair : (element -> element -> Bool) -> (List element -> Bool)
@@ -62,6 +59,5 @@ anyPair isFound list =
 
 
 elementAtIndex : Int -> (List a -> Maybe a)
-elementAtIndex index =
-    \list ->
-        list |> List.drop index |> List.head
+elementAtIndex index list =
+    list |> List.drop index |> List.head
