@@ -464,7 +464,7 @@ toReviewResult review project =
 
                         fileErrors : List SuccessfulRunResult
                         fileErrors =
-                            [ modulesParsed
+                            (modulesParsed
                                 |> List.map
                                     (\module_ ->
                                         { path = module_.path
@@ -475,31 +475,32 @@ toReviewResult review project =
                                                 |> Maybe.withDefault []
                                         }
                                     )
-                            , case runErrorsByPath |> FastDict.get "elm.json" of
-                                Just errorsForElmJson ->
-                                    [ { path = "elm.json"
-                                      , source = project.elmJson.source
-                                      , errors = errorsForElmJson
-                                      }
-                                    ]
+                            )
+                                ++ (case runErrorsByPath |> FastDict.get "elm.json" of
+                                        Just errorsForElmJson ->
+                                            [ { path = "elm.json"
+                                              , source = project.elmJson.source
+                                              , errors = errorsForElmJson
+                                              }
+                                            ]
 
-                                Nothing ->
-                                    []
-                            , extraFiles
-                                |> List.filterMap
-                                    (\extraFile ->
-                                        runErrorsByPath
-                                            |> FastDict.get extraFile.path
-                                            |> Maybe.map
-                                                (\errorsForExtraFile ->
-                                                    { path = extraFile.path
-                                                    , source = extraFile.source
-                                                    , errors = errorsForExtraFile
-                                                    }
-                                                )
-                                    )
-                            ]
-                                |> List.concat
+                                        Nothing ->
+                                            []
+                                   )
+                                ++ (extraFiles
+                                        |> List.filterMap
+                                            (\extraFile ->
+                                                runErrorsByPath
+                                                    |> FastDict.get extraFile.path
+                                                    |> Maybe.map
+                                                        (\errorsForExtraFile ->
+                                                            { path = extraFile.path
+                                                            , source = extraFile.source
+                                                            , errors = errorsForExtraFile
+                                                            }
+                                                        )
+                                            )
+                                   )
                     in
                     fileErrors |> Ok
 
@@ -561,10 +562,9 @@ invalidExpectedErrorsIn project expectedErrors =
             project.files |> FastSetLocalExtra.fromListMap .path
 
         pathIsModule : String -> Bool
-        pathIsModule =
-            \path ->
-                (path |> String.endsWith ".elm")
-                    && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
+        pathIsModule path =
+            (path |> String.endsWith ".elm")
+                && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
 
         modulePaths : FastSet.Set String
         modulePaths =
@@ -574,7 +574,7 @@ invalidExpectedErrorsIn project expectedErrors =
         projectPaths =
             projectPathsExceptElmJson |> FastSet.insert "elm.json"
     in
-    [ expectedErrors
+    (expectedErrors
         |> List.filterMap
             (\expectedErrorsAtPath ->
                 if projectPaths |> FastSet.member expectedErrorsAtPath.path then
@@ -584,63 +584,64 @@ invalidExpectedErrorsIn project expectedErrors =
                     unknownFilesInExpectedErrors expectedErrorsAtPath.path
                         |> Just
             )
-    , expectedErrors
-        |> List.concatMap
-            (\expectedFileErrors ->
-                case expectedFileErrors.path of
-                    "elm.json" ->
-                        expectedFileErrors.errors
+    )
+        ++ (expectedErrors
+                |> List.concatMap
+                    (\expectedFileErrors ->
+                        case expectedFileErrors.path of
+                            "elm.json" ->
+                                expectedFileErrors.errors
 
-                    _ ->
-                        []
-            )
-        |> List.concatMap
-            (\expectedError ->
-                expectedError.fixedFiles
-                    |> List.filterMap
-                        (\fixedFile ->
-                            case fixedFile.source |> Json.Decode.decodeString Elm.Project.decoder of
-                                Ok _ ->
-                                    Nothing
+                            _ ->
+                                []
+                    )
+                |> List.concatMap
+                    (\expectedError ->
+                        expectedError.fixedFiles
+                            |> List.filterMap
+                                (\fixedFile ->
+                                    case fixedFile.source |> Json.Decode.decodeString Elm.Project.decoder of
+                                        Ok _ ->
+                                            Nothing
 
-                                Err jsonDecodeError ->
-                                    elmJsonFixedSourceParsingFailure
-                                        jsonDecodeError
-                                        { message = expectedError.message, details = expectedError.details }
-                                        |> Just
-                        )
-            )
-    , expectedErrors
-        |> List.concatMap
-            (\expectedFileErrors ->
-                if modulePaths |> FastSet.member expectedFileErrors.path then
-                    expectedFileErrors.errors
-                        |> List.concatMap
-                            (\expectedError ->
-                                expectedError.fixedFiles
-                                    |> List.filterMap
-                                        (\fixedFile ->
-                                            case fixedFile.source |> Elm.Parser.parseToFile of
-                                                Ok _ ->
-                                                    Nothing
+                                        Err jsonDecodeError ->
+                                            elmJsonFixedSourceParsingFailure
+                                                jsonDecodeError
+                                                { message = expectedError.message, details = expectedError.details }
+                                                |> Just
+                                )
+                    )
+           )
+        ++ (expectedErrors
+                |> List.concatMap
+                    (\expectedFileErrors ->
+                        if modulePaths |> FastSet.member expectedFileErrors.path then
+                            expectedFileErrors.errors
+                                |> List.concatMap
+                                    (\expectedError ->
+                                        expectedError.fixedFiles
+                                            |> List.filterMap
+                                                (\fixedFile ->
+                                                    case fixedFile.source |> Elm.Parser.parseToFile of
+                                                        Ok _ ->
+                                                            Nothing
 
-                                                Err _ ->
-                                                    moduleFixedSourceParsingFailure
-                                                        { path = expectedFileErrors.path
-                                                        , errorInfo =
-                                                            { message = expectedError.message
-                                                            , details = expectedError.details
-                                                            }
-                                                        }
-                                                        |> Just
-                                        )
-                            )
+                                                        Err _ ->
+                                                            moduleFixedSourceParsingFailure
+                                                                { path = expectedFileErrors.path
+                                                                , errorInfo =
+                                                                    { message = expectedError.message
+                                                                    , details = expectedError.details
+                                                                    }
+                                                                }
+                                                                |> Just
+                                                )
+                                    )
 
-                else
-                    []
-            )
-    ]
-        |> List.concat
+                        else
+                            []
+                    )
+           )
 
 
 elmJsonFixedSourceParsingFailure : Json.Decode.Error -> { message : String, details : List String } -> String

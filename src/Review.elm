@@ -1912,14 +1912,13 @@ applyFixSingle fixToApply lines =
                         |> Maybe.withDefault ""
                         |> Unicode.dropLeft (replace.range.end.column - 1)
             in
-            [ linesBefore
-            , replace.replacement
-                |> String.lines
-                |> ListLocalExtra.headMap (\replacementFirstLine -> startLine ++ replacementFirstLine)
-                |> ListLocalExtra.lastMap (\replacementLastLine -> replacementLastLine ++ endLine)
-            , linesAfter
-            ]
-                |> List.concat
+            linesBefore
+                ++ (replace.replacement
+                        |> String.lines
+                        |> ListLocalExtra.headMap (\replacementFirstLine -> startLine ++ replacementFirstLine)
+                        |> ListLocalExtra.lastMap (\replacementLastLine -> replacementLastLine ++ endLine)
+                   )
+                ++ linesAfter
 
 
 containRangeCollisions : List SourceEdit -> Bool
