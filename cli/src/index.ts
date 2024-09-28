@@ -242,7 +242,7 @@ function readAllContainedFilePaths(directoryPath: string): Promise<string[]> {
         .then(fileNames =>
             fileNames
                 .filter(dirent => dirent.isFile())
-                .map(dirent => path.resolve(directoryPath, dirent.path, dirent.name))
+                .map(dirent => path.resolve(directoryPath, dirent.parentPath, dirent.name))
         )
 }
 
