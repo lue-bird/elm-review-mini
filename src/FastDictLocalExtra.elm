@@ -7,7 +7,6 @@ fromListMap :
     (element -> { key : comparableKey, value : value })
     -> (List element -> FastDict.Dict comparableKey value)
 fromListMap elementToEntry list =
-    -- TODO use optimized from PR
     list
         |> List.foldl
             (\element soFar ->
