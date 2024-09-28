@@ -1,6 +1,6 @@
 module Tests exposing (tests)
 
-import Review.Test
+import Review
 import StringSpellsCompanyNameCorrectly
 import Test exposing (Test)
 
@@ -11,7 +11,7 @@ tests =
         [ Test.describe "StringSpellsCompanyNameCorrectly"
             [ Test.test "fruits.com in string is accepted"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -25,11 +25,11 @@ tests =
                     , review = StringSpellsCompanyNameCorrectly.review
                     , expectedErrors = []
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should pass) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -45,7 +45,7 @@ tests =
                         [ { path = "src/A.elm"
                           , message = "misspelled fruits.com"
                           , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                          , range = Review.Test.Under "frits.com"
+                          , range = Review.ExpectUnder "frits.com"
                           , fixedFiles =
                                 [ { path = "src/A.elm"
                                   , source = """
@@ -59,11 +59,11 @@ tests =
                           }
                         ]
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should fail because module source doesn't parse) fruits.com in string is accepted"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -78,11 +78,11 @@ tests =
                     , expectedErrors =
                         []
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should fail because missing errors) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -97,11 +97,11 @@ tests =
                     , expectedErrors =
                         []
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should fail because missing fixes) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -117,16 +117,16 @@ tests =
                         [ { path = "src/A.elm"
                           , message = "misspelled fruits.com"
                           , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                          , range = Review.Test.Under "frits.com"
+                          , range = Review.ExpectUnder "frits.com"
                           , fixedFiles = []
                           }
                         ]
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should fail because incorrect range) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -142,7 +142,7 @@ tests =
                         [ { path = "src/A.elm"
                           , message = "misspelled fruits.com"
                           , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                          , range = Review.Test.Under "\"the name is obviously frits.com\""
+                          , range = Review.ExpectUnder "\"the name is obviously frits.com\""
                           , fixedFiles =
                                 [ { path = "src/A.elm"
                                   , source = """
@@ -156,11 +156,11 @@ tests =
                           }
                         ]
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should fail because fixed module source doesn't parse) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -176,7 +176,7 @@ tests =
                         [ { path = "src/A.elm"
                           , message = "misspelled fruits.com"
                           , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                          , range = Review.Test.Under "frits.com"
+                          , range = Review.ExpectUnder "frits.com"
                           , fixedFiles =
                                 [ { path = "src/A.elm"
                                   , source = """
@@ -190,11 +190,11 @@ tests =
                           }
                         ]
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             , Test.test "(should fail because fixed module source doesn't match) frits.com in string is reported"
                 (\() ->
-                    { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                    { projectConfiguration = Review.applicationConfigurationMinimal
                     , files =
                         [ { path = "src/A.elm"
                           , source = """
@@ -210,7 +210,7 @@ tests =
                         [ { path = "src/A.elm"
                           , message = "misspelled fruits.com"
                           , details = [ "The typo of using frits.com instead of fruits.com has been made and noticed by users too many times. Our company is `fruits.com`, not `frits.com`." ]
-                          , range = Review.Test.Under "frits.com"
+                          , range = Review.ExpectUnder "frits.com"
                           , fixedFiles =
                                 [ { path = "src/A.elm"
                                   , source = """
@@ -224,7 +224,7 @@ tests =
                           }
                         ]
                     }
-                        |> Review.Test.run
+                        |> Review.test
                 )
             ]
         ]
