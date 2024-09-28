@@ -237,7 +237,7 @@ type Inspect knowledge
         )
 
 
-{-| Relative path to the project elm.json to be used in an [`Error`](#Error) or [expected test error](Review-Test#run).
+{-| Relative path to the project elm.json to be used in an [`Error`](#Error) or [expected test error](Review#test).
 You could also just use `"elm.json"` which feels a bit brittle.
 -}
 elmJsonPath : String
