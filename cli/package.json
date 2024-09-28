@@ -21,7 +21,7 @@
   "author": "lue-bird",
   "license": "Unlicense",
   "devDependencies": {
-    "@types/node": "^20.12.7",
+    "@types/node": "^20.16.10",
     "typescript": "^5.4.5"
   }
 }
