@@ -83,7 +83,7 @@ justsToListMap keyValueToMaybeElement fastDict =
                         soFar
 
                     Just element ->
-                        soFar |> (::) element
+                        element :: soFar
             )
             []
 
@@ -148,7 +148,7 @@ toListMap keyValueToElement dict =
     dict
         |> FastDict.foldr
             (\key value soFar ->
-                soFar |> (::) (keyValueToElement key value)
+                keyValueToElement key value :: soFar
             )
             []
 

@@ -259,31 +259,29 @@ moduleDataToKnowledge moduleData =
                     soFar
                         |> FastDict.update (import_.moduleName |> Elm.Syntax.Node.value)
                             (\rangesSoFar ->
-                                rangesSoFar
-                                    |> Maybe.withDefault []
-                                    |> (::)
-                                        { path = moduleData.path
-                                        , range = importLineRange
-                                        , exposes =
-                                            case import_.exposingList of
-                                                Nothing ->
-                                                    Nothing
+                                { path = moduleData.path
+                                , range = importLineRange
+                                , exposes =
+                                    case import_.exposingList of
+                                        Nothing ->
+                                            Nothing
 
-                                                Just (Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _)) ->
-                                                    Nothing
+                                        Just (Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _)) ->
+                                            Nothing
 
-                                                Just (Elm.Syntax.Node.Node exposingRange (Elm.Syntax.Exposing.Explicit topLevelExposeList)) ->
-                                                    let
-                                                        exposes : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
-                                                        exposes =
-                                                            topLevelExposeList |> Review.topLevelExposeListToExposes
-                                                    in
-                                                    { exposingRange = exposingRange
-                                                    , simpleNames = exposes.simpleNames
-                                                    , typesExposingVariants = exposes.typesExposingVariants
-                                                    }
-                                                        |> Just
-                                        }
+                                        Just (Elm.Syntax.Node.Node exposingRange (Elm.Syntax.Exposing.Explicit topLevelExposeList)) ->
+                                            let
+                                                exposes : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
+                                                exposes =
+                                                    topLevelExposeList |> Review.topLevelExposeListToExposes
+                                            in
+                                            { exposingRange = exposingRange
+                                            , simpleNames = exposes.simpleNames
+                                            , typesExposingVariants = exposes.typesExposingVariants
+                                            }
+                                                |> Just
+                                }
+                                    :: (rangesSoFar |> Maybe.withDefault [])
                                     |> Just
                             )
                 )

@@ -159,14 +159,17 @@ variablesAndRanges =
                         ]
 
                     (Elm.Syntax.Node.Node field0Range field0Name) :: (Elm.Syntax.Node.Node field1Range field1Name) :: field2Up ->
-                        (Elm.Syntax.Node.Node field1Range field1Name :: field2Up)
-                            -- take ranges starting at previous comma
-                            |> List.foldl
-                                (\(Elm.Syntax.Node.Node fieldRange fieldName) soFar ->
-                                    { previousEnd = fieldRange.end
-                                    , variables =
-                                        soFar.variables
-                                            |> (::)
+                        { variableName = field0Name
+                        , variableRange = field0Range
+                        , fixRange = { start = field0Range.start, end = field1Range.start }
+                        , fixReplacement = ""
+                        }
+                            :: ((Elm.Syntax.Node.Node field1Range field1Name :: field2Up)
+                                    -- take ranges starting at previous comma
+                                    |> List.foldl
+                                        (\(Elm.Syntax.Node.Node fieldRange fieldName) soFar ->
+                                            { previousEnd = fieldRange.end
+                                            , variables =
                                                 { variableName = fieldName
                                                 , variableRange = fieldRange
                                                 , fixRange =
@@ -175,16 +178,12 @@ variablesAndRanges =
                                                     }
                                                 , fixReplacement = ""
                                                 }
-                                    }
-                                )
-                                { previousEnd = field0Range.end, variables = [] }
-                            |> .variables
-                            |> (::)
-                                { variableName = field0Name
-                                , variableRange = field0Range
-                                , fixRange = { start = field0Range.start, end = field1Range.start }
-                                , fixReplacement = ""
-                                }
+                                                    :: soFar.variables
+                                            }
+                                        )
+                                        { previousEnd = field0Range.end, variables = [] }
+                                    |> .variables
+                               )
 
             Elm.Syntax.Pattern.NamedPattern _ patterns ->
                 patterns |> List.concatMap variablesAndRanges

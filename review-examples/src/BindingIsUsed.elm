@@ -302,12 +302,11 @@ moduleToKnowledge moduleData =
                                             |> List.foldl
                                                 (\(Elm.Syntax.Node.Node variantRange variant) soFar ->
                                                     { result =
-                                                        soFar.result
-                                                            |> (::)
-                                                                { unqualifiedName = variant.name |> Elm.Syntax.Node.value
-                                                                , nameRange = variant.name |> Elm.Syntax.Node.range
-                                                                , removeRange = { start = soFar.variantEndLocation, end = variantRange.end }
-                                                                }
+                                                        { unqualifiedName = variant.name |> Elm.Syntax.Node.value
+                                                        , nameRange = variant.name |> Elm.Syntax.Node.range
+                                                        , removeRange = { start = soFar.variantEndLocation, end = variantRange.end }
+                                                        }
+                                                            :: soFar.result
                                                     , variantEndLocation = variantRange.end
                                                     }
                                                 )
