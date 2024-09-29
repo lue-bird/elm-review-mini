@@ -51,14 +51,13 @@ review =
 
 
 moduleHeaderNameNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.ModuleName.ModuleName
-moduleHeaderNameNode =
-    \(Elm.Syntax.Node.Node _ moduleHeader) ->
-        case moduleHeader of
-            Elm.Syntax.Module.NormalModule data ->
-                data.moduleName
+moduleHeaderNameNode (Elm.Syntax.Node.Node _ moduleHeader) =
+    case moduleHeader of
+        Elm.Syntax.Module.NormalModule data ->
+            data.moduleName
 
-            Elm.Syntax.Module.PortModule data ->
-                data.moduleName
+        Elm.Syntax.Module.PortModule data ->
+            data.moduleName
 
-            Elm.Syntax.Module.EffectModule data ->
-                data.moduleName
+        Elm.Syntax.Module.EffectModule data ->
+            data.moduleName

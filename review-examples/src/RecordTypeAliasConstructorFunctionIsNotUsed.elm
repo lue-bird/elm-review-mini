@@ -112,51 +112,50 @@ type alias Knowledge =
 directDependenciesToKnowledge :
     List { dependency_ | modules : List Elm.Docs.Module }
     -> Knowledge
-directDependenciesToKnowledge =
-    \dependencies ->
-        let
-            modules : List Elm.Docs.Module
-            modules =
-                dependencies |> List.concatMap .modules
-        in
-        { modulePossibleTypeAliasConstructorUses = []
-        , moduleExposes =
-            modules
-                |> List.map
-                    (\moduleInterface ->
-                        ( moduleInterface.name |> String.split "."
-                        , moduleInterface |> Review.moduleInterfaceExposes
-                        )
+directDependenciesToKnowledge dependencies =
+    let
+        modules : List Elm.Docs.Module
+        modules =
+            dependencies |> List.concatMap .modules
+    in
+    { modulePossibleTypeAliasConstructorUses = []
+    , moduleExposes =
+        modules
+            |> List.map
+                (\moduleInterface ->
+                    ( moduleInterface.name |> String.split "."
+                    , moduleInterface |> Review.moduleInterfaceExposes
                     )
-                |> FastDict.fromList
-        , recordTypeAliasDeclarations =
-            modules
-                |> List.concatMap
-                    (\moduleInterface ->
-                        let
-                            moduleName : Elm.Syntax.ModuleName.ModuleName
-                            moduleName =
-                                moduleInterface.name |> String.split "."
-                        in
-                        moduleInterface.aliases
-                            |> List.filterMap
-                                (\alias ->
-                                    case alias.tipe of
-                                        Elm.Type.Record fields Nothing ->
-                                            ( ( moduleName, alias.name )
-                                            , { recordFields =
-                                                    fields
-                                                        |> List.map (\( fieldName, _ ) -> fieldName)
-                                              }
-                                            )
-                                                |> Just
+                )
+            |> FastDict.fromList
+    , recordTypeAliasDeclarations =
+        modules
+            |> List.concatMap
+                (\moduleInterface ->
+                    let
+                        moduleName : Elm.Syntax.ModuleName.ModuleName
+                        moduleName =
+                            moduleInterface.name |> String.split "."
+                    in
+                    moduleInterface.aliases
+                        |> List.filterMap
+                            (\alias ->
+                                case alias.tipe of
+                                    Elm.Type.Record fields Nothing ->
+                                        ( ( moduleName, alias.name )
+                                        , { recordFields =
+                                                fields
+                                                    |> List.map (\( fieldName, _ ) -> fieldName)
+                                          }
+                                        )
+                                            |> Just
 
-                                        _ ->
-                                            Nothing
-                                )
-                    )
-                |> FastDict.fromList
-        }
+                                    _ ->
+                                        Nothing
+                            )
+                )
+            |> FastDict.fromList
+    }
 
 
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge
@@ -174,134 +173,133 @@ knowledgeMerge a b =
 moduleDataToKnowledge :
     { source : String, syntax : Elm.Syntax.File.File, path : String }
     -> Knowledge
-moduleDataToKnowledge =
-    \moduleData ->
-        let
-            moduleName : Elm.Syntax.ModuleName.ModuleName
-            moduleName =
-                moduleData.syntax.moduleDefinition
-                    |> Elm.Syntax.Node.value
-                    |> Elm.Syntax.Module.moduleName
-        in
-        { recordTypeAliasDeclarations =
-            moduleData.syntax.declarations
-                |> List.filterMap
-                    (\(Elm.Syntax.Node.Node _ declaration) ->
-                        case declaration of
-                            Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
-                                case typeAliasDeclaration.typeAnnotation |> Elm.Syntax.Node.value of
-                                    Elm.Syntax.TypeAnnotation.Record fields ->
-                                        ( ( moduleName
-                                          , typeAliasDeclaration.name |> Elm.Syntax.Node.value
-                                          )
-                                        , { recordFields =
-                                                fields
-                                                    |> List.map
-                                                        (\(Elm.Syntax.Node.Node _ ( Elm.Syntax.Node.Node _ field, _ )) -> field)
-                                          }
-                                        )
-                                            |> Just
+moduleDataToKnowledge moduleData =
+    let
+        moduleName : Elm.Syntax.ModuleName.ModuleName
+        moduleName =
+            moduleData.syntax.moduleDefinition
+                |> Elm.Syntax.Node.value
+                |> Elm.Syntax.Module.moduleName
+    in
+    { recordTypeAliasDeclarations =
+        moduleData.syntax.declarations
+            |> List.filterMap
+                (\(Elm.Syntax.Node.Node _ declaration) ->
+                    case declaration of
+                        Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
+                            case typeAliasDeclaration.typeAnnotation |> Elm.Syntax.Node.value of
+                                Elm.Syntax.TypeAnnotation.Record fields ->
+                                    ( ( moduleName
+                                      , typeAliasDeclaration.name |> Elm.Syntax.Node.value
+                                      )
+                                    , { recordFields =
+                                            fields
+                                                |> List.map
+                                                    (\(Elm.Syntax.Node.Node _ ( Elm.Syntax.Node.Node _ field, _ )) -> field)
+                                      }
+                                    )
+                                        |> Just
 
-                                    _ ->
-                                        Nothing
+                                _ ->
+                                    Nothing
 
-                            _ ->
-                                Nothing
-                    )
-                |> FastDict.fromList
-        , moduleExposes =
-            FastDict.singleton moduleName
-                (moduleData.syntax |> Review.moduleExposes)
-        , modulePossibleTypeAliasConstructorUses =
-            [ { modulePath = moduleData.path
-              , moduleName = moduleName
-              , moduleDeclaredNames =
-                    moduleData.syntax.declarations
-                        |> FastSet.LocalExtra.unionFromListMap
-                            (\(Elm.Syntax.Node.Node _ declaration) ->
-                                declaration |> Declaration.LocalExtra.declaredNames
+                        _ ->
+                            Nothing
+                )
+            |> FastDict.fromList
+    , moduleExposes =
+        FastDict.singleton moduleName
+            (moduleData.syntax |> Review.moduleExposes)
+    , modulePossibleTypeAliasConstructorUses =
+        [ { modulePath = moduleData.path
+          , moduleName = moduleName
+          , moduleDeclaredNames =
+                moduleData.syntax.declarations
+                    |> FastSet.LocalExtra.unionFromListMap
+                        (\(Elm.Syntax.Node.Node _ declaration) ->
+                            declaration |> Declaration.LocalExtra.declaredNames
+                        )
+          , importsExposingAll =
+                moduleData.syntax.imports
+                    |> List.filterMap
+                        (\(Elm.Syntax.Node.Node _ import_) ->
+                            case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                                Nothing ->
+                                    Nothing
+
+                                Just (Elm.Syntax.Exposing.Explicit _) ->
+                                    Nothing
+
+                                Just (Elm.Syntax.Exposing.All _) ->
+                                    { moduleName = import_.moduleName |> Elm.Syntax.Node.value
+                                    , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
+                                    }
+                                        |> Just
+                        )
+          , importsExposingExplicit =
+                moduleData.syntax.imports
+                    |> List.filterMap
+                        (\(Elm.Syntax.Node.Node _ import_) ->
+                            (case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                                Just (Elm.Syntax.Exposing.All _) ->
+                                    Nothing
+
+                                Nothing ->
+                                    { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
+                                        |> Just
+
+                                Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
+                                    topLevelExposeList |> Review.topLevelExposeListToExposes |> Just
                             )
-              , importsExposingAll =
-                    moduleData.syntax.imports
-                        |> List.filterMap
-                            (\(Elm.Syntax.Node.Node _ import_) ->
-                                case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
-                                    Nothing ->
-                                        Nothing
-
-                                    Just (Elm.Syntax.Exposing.Explicit _) ->
-                                        Nothing
-
-                                    Just (Elm.Syntax.Exposing.All _) ->
+                                |> Maybe.map
+                                    (\exposes ->
                                         { moduleName = import_.moduleName |> Elm.Syntax.Node.value
                                         , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
+                                        , simpleNames = exposes.simpleNames
+                                        , typesExposingVariants = exposes.typesExposingVariants
                                         }
-                                            |> Just
-                            )
-              , importsExposingExplicit =
-                    moduleData.syntax.imports
-                        |> List.filterMap
-                            (\(Elm.Syntax.Node.Node _ import_) ->
-                                (case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
-                                    Just (Elm.Syntax.Exposing.All _) ->
-                                        Nothing
+                                    )
+                        )
+          , possibleTypeAliasConstructorUses =
+                moduleData.syntax.declarations
+                    |> List.concatMap
+                        (\(Elm.Syntax.Node.Node _ declaration) ->
+                            case declaration of
+                                Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
+                                    valueOrFunctionDeclaration.declaration
+                                        |> Elm.Syntax.Node.value
+                                        |> .expression
+                                        |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
+                                            (valueOrFunctionDeclaration.declaration
+                                                |> Elm.Syntax.Node.value
+                                                |> .arguments
+                                                |> List.concatMap Review.patternBindings
+                                                |> FastSet.fromList
+                                            )
+                                        |> List.map
+                                            (\possibleTypeAliasConstructorUse ->
+                                                { qualification = possibleTypeAliasConstructorUse.qualification
+                                                , unqualifiedName = possibleTypeAliasConstructorUse.unqualifiedName
+                                                , referenceRange = possibleTypeAliasConstructorUse.referenceRange
+                                                , bindingsInScope = possibleTypeAliasConstructorUse.bindingsInScope
+                                                , directCallRange = possibleTypeAliasConstructorUse.directCallRange
+                                                , directCallArguments =
+                                                    possibleTypeAliasConstructorUse.directCallArguments
+                                                        |> List.map
+                                                            (\directCallArgument ->
+                                                                { startColumn = directCallArgument.range.start.column
+                                                                , source = moduleData.source |> Review.sourceExtractInRange directCallArgument.range
+                                                                }
+                                                            )
+                                                }
+                                            )
 
-                                    Nothing ->
-                                        { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
-                                            |> Just
-
-                                    Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
-                                        topLevelExposeList |> Review.topLevelExposeListToExposes |> Just
-                                )
-                                    |> Maybe.map
-                                        (\exposes ->
-                                            { moduleName = import_.moduleName |> Elm.Syntax.Node.value
-                                            , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
-                                            , simpleNames = exposes.simpleNames
-                                            , typesExposingVariants = exposes.typesExposingVariants
-                                            }
-                                        )
-                            )
-              , possibleTypeAliasConstructorUses =
-                    moduleData.syntax.declarations
-                        |> List.concatMap
-                            (\(Elm.Syntax.Node.Node _ declaration) ->
-                                case declaration of
-                                    Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
-                                        valueOrFunctionDeclaration.declaration
-                                            |> Elm.Syntax.Node.value
-                                            |> .expression
-                                            |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
-                                                (valueOrFunctionDeclaration.declaration
-                                                    |> Elm.Syntax.Node.value
-                                                    |> .arguments
-                                                    |> List.concatMap Review.patternBindings
-                                                    |> FastSet.fromList
-                                                )
-                                            |> List.map
-                                                (\possibleTypeAliasConstructorUse ->
-                                                    { qualification = possibleTypeAliasConstructorUse.qualification
-                                                    , unqualifiedName = possibleTypeAliasConstructorUse.unqualifiedName
-                                                    , referenceRange = possibleTypeAliasConstructorUse.referenceRange
-                                                    , bindingsInScope = possibleTypeAliasConstructorUse.bindingsInScope
-                                                    , directCallRange = possibleTypeAliasConstructorUse.directCallRange
-                                                    , directCallArguments =
-                                                        possibleTypeAliasConstructorUse.directCallArguments
-                                                            |> List.map
-                                                                (\directCallArgument ->
-                                                                    { startColumn = directCallArgument.range.start.column
-                                                                    , source = moduleData.source |> Review.sourceExtractInRange directCallArgument.range
-                                                                    }
-                                                                )
-                                                    }
-                                                )
-
-                                    _ ->
-                                        []
-                            )
-              }
-            ]
-        }
+                                _ ->
+                                    []
+                        )
+          }
+        ]
+    }
 
 
 expressionPossibleTypeAliasConstructorUsesWithBindingsInScope :
@@ -316,87 +314,85 @@ expressionPossibleTypeAliasConstructorUsesWithBindingsInScope :
             , directCallRange : Elm.Syntax.Range.Range
             , directCallArguments : List { range : Elm.Syntax.Range.Range }
             }
-expressionPossibleTypeAliasConstructorUsesWithBindingsInScope outerBindingsInScope =
-    \expressionNode ->
-        case expressionNode of
-            Elm.Syntax.Node.Node referenceRange (Elm.Syntax.Expression.FunctionOrValue qualification unqualifiedName) ->
-                if unqualifiedName |> isPossibleTypeAliasConstructorName then
-                    [ { qualification = qualification
-                      , unqualifiedName = unqualifiedName
-                      , referenceRange = referenceRange
-                      , bindingsInScope = outerBindingsInScope
-                      , directCallRange = referenceRange
-                      , directCallArguments = []
-                      }
-                    ]
+expressionPossibleTypeAliasConstructorUsesWithBindingsInScope outerBindingsInScope expressionNode =
+    case expressionNode of
+        Elm.Syntax.Node.Node referenceRange (Elm.Syntax.Expression.FunctionOrValue qualification unqualifiedName) ->
+            if unqualifiedName |> isPossibleTypeAliasConstructorName then
+                [ { qualification = qualification
+                  , unqualifiedName = unqualifiedName
+                  , referenceRange = referenceRange
+                  , bindingsInScope = outerBindingsInScope
+                  , directCallRange = referenceRange
+                  , directCallArguments = []
+                  }
+                ]
 
-                else
-                    []
+            else
+                []
 
-            Elm.Syntax.Node.Node directCallRange (Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node referenceRange (Elm.Syntax.Expression.FunctionOrValue qualification unqualifiedName)) :: directCallArguments)) ->
-                let
-                    argumentsPossibleTypeAliasConstructorUse :
-                        List
-                            { qualification : Elm.Syntax.ModuleName.ModuleName
-                            , unqualifiedName : String
-                            , referenceRange : Elm.Syntax.Range.Range
-                            , bindingsInScope : FastSet.Set String
-                            , directCallRange : Elm.Syntax.Range.Range
-                            , directCallArguments : List { range : Elm.Syntax.Range.Range }
-                            }
-                    argumentsPossibleTypeAliasConstructorUse =
-                        directCallArguments
-                            -- note how we don't recuse into the first element in the application
-                            |> List.concatMap
-                                (\otherExpressionNode ->
-                                    otherExpressionNode
-                                        |> Review.expressionSubsWithBindings
-                                        |> List.concatMap
-                                            (\sub ->
-                                                sub.expressionNode
-                                                    |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
-                                                        (FastSet.union (sub.bindings |> FastSet.fromList) outerBindingsInScope)
-                                            )
-                                )
-                in
-                if unqualifiedName |> isPossibleTypeAliasConstructorName then
-                    { qualification = qualification
-                    , unqualifiedName = unqualifiedName
-                    , referenceRange = referenceRange
-                    , bindingsInScope = outerBindingsInScope
-                    , directCallRange = directCallRange
-                    , directCallArguments =
-                        directCallArguments
-                            |> List.map
-                                (\(Elm.Syntax.Node.Node directCallArgumentRange _) ->
-                                    { range = directCallArgumentRange }
-                                )
-                    }
-                        :: argumentsPossibleTypeAliasConstructorUse
+        Elm.Syntax.Node.Node directCallRange (Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node referenceRange (Elm.Syntax.Expression.FunctionOrValue qualification unqualifiedName)) :: directCallArguments)) ->
+            let
+                argumentsPossibleTypeAliasConstructorUse :
+                    List
+                        { qualification : Elm.Syntax.ModuleName.ModuleName
+                        , unqualifiedName : String
+                        , referenceRange : Elm.Syntax.Range.Range
+                        , bindingsInScope : FastSet.Set String
+                        , directCallRange : Elm.Syntax.Range.Range
+                        , directCallArguments : List { range : Elm.Syntax.Range.Range }
+                        }
+                argumentsPossibleTypeAliasConstructorUse =
+                    directCallArguments
+                        -- note how we don't recuse into the first element in the application
+                        |> List.concatMap
+                            (\otherExpressionNode ->
+                                otherExpressionNode
+                                    |> Review.expressionSubsWithBindings
+                                    |> List.concatMap
+                                        (\sub ->
+                                            sub.expressionNode
+                                                |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
+                                                    (FastSet.union (sub.bindings |> FastSet.fromList) outerBindingsInScope)
+                                        )
+                            )
+            in
+            if unqualifiedName |> isPossibleTypeAliasConstructorName then
+                { qualification = qualification
+                , unqualifiedName = unqualifiedName
+                , referenceRange = referenceRange
+                , bindingsInScope = outerBindingsInScope
+                , directCallRange = directCallRange
+                , directCallArguments =
+                    directCallArguments
+                        |> List.map
+                            (\(Elm.Syntax.Node.Node directCallArgumentRange _) ->
+                                { range = directCallArgumentRange }
+                            )
+                }
+                    :: argumentsPossibleTypeAliasConstructorUse
 
-                else
-                    argumentsPossibleTypeAliasConstructorUse
+            else
+                argumentsPossibleTypeAliasConstructorUse
 
-            otherExpressionNode ->
-                otherExpressionNode
-                    |> Review.expressionSubsWithBindings
-                    |> List.concatMap
-                        (\sub ->
-                            sub.expressionNode
-                                |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
-                                    (FastSet.union (sub.bindings |> FastSet.fromList) outerBindingsInScope)
-                        )
+        otherExpressionNode ->
+            otherExpressionNode
+                |> Review.expressionSubsWithBindings
+                |> List.concatMap
+                    (\sub ->
+                        sub.expressionNode
+                            |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
+                                (FastSet.union (sub.bindings |> FastSet.fromList) outerBindingsInScope)
+                    )
 
 
 isPossibleTypeAliasConstructorName : String -> Bool
-isPossibleTypeAliasConstructorName =
-    \unqualifiedName ->
-        case unqualifiedName |> String.uncons of
-            Nothing ->
-                False
+isPossibleTypeAliasConstructorName unqualifiedName =
+    case unqualifiedName |> String.uncons of
+        Nothing ->
+            False
 
-            Just ( unqualifiedNameFirstChar, _ ) ->
-                unqualifiedNameFirstChar |> Char.isUpper
+        Just ( unqualifiedNameFirstChar, _ ) ->
+            unqualifiedNameFirstChar |> Char.isUpper
 
 
 report : Knowledge -> List Review.Error
@@ -522,10 +518,9 @@ report knowledge =
 
 
 disambiguateFromSet : FastSet.Set String -> (String -> String)
-disambiguateFromSet forbiddenNamesSet =
-    \name ->
-        if forbiddenNamesSet |> FastSet.member name then
-            (name ++ "_") |> disambiguateFromSet forbiddenNamesSet
+disambiguateFromSet forbiddenNamesSet name =
+    if forbiddenNamesSet |> FastSet.member name then
+        (name ++ "_") |> disambiguateFromSet forbiddenNamesSet
 
-        else
-            name
+    else
+        name

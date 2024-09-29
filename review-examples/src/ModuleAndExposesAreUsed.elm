@@ -153,144 +153,142 @@ type alias Knowledge =
 directDependenciesToKnowledge :
     List { dependency_ | modules : List Elm.Docs.Module }
     -> Knowledge
-directDependenciesToKnowledge =
-    \dependencies ->
-        { identifierUseCounts = FastDict.empty
-        , moduleExposes = FastDict.empty
-        , dependencyModuleExposes =
-            dependencies
-                |> List.concatMap .modules
-                |> List.map
-                    (\moduleInterface ->
-                        ( moduleInterface.name |> String.split "."
-                        , moduleInterface |> Review.moduleInterfaceExposes
-                        )
+directDependenciesToKnowledge dependencies =
+    { identifierUseCounts = FastDict.empty
+    , moduleExposes = FastDict.empty
+    , dependencyModuleExposes =
+        dependencies
+            |> List.concatMap .modules
+            |> List.map
+                (\moduleInterface ->
+                    ( moduleInterface.name |> String.split "."
+                    , moduleInterface |> Review.moduleInterfaceExposes
                     )
-                |> FastDict.fromList
-        , modulesAllowingUnusedExposes = FastSet.empty
-        , moduleImports = FastDict.empty
-        }
+                )
+            |> FastDict.fromList
+    , modulesAllowingUnusedExposes = FastSet.empty
+    , moduleImports = FastDict.empty
+    }
 
 
 moduleDataToKnowledge :
     { moduleData_ | path : String, syntax : Elm.Syntax.File.File }
     -> Knowledge
-moduleDataToKnowledge =
-    \moduleData ->
-        let
-            moduleName : Elm.Syntax.ModuleName.ModuleName
-            moduleName =
-                moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
-        in
-        { dependencyModuleExposes = FastDict.empty
-        , modulesAllowingUnusedExposes = FastSet.empty
-        , identifierUseCounts =
-            { identifierUseCounts =
-                moduleData.syntax.declarations
-                    |> FastDict.LocalExtra.unionFromListWithMap
-                        (\(Elm.Syntax.Node.Node _ declaration) ->
-                            declaration
-                                |> Declaration.LocalExtra.identifierUses
-                                |> FastDict.map (\_ ranges -> ranges |> List.length)
+moduleDataToKnowledge moduleData =
+    let
+        moduleName : Elm.Syntax.ModuleName.ModuleName
+        moduleName =
+            moduleData.syntax.moduleDefinition |> Elm.Syntax.Node.value |> Elm.Syntax.Module.moduleName
+    in
+    { dependencyModuleExposes = FastDict.empty
+    , modulesAllowingUnusedExposes = FastSet.empty
+    , identifierUseCounts =
+        { identifierUseCounts =
+            moduleData.syntax.declarations
+                |> FastDict.LocalExtra.unionFromListWithMap
+                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                        declaration
+                            |> Declaration.LocalExtra.identifierUses
+                            |> FastDict.map (\_ ranges -> ranges |> List.length)
+                    )
+                    (+)
+        , importsExposingAll =
+            moduleData.syntax.imports
+                |> List.filterMap
+                    (\(Elm.Syntax.Node.Node _ import_) ->
+                        case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                            Nothing ->
+                                Nothing
+
+                            Just (Elm.Syntax.Exposing.Explicit _) ->
+                                Nothing
+
+                            Just (Elm.Syntax.Exposing.All _) ->
+                                { moduleName = import_.moduleName |> Elm.Syntax.Node.value
+                                , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
+                                }
+                                    |> Just
+                    )
+        , importsExposingExplicit =
+            moduleData.syntax.imports
+                |> List.filterMap
+                    (\(Elm.Syntax.Node.Node _ import_) ->
+                        (case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                            Just (Elm.Syntax.Exposing.All _) ->
+                                Nothing
+
+                            Nothing ->
+                                { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
+                                    |> Just
+
+                            Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
+                                topLevelExposeList |> Review.topLevelExposeListToExposes |> Just
                         )
-                        (+)
-            , importsExposingAll =
-                moduleData.syntax.imports
-                    |> List.filterMap
-                        (\(Elm.Syntax.Node.Node _ import_) ->
-                            case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
-                                Nothing ->
-                                    Nothing
-
-                                Just (Elm.Syntax.Exposing.Explicit _) ->
-                                    Nothing
-
-                                Just (Elm.Syntax.Exposing.All _) ->
+                            |> Maybe.map
+                                (\exposes ->
                                     { moduleName = import_.moduleName |> Elm.Syntax.Node.value
                                     , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
+                                    , simpleNames = exposes.simpleNames
+                                    , typesExposingVariants = exposes.typesExposingVariants
                                     }
-                                        |> Just
-                        )
-            , importsExposingExplicit =
-                moduleData.syntax.imports
-                    |> List.filterMap
-                        (\(Elm.Syntax.Node.Node _ import_) ->
-                            (case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
-                                Just (Elm.Syntax.Exposing.All _) ->
-                                    Nothing
-
-                                Nothing ->
-                                    { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
-                                        |> Just
-
-                                Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
-                                    topLevelExposeList |> Review.topLevelExposeListToExposes |> Just
-                            )
-                                |> Maybe.map
-                                    (\exposes ->
-                                        { moduleName = import_.moduleName |> Elm.Syntax.Node.value
-                                        , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
-                                        , simpleNames = exposes.simpleNames
-                                        , typesExposingVariants = exposes.typesExposingVariants
-                                        }
-                                    )
-                        )
-            }
-                |> FastDict.singleton moduleName
-        , moduleExposes =
-            let
-                exposes :
-                    { range : Elm.Syntax.Range.Range
-                    , simpleNames : FastDict.Dict String Elm.Syntax.Range.Range
-                    , typesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : FastSet.Set String }
-                    }
-                exposes =
-                    moduleData.syntax |> moduleToExposes
-            in
-            FastDict.singleton
-                moduleName
-                { path = moduleData.path
-                , exposingRange = exposes.range
-                , exposedSimpleNames = exposes.simpleNames
-                , exposedTypesWithVariantNames = exposes.typesWithVariantNames
-                }
-        , moduleImports =
-            moduleData.syntax.imports
-                |> List.foldl
-                    (\(Elm.Syntax.Node.Node importLineRange import_) soFar ->
-                        soFar
-                            |> FastDict.update (import_.moduleName |> Elm.Syntax.Node.value)
-                                (\rangesSoFar ->
-                                    rangesSoFar
-                                        |> Maybe.withDefault []
-                                        |> (::)
-                                            { path = moduleData.path
-                                            , range = importLineRange
-                                            , exposes =
-                                                case import_.exposingList of
-                                                    Nothing ->
-                                                        Nothing
-
-                                                    Just (Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _)) ->
-                                                        Nothing
-
-                                                    Just (Elm.Syntax.Node.Node exposingRange (Elm.Syntax.Exposing.Explicit topLevelExposeList)) ->
-                                                        let
-                                                            exposes : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
-                                                            exposes =
-                                                                topLevelExposeList |> Review.topLevelExposeListToExposes
-                                                        in
-                                                        { exposingRange = exposingRange
-                                                        , simpleNames = exposes.simpleNames
-                                                        , typesExposingVariants = exposes.typesExposingVariants
-                                                        }
-                                                            |> Just
-                                            }
-                                        |> Just
                                 )
                     )
-                    FastDict.empty
         }
+            |> FastDict.singleton moduleName
+    , moduleExposes =
+        let
+            exposes :
+                { range : Elm.Syntax.Range.Range
+                , simpleNames : FastDict.Dict String Elm.Syntax.Range.Range
+                , typesWithVariantNames : FastDict.Dict String { range : Elm.Syntax.Range.Range, variants : FastSet.Set String }
+                }
+            exposes =
+                moduleData.syntax |> moduleToExposes
+        in
+        FastDict.singleton
+            moduleName
+            { path = moduleData.path
+            , exposingRange = exposes.range
+            , exposedSimpleNames = exposes.simpleNames
+            , exposedTypesWithVariantNames = exposes.typesWithVariantNames
+            }
+    , moduleImports =
+        moduleData.syntax.imports
+            |> List.foldl
+                (\(Elm.Syntax.Node.Node importLineRange import_) soFar ->
+                    soFar
+                        |> FastDict.update (import_.moduleName |> Elm.Syntax.Node.value)
+                            (\rangesSoFar ->
+                                rangesSoFar
+                                    |> Maybe.withDefault []
+                                    |> (::)
+                                        { path = moduleData.path
+                                        , range = importLineRange
+                                        , exposes =
+                                            case import_.exposingList of
+                                                Nothing ->
+                                                    Nothing
+
+                                                Just (Elm.Syntax.Node.Node _ (Elm.Syntax.Exposing.All _)) ->
+                                                    Nothing
+
+                                                Just (Elm.Syntax.Node.Node exposingRange (Elm.Syntax.Exposing.Explicit topLevelExposeList)) ->
+                                                    let
+                                                        exposes : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String }
+                                                        exposes =
+                                                            topLevelExposeList |> Review.topLevelExposeListToExposes
+                                                    in
+                                                    { exposingRange = exposingRange
+                                                    , simpleNames = exposes.simpleNames
+                                                    , typesExposingVariants = exposes.typesExposingVariants
+                                                    }
+                                                        |> Just
+                                        }
+                                    |> Just
+                            )
+                )
+                FastDict.empty
+    }
 
 
 moduleToExposes :
@@ -420,17 +418,16 @@ moduleToExposes syntaxFile =
 
 
 moduleHeaderExposingNode : Elm.Syntax.Node.Node Elm.Syntax.Module.Module -> Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
-moduleHeaderExposingNode =
-    \(Elm.Syntax.Node.Node _ moduleHeader) ->
-        case moduleHeader of
-            Elm.Syntax.Module.NormalModule moduleHeaderData ->
-                moduleHeaderData.exposingList
+moduleHeaderExposingNode (Elm.Syntax.Node.Node _ moduleHeader) =
+    case moduleHeader of
+        Elm.Syntax.Module.NormalModule moduleHeaderData ->
+            moduleHeaderData.exposingList
 
-            Elm.Syntax.Module.PortModule moduleHeaderData ->
-                moduleHeaderData.exposingList
+        Elm.Syntax.Module.PortModule moduleHeaderData ->
+            moduleHeaderData.exposingList
 
-            Elm.Syntax.Module.EffectModule moduleHeaderData ->
-                moduleHeaderData.exposingList
+        Elm.Syntax.Module.EffectModule moduleHeaderData ->
+            moduleHeaderData.exposingList
 
 
 knowledgeMerge : Knowledge -> Knowledge -> Knowledge
@@ -714,24 +711,22 @@ If you think you don't need it anymore or think it was added it prematurely, you
 
 
 exposingToString : { simpleNames : FastSet.Set String, typesExposingVariants : FastSet.Set String } -> String
-exposingToString =
-    \exposes ->
-        let
-            exposesSet : FastSet.Set String
-            exposesSet =
-                FastSet.union exposes.simpleNames
-                    (exposes.typesExposingVariants
-                        |> FastSet.map (\typeExposingVariants -> typeExposingVariants ++ "(..)")
-                    )
-        in
-        if exposesSet |> FastSet.isEmpty then
-            ""
+exposingToString exposes =
+    let
+        exposesSet : FastSet.Set String
+        exposesSet =
+            FastSet.union exposes.simpleNames
+                (exposes.typesExposingVariants
+                    |> FastSet.map (\typeExposingVariants -> typeExposingVariants ++ "(..)")
+                )
+    in
+    if exposesSet |> FastSet.isEmpty then
+        ""
 
-        else
-            [ "exposing (", exposesSet |> FastSet.toList |> String.join ", ", ")" ] |> String.concat
+    else
+        [ "exposing (", exposesSet |> FastSet.toList |> String.join ", ", ")" ] |> String.concat
 
 
 referenceToString : ( Elm.Syntax.ModuleName.ModuleName, String ) -> String
-referenceToString =
-    \( moduleName, name ) ->
-        [ moduleName |> String.join ".", ".", name ] |> String.concat
+referenceToString ( moduleName, name ) =
+    [ moduleName |> String.join ".", ".", name ] |> String.concat

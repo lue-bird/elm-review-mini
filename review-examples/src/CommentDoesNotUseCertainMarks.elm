@@ -133,22 +133,21 @@ moduleDataToKnowledge reviewConfiguration moduleData =
 {-| The given mark to find should not wrap multiple lines
 -}
 stringRowColumnOffsetsOfMark : String -> (String -> List { row0Based : Int, startColumn0Based : Int })
-stringRowColumnOffsetsOfMark toFind =
-    \string ->
-        string
-            |> String.lines
-            |> List.indexedMap
-                (\row0Based commentLine ->
-                    commentLine
-                        |> String.indexes toFind
-                        |> List.map
-                            (\startColumn0Based ->
-                                { row0Based = row0Based
-                                , startColumn0Based = startColumn0Based
-                                }
-                            )
-                )
-            |> List.concat
+stringRowColumnOffsetsOfMark toFind string =
+    string
+        |> String.lines
+        |> List.indexedMap
+            (\row0Based commentLine ->
+                commentLine
+                    |> String.indexes toFind
+                    |> List.map
+                        (\startColumn0Based ->
+                            { row0Based = row0Based
+                            , startColumn0Based = startColumn0Based
+                            }
+                        )
+            )
+        |> List.concat
 
 
 rangeInSingleRow : { row : Int, startColumn : Int, length : Int } -> Elm.Syntax.Range.Range

@@ -23,10 +23,10 @@ identifierUsesMerge a b =
 listIdentifierUses :
     List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-listIdentifierUses =
-    \patternNodeList ->
-        patternNodeList
-            |> List.foldl (\sub -> identifierUsesMerge (sub |> identifierUses)) FastDict.empty
+listIdentifierUses patternNodeList =
+    patternNodeList
+        |> List.foldl (\sub -> identifierUsesMerge (sub |> identifierUses))
+            FastDict.empty
 
 
 identifierUses :
@@ -96,23 +96,24 @@ identifierUses =
 
 
 qualifiedToString : ( Elm.Syntax.ModuleName.ModuleName, String ) -> String
-qualifiedToString =
-    \( qualification, unqualified ) ->
-        case qualification of
-            [] ->
-                unqualified
+qualifiedToString ( qualification, unqualified ) =
+    case qualification of
+        [] ->
+            unqualified
 
-            qualificationPart0 :: qualificationPart1Up ->
-                ((qualificationPart0 :: qualificationPart1Up) |> String.join ".")
-                    ++ "."
-                    ++ unqualified
+        qualificationPart0 :: qualificationPart1Up ->
+            ((qualificationPart0 :: qualificationPart1Up) |> String.join ".")
+                ++ "."
+                ++ unqualified
 
 
 {-| Recursively find all bindings in the pattern
 -}
 variables : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> FastSet.Set String
-variables =
-    \patternNode -> patternNode |> variablesAndRanges |> List.LocalExtra.toSetMap (\variable -> variable.variableName)
+variables patternNode =
+    patternNode
+        |> variablesAndRanges
+        |> List.LocalExtra.toSetMap .variableName
 
 
 {-| Recursively find all bindings + ranges in the pattern

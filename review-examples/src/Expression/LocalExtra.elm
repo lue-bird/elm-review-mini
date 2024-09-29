@@ -103,35 +103,34 @@ identifiers =
 letDeclarationIdentifiers :
     Elm.Syntax.Expression.LetDeclaration
     -> FastDict.Dict ( Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.Range.Range)
-letDeclarationIdentifiers =
-    \letDeclaration ->
-        case letDeclaration of
-            Elm.Syntax.Expression.LetDestructuring patternNode destructuredExpressionNode ->
-                FastDict.LocalExtra.unionWith (++)
-                    (patternNode |> Pattern.LocalExtra.identifierUses)
-                    (destructuredExpressionNode |> identifiers)
+letDeclarationIdentifiers letDeclaration =
+    case letDeclaration of
+        Elm.Syntax.Expression.LetDestructuring patternNode destructuredExpressionNode ->
+            FastDict.LocalExtra.unionWith (++)
+                (patternNode |> Pattern.LocalExtra.identifierUses)
+                (destructuredExpressionNode |> identifiers)
 
-            Elm.Syntax.Expression.LetFunction letValueOrFunctionDeclaration ->
-                [ case letValueOrFunctionDeclaration.signature of
-                    Nothing ->
-                        FastDict.empty
+        Elm.Syntax.Expression.LetFunction letValueOrFunctionDeclaration ->
+            [ case letValueOrFunctionDeclaration.signature of
+                Nothing ->
+                    FastDict.empty
 
-                    Just (Elm.Syntax.Node.Node _ signature) ->
-                        signature.typeAnnotation
-                            |> Type.LocalExtra.identifierUses
-                , letValueOrFunctionDeclaration.declaration
-                    |> Elm.Syntax.Node.value
-                    |> .arguments
-                    |> Pattern.LocalExtra.listIdentifierUses
-                , (letValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value |> .expression)
-                    |> identifiers
-                    |> FastDict.LocalExtra.excludeKeys
-                        (letValueOrFunctionDeclaration.declaration
-                            |> Elm.Syntax.Node.value
-                            |> .arguments
-                            |> FastSet.LocalExtra.unionFromListMap
-                                (\patternNode -> patternNode |> Pattern.LocalExtra.variables)
-                            |> FastSet.map (\variable -> ( [], variable ))
-                        )
-                ]
-                    |> FastDict.LocalExtra.unionFromListWithMap identity (++)
+                Just (Elm.Syntax.Node.Node _ signature) ->
+                    signature.typeAnnotation
+                        |> Type.LocalExtra.identifierUses
+            , letValueOrFunctionDeclaration.declaration
+                |> Elm.Syntax.Node.value
+                |> .arguments
+                |> Pattern.LocalExtra.listIdentifierUses
+            , (letValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value |> .expression)
+                |> identifiers
+                |> FastDict.LocalExtra.excludeKeys
+                    (letValueOrFunctionDeclaration.declaration
+                        |> Elm.Syntax.Node.value
+                        |> .arguments
+                        |> FastSet.LocalExtra.unionFromListMap
+                            (\patternNode -> patternNode |> Pattern.LocalExtra.variables)
+                        |> FastSet.map (\variable -> ( [], variable ))
+                    )
+            ]
+                |> FastDict.LocalExtra.unionFromListWithMap identity (++)

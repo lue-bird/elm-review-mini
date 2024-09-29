@@ -11,27 +11,25 @@ unionFromListWithMap :
         (List element
          -> FastDict.Dict comparableResultKey resultValue
         )
-unionFromListWithMap elementToDict resultValueMerge =
-    \dict ->
-        dict
-            |> List.foldl
-                (\element soFar ->
-                    unionWith resultValueMerge (element |> elementToDict) soFar
-                )
-                FastDict.empty
+unionFromListWithMap elementToDict resultValueMerge dict =
+    dict
+        |> List.foldl
+            (\element soFar ->
+                unionWith resultValueMerge (element |> elementToDict) soFar
+            )
+            FastDict.empty
 
 
 unionFromListMap :
     (element -> FastDict.Dict comparableKey value)
     -> (List element -> FastDict.Dict comparableKey value)
-unionFromListMap elementToDict =
-    \list ->
-        list
-            |> List.foldl
-                (\element soFar ->
-                    FastDict.union (element |> elementToDict) soFar
-                )
-                FastDict.empty
+unionFromListMap elementToDict list =
+    list
+        |> List.foldl
+            (\element soFar ->
+                FastDict.union (element |> elementToDict) soFar
+            )
+            FastDict.empty
 
 
 unionWith :
@@ -76,97 +74,89 @@ unionWith valueABMerge aDict bDict =
 
 
 justsToListMap : (key -> value -> Maybe element) -> (FastDict.Dict key value -> List element)
-justsToListMap keyValueToMaybeElement =
-    \fastDict ->
-        fastDict
-            |> FastDict.foldl
-                (\key value soFar ->
-                    case keyValueToMaybeElement key value of
-                        Nothing ->
-                            soFar
+justsToListMap keyValueToMaybeElement fastDict =
+    fastDict
+        |> FastDict.foldl
+            (\key value soFar ->
+                case keyValueToMaybeElement key value of
+                    Nothing ->
+                        soFar
 
-                        Just element ->
-                            soFar |> (::) element
-                )
-                []
+                    Just element ->
+                        soFar |> (::) element
+            )
+            []
 
 
 justsToSetMap : (key -> value -> Maybe comparableElement) -> (FastDict.Dict key value -> FastSet.Set comparableElement)
-justsToSetMap keyValueToMaybeElement =
-    \fastDict ->
-        fastDict
-            |> FastDict.foldl
-                (\key value soFar ->
-                    case keyValueToMaybeElement key value of
-                        Nothing ->
-                            soFar
+justsToSetMap keyValueToMaybeElement fastDict =
+    fastDict
+        |> FastDict.foldl
+            (\key value soFar ->
+                case keyValueToMaybeElement key value of
+                    Nothing ->
+                        soFar
 
-                        Just element ->
-                            soFar |> FastSet.insert element
-                )
-                FastSet.empty
+                    Just element ->
+                        soFar |> FastSet.insert element
+            )
+            FastSet.empty
 
 
 unionToSetMap : (key -> value -> FastSet.Set comparableElement) -> (FastDict.Dict key value -> FastSet.Set comparableElement)
-unionToSetMap keyValueToMaybeElement =
-    \fastDict ->
-        fastDict
-            |> FastDict.foldl
-                (\key value soFar ->
-                    FastSet.union (keyValueToMaybeElement key value) soFar
-                )
-                FastSet.empty
+unionToSetMap keyValueToMaybeElement fastDict =
+    fastDict
+        |> FastDict.foldl
+            (\key value soFar ->
+                FastSet.union (keyValueToMaybeElement key value) soFar
+            )
+            FastSet.empty
 
 
 toSetMap : (key -> value -> comparableElement) -> (FastDict.Dict key value -> FastSet.Set comparableElement)
-toSetMap keyValueToMaybeElement =
-    \fastDict ->
-        fastDict
-            |> FastDict.foldl
-                (\key value soFar ->
-                    soFar |> FastSet.insert (keyValueToMaybeElement key value)
-                )
-                FastSet.empty
+toSetMap keyValueToMaybeElement fastDict =
+    fastDict
+        |> FastDict.foldl
+            (\key value soFar ->
+                soFar |> FastSet.insert (keyValueToMaybeElement key value)
+            )
+            FastSet.empty
 
 
 keys : FastDict.Dict comparableKey value_ -> FastSet.Set comparableKey
-keys =
-    \fastDict ->
-        fastDict |> toSetMap (\key _ -> key)
+keys fastDict =
+    fastDict |> toSetMap (\key _ -> key)
 
 
 firstJustMap : (key -> value -> Maybe found) -> FastDict.Dict key value -> Maybe found
-firstJustMap keyValueToMaybeFound =
-    \fastDict ->
-        fastDict
-            |> FastDict.stoppableFoldl
-                (\key value _ ->
-                    case keyValueToMaybeFound key value of
-                        Nothing ->
-                            FastDict.Continue Nothing
+firstJustMap keyValueToMaybeFound fastDict =
+    fastDict
+        |> FastDict.stoppableFoldl
+            (\key value _ ->
+                case keyValueToMaybeFound key value of
+                    Nothing ->
+                        FastDict.Continue Nothing
 
-                        Just found ->
-                            FastDict.Stop (Just found)
-                )
-                Nothing
+                    Just found ->
+                        FastDict.Stop (Just found)
+            )
+            Nothing
 
 
 toListMap : (key -> value -> element) -> (FastDict.Dict key value -> List element)
-toListMap keyValueToElement =
-    \dict ->
-        dict
-            |> FastDict.foldr
-                (\key value soFar ->
-                    soFar |> (::) (keyValueToElement key value)
-                )
-                []
+toListMap keyValueToElement dict =
+    dict
+        |> FastDict.foldr
+            (\key value soFar ->
+                soFar |> (::) (keyValueToElement key value)
+            )
+            []
 
 
 excludeKeys :
     FastSet.Set comparableKey
     -> (FastDict.Dict comparableKey value -> FastDict.Dict comparableKey value)
-excludeKeys keysToRemove =
-    \dict ->
-        dict
-            |> FastDict.filter
-                (\key _ -> not (keysToRemove |> FastSet.member key))
+excludeKeys keysToRemove dict =
+    dict
+        |> FastDict.filter
+            (\key _ -> not (keysToRemove |> FastSet.member key))
