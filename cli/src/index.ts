@@ -167,6 +167,8 @@ export function startWatching(elmPorts: ElmPorts) {
                     const readLineInterface = readLine.promises.createInterface({
                         input: process.stdin,
                         output: process.stdout,
+                        // https://github.com/nodejs/node/issues/30510
+                        terminal: false
                     })
                     readLineInterface.question("To apply these edits, enter y. To reject, enter n: ")
                         .then(async (response) => {
