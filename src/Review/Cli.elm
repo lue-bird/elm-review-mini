@@ -966,60 +966,48 @@ errorsByPathToNextFixableErrorOrAll project errorsByPath =
                                                 errors
                                                     |> List.foldl
                                                         (\error errorsResultSoFar ->
-                                                            if error.fixEditsByPath |> FastDict.isEmpty then
-                                                                { fixable = Nothing
-                                                                , otherErrors = error :: errorsResultSoFar.otherErrors
-                                                                }
+                                                            let
+                                                                fixedSources : List { path : String, fixedSource : String, originalSource : String }
+                                                                fixedSources =
+                                                                    error.fixEditsByPath
+                                                                        |> FastDict.foldl
+                                                                            (\fixPath fileEdits soFarFixedSources ->
+                                                                                case sourceAtPath fixPath of
+                                                                                    Nothing ->
+                                                                                        soFarFixedSources
 
-                                                            else
-                                                                let
-                                                                    maybeFixedSources : Maybe (List { path : String, fixedSource : String, originalSource : String })
-                                                                    maybeFixedSources =
-                                                                        error.fixEditsByPath
-                                                                            |> FastDict.foldl
-                                                                                (\fixPath fileEdits maybeFixedSourcesSoFar ->
-                                                                                    case maybeFixedSourcesSoFar of
-                                                                                        Nothing ->
-                                                                                            Nothing
+                                                                                    Just sourceToFix ->
+                                                                                        case sourceToFix |> Review.sourceApplyEdits fileEdits of
+                                                                                            Ok fixedSource ->
+                                                                                                { path = fixPath
+                                                                                                , fixedSource = fixedSource
+                                                                                                , originalSource = sourceToFix
+                                                                                                }
+                                                                                                    :: soFarFixedSources
 
-                                                                                        Just soFarFixedSources ->
-                                                                                            case sourceAtPath fixPath of
-                                                                                                Nothing ->
-                                                                                                    Nothing
+                                                                                            Err _ ->
+                                                                                                soFarFixedSources
+                                                                            )
+                                                                            []
+                                                            in
+                                                            case fixedSources of
+                                                                [] ->
+                                                                    { fixable = Nothing
+                                                                    , otherErrors = error :: errorsResultSoFar.otherErrors
+                                                                    }
 
-                                                                                                Just sourceToFix ->
-                                                                                                    case sourceToFix |> Review.sourceApplyEdits fileEdits of
-                                                                                                        Ok fixedSource ->
-                                                                                                            { path = fixPath
-                                                                                                            , fixedSource = fixedSource
-                                                                                                            , originalSource = sourceToFix
-                                                                                                            }
-                                                                                                                :: soFarFixedSources
-                                                                                                                |> Just
-
-                                                                                                        Err _ ->
-                                                                                                            Nothing
-                                                                                )
-                                                                                (Just [])
-                                                                in
-                                                                case maybeFixedSources of
-                                                                    Nothing ->
-                                                                        { fixable = Nothing
-                                                                        , otherErrors = error :: errorsResultSoFar.otherErrors
+                                                                fixedSource0 :: fixedSource1Up ->
+                                                                    { fixable =
+                                                                        { source = pathSource
+                                                                        , fixedSources = fixedSource0 :: fixedSource1Up
+                                                                        , message = error.message
+                                                                        , details = error.details
+                                                                        , range = error.range
+                                                                        , path = path
                                                                         }
-
-                                                                    Just fixedSources ->
-                                                                        { fixable =
-                                                                            { source = pathSource
-                                                                            , fixedSources = fixedSources
-                                                                            , message = error.message
-                                                                            , details = error.details
-                                                                            , range = error.range
-                                                                            , path = path
-                                                                            }
-                                                                                |> Just
-                                                                        , otherErrors = errorsResultSoFar.otherErrors
-                                                                        }
+                                                                            |> Just
+                                                                    , otherErrors = errorsResultSoFar.otherErrors
+                                                                    }
                                                         )
                                                         { fixable = Nothing
                                                         , otherErrors = []
