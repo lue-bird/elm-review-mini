@@ -1020,18 +1020,23 @@ errorsByPathToNextFixableErrorOrAll project errorsByPath =
                     { fixable = Nothing
                     , otherErrors = FastDict.empty
                     }
+
+        otherErrorsByPath : FastDict.Dict String (List FileReviewError)
+        otherErrorsByPath =
+            nextFixableErrorOrAll.otherErrors
+                |> FastDict.filter (\_ errors -> errors /= [])
     in
-    case ( nextFixableErrorOrAll.fixable, nextFixableErrorOrAll.otherErrors |> FastDictLocalExtra.all (\_ errors -> errors |> List.isEmpty) ) of
-        ( Nothing, True ) ->
-            Nothing
-
-        ( Just fixable, _ ) ->
-            Fixable { fixable = fixable, otherErrors = nextFixableErrorOrAll.otherErrors }
+    case nextFixableErrorOrAll.fixable of
+        Just fixable ->
+            Fixable { fixable = fixable, otherErrors = otherErrorsByPath }
                 |> Just
 
-        ( Nothing, False ) ->
-            AllUnfixable nextFixableErrorOrAll.otherErrors
-                |> Just
+        Nothing ->
+            if otherErrorsByPath |> FastDict.isEmpty then
+                Nothing
+
+            else
+                AllUnfixable otherErrorsByPath |> Just
 
 
 moduleFileToWithParsedSyntax : { source : String, path : String } -> Result () { path : String, source : String, syntax : Elm.Syntax.File.File }
