@@ -11,7 +11,6 @@ import ModuleNameWithUnderscoreForbid
 import ModuleValueOrFunctionIsTypeAnnotated
 import RecordTypeAliasConstructorFunctionIsNotUsed
 import Review
-import Review.Test
 import Test exposing (Test)
 
 
@@ -36,7 +35,7 @@ moduleNameWithUnderscoreForbidTests =
     Test.describe "ModuleNameWithUnderscoreForbid"
         [ Test.test "single module without errors"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -49,11 +48,11 @@ moduleNameWithUnderscoreForbidTests =
                 , review = ModuleNameWithUnderscoreForbid.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "single module with error"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A_.elm"
                       , source = """
@@ -68,12 +67,12 @@ moduleNameWithUnderscoreForbidTests =
                     [ { path = "src/A_.elm"
                       , message = "module name contains _"
                       , details = [ "By convention, elm modules names use Pascal case (like `MyModuleName`). Please rename your module using this format." ]
-                      , range = Review.Test.Under "A_"
+                      , range = Review.ExpectUnder "A_"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -83,7 +82,7 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
     Test.describe "ModuleValueOrFunctionIsTypeAnnotated"
         [ Test.test "allows annotated value and function declaration and un-annotated let value and function declaration"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -109,11 +108,11 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
                 , review = ModuleValueOrFunctionIsTypeAnnotated.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "reports un-annotated value declaration"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -132,12 +131,12 @@ moduleValueOrFunctionIsTypeAnnotatedTests =
                             [ "Type annotations help to quickly understand what's expected in the code, and it will help the compiler give better error messages."
                             , "Try adding a line a : ItsType above the declaration. If you don't know the type, you can start by using the \"infer type\" feature of your IDE or inserting the type like `Never` and letting the compiler fill you in on the details."
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 3, column = 1 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 3, column = 1 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -147,7 +146,7 @@ letValueOrFunctionIsTypeAnnotatedTests =
     Test.describe "LetValueOrFunctionIsTypeAnnotated"
         [ Test.test "allows annotated and un-annotated module-level value and function declaration and annotated let value and function declaration"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -178,11 +177,11 @@ letValueOrFunctionIsTypeAnnotatedTests =
                 , review = LetValueOrFunctionIsTypeAnnotated.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "reports un-annotated let value declaration"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -205,12 +204,12 @@ letValueOrFunctionIsTypeAnnotatedTests =
                             [ "Type annotations help to quickly understand what's expected in the code, and it will help the compiler give better error messages."
                             , "Try adding a line b : ItsType above the declaration. If you don't know the type, you can start by using the \"infer type\" feature of your IDE or inserting the type like `Never` and letting the compiler fill you in on the details."
                             ]
-                      , range = Review.Test.UnderExactly { section = "b", startingAt = { row = 5, column = 9 } }
+                      , range = Review.ExpectUnderExactly { section = "b", startingAt = { row = 5, column = 9 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -220,7 +219,7 @@ moduleExposingIsExplicitTests =
     Test.describe "ModuleExposingIsExplicit"
         [ Test.test "allows module exposing (value, function, type alias, choice type)"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -243,11 +242,11 @@ moduleExposingIsExplicitTests =
                 , review = ModuleExposingIsExplicit.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "reports module exposing (..) with value, function, type alias, choice type"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -275,7 +274,7 @@ moduleExposingIsExplicitTests =
                             [ "Modules can have helpers for implementation details which the users of this module should not have to know about. Therefore, the API should be explicitly defined and as small as possible."
                             , "Try to explicitly pick the members you want to make public and put them where the .. is currently. To start with all the currently exposed members, accept the provided fix and then remove the undesired ones."
                             ]
-                      , range = Review.Test.Under ".."
+                      , range = Review.ExpectUnder ".."
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -298,7 +297,7 @@ moduleExposingIsExplicitTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -308,7 +307,7 @@ importExposingIsExplicitTests =
     Test.describe "ImportExposingIsExplicit"
         [ Test.test "allows import exposing (value)"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -341,11 +340,11 @@ importExposingIsExplicitTests =
                 , review = ImportExposingIsExplicit.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "reports import exposing (..) with .. being from explicit exposing value, function, type alias, choice type"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -383,7 +382,7 @@ importExposingIsExplicitTests =
                             [ "When you import everything from a module without explicitly listing what you actually need, it becomes harder to know where a reference comes from and which \"domain\" it belongs to for example."
                             , "Try using qualified imports like ModuleName.member or if that becomes too inconvenient, explicitly list what exposes you want to import for use without qualification. To start by explicitly listing all of the current members, accept the automatic fix and clean up from there."
                             ]
-                      , range = Review.Test.Under ".."
+                      , range = Review.ExpectUnder ".."
                       , fixedFiles =
                             [ { path = "src/B.elm"
                               , source = """
@@ -399,11 +398,11 @@ importExposingIsExplicitTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "reports import exposing (..) with .. being from explicit exposing value, function, type alias, choice type, not including an unexposed member"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -444,7 +443,7 @@ importExposingIsExplicitTests =
                             [ "When you import everything from a module without explicitly listing what you actually need, it becomes harder to know where a reference comes from and which \"domain\" it belongs to for example."
                             , "Try using qualified imports like ModuleName.member or if that becomes too inconvenient, explicitly list what exposes you want to import for use without qualification. To start by explicitly listing all of the current members, accept the automatic fix and clean up from there."
                             ]
-                      , range = Review.Test.Under ".."
+                      , range = Review.ExpectUnder ".."
                       , fixedFiles =
                             [ { path = "src/B.elm"
                               , source = """
@@ -460,11 +459,11 @@ importExposingIsExplicitTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "reports import exposing (..) with .. being from exposing everything being value, function, type alias, choice type"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -502,7 +501,7 @@ importExposingIsExplicitTests =
                             [ "When you import everything from a module without explicitly listing what you actually need, it becomes harder to know where a reference comes from and which \"domain\" it belongs to for example."
                             , "Try using qualified imports like ModuleName.member or if that becomes too inconvenient, explicitly list what exposes you want to import for use without qualification. To start by explicitly listing all of the current members, accept the automatic fix and clean up from there."
                             ]
-                      , range = Review.Test.Under ".."
+                      , range = Review.ExpectUnder ".."
                       , fixedFiles =
                             [ { path = "src/B.elm"
                               , source = """
@@ -518,7 +517,7 @@ importExposingIsExplicitTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -528,7 +527,7 @@ moduleAndExposesAreUsedTests =
     Test.describe "ModuleAndExposesAreUsed"
         [ Test.test "unused exposed value, usage fully qualified"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -561,7 +560,7 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -576,11 +575,11 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused exposed value, usage fully qualified, cleaning up unused exposes"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -622,7 +621,7 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -645,11 +644,11 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused exposed value as the only expose"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -682,16 +681,16 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused exposed value as the only expose, cleaning up unused imports of the now unused module"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -726,7 +725,7 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it manually."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
                       , fixedFiles =
                             [ { path = "src/Main.elm"
                               , source = """
@@ -741,11 +740,11 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused exposed value, usage qualified by alias"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -778,7 +777,7 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -793,11 +792,11 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused exposed choice type with variants, usage qualified by alias"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -830,7 +829,7 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
-                      , range = Review.Test.Under "A(..)"
+                      , range = Review.ExpectUnder "A(..)"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -845,11 +844,11 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused exposed value, usage by import exposing"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -882,7 +881,7 @@ If intended as a very generic utility, try moving it into a package
 (possibly local-only, using `Review.ignoreErrorsForPathsWhere (String.startsWith "your-local-package-source-directory")`).
 If you think you don't need it anymore or think it was added it prematurely, you can remove it from the exposing part of the module header by applying the provided fix which might reveal its declaration as unused."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
+                      , range = Review.ExpectUnderExactly { section = "a", startingAt = { row = 1, column = 20 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -897,7 +896,7 @@ If you think you don't need it anymore or think it was added it prematurely, you
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -907,7 +906,7 @@ bindingIsUsedTests =
     Test.describe "BindingIsUsed"
         [ Test.test "used pattern variables, let declarations and module scope declarations are not reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -947,11 +946,11 @@ bindingIsUsedTests =
                 , review = BindingIsUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "used let declared values and functions are not reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -973,11 +972,11 @@ bindingIsUsedTests =
                 , review = BindingIsUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused let declared value among multiple is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1002,7 +1001,7 @@ bindingIsUsedTests =
                 , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , message = "let declared unused isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
                       , fixedFiles =
@@ -1028,11 +1027,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused let declared value among as the only one between let..in is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1054,7 +1053,7 @@ bindingIsUsedTests =
                 , review = BindingIsUsed.review
                 , expectedErrors =
                     [ { path = "src/A.elm"
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , message = "let declared unused isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
                       , fixedFiles =
@@ -1074,11 +1073,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused function declaration argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1094,7 +1093,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1108,11 +1107,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused function declaration argument pattern variable from single-field record is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1128,7 +1127,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1142,11 +1141,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused function declaration argument pattern variable as first from multi-field record is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1162,7 +1161,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1176,11 +1175,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused function declaration argument pattern variable as last from multi-field record is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1196,7 +1195,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1210,11 +1209,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused function declaration argument pattern variable from as is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1230,7 +1229,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1244,11 +1243,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused lambda argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1264,7 +1263,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1278,11 +1277,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused case argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1300,7 +1299,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1316,11 +1315,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused let destructured argument pattern variable is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1340,7 +1339,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "pattern variable unused isn't used"
                       , details = [ "Maybe you wanted to use this variable for something? If you don't need it, remove the variable here by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1358,11 +1357,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused declared value is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1381,7 +1380,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "declared A.unused isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1390,18 +1389,17 @@ bindingIsUsedTests =
                                     a =
                                         ""
                                     
-
                                     """
                               }
                             ]
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused declared function is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1420,7 +1418,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "declared A.unused isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
-                      , range = Review.Test.Under "unused"
+                      , range = Review.ExpectUnder "unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1429,18 +1427,17 @@ bindingIsUsedTests =
                                     a =
                                         ""
                                     
-                                    
                                     """
                               }
                             ]
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused declared type alias is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1459,7 +1456,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "declared A.Unused isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
-                      , range = Review.Test.Under "Unused"
+                      , range = Review.ExpectUnder "Unused"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1475,11 +1472,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused choice type with one variant is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1498,7 +1495,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "declared A.UnusedVariant isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
-                      , range = Review.Test.Under "UnusedVariant"
+                      , range = Review.ExpectUnder "UnusedVariant"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1514,11 +1511,11 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "unused variant in declared choice type with multiple variants is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1538,7 +1535,7 @@ bindingIsUsedTests =
                     [ { path = "src/A.elm"
                       , message = "declared A.Unused isn't used"
                       , details = [ "Maybe you wanted to use it for something? If you don't need it, remove its declaration by applying the automatic fix." ]
-                      , range = Review.Test.UnderExactly { section = "Unused", startingAt = { row = 8, column = 7 } }
+                      , range = Review.ExpectUnderExactly { section = "Unused", startingAt = { row = 8, column = 7 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -1555,7 +1552,7 @@ bindingIsUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -1565,7 +1562,7 @@ debugIsNotUsedTests =
     Test.describe "DebugIsNotUsed"
         [ Test.test "using variables named log, toString, todo are allowed"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1584,11 +1581,11 @@ debugIsNotUsedTests =
                 , review = DebugIsNotUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using log with import Debug exposing (log) and module-declared log is allowed"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1607,11 +1604,11 @@ debugIsNotUsedTests =
                 , review = DebugIsNotUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using log with import Debug exposing (log) with alias and module-declared log is allowed"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1630,11 +1627,11 @@ debugIsNotUsedTests =
                 , review = DebugIsNotUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using \"Debug.log\" though unambiguous import alias to a module different than Debug is allowed"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1659,11 +1656,11 @@ debugIsNotUsedTests =
                 , review = DebugIsNotUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using Debug.todo from implicit import is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1681,16 +1678,16 @@ debugIsNotUsedTests =
                       , details =
                             [ "Debug.todo marks missing functionality which needs to be added gradually."
                             ]
-                      , range = Review.Test.Under "Debug.todo"
+                      , range = Review.ExpectUnder "Debug.todo"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using Debug.log from implicit import is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1711,16 +1708,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.Under "Debug.log"
+                      , range = Review.ExpectUnder "Debug.log"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using Debug.toString from implicit import is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1741,16 +1738,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.Under "Debug.toString"
+                      , range = Review.ExpectUnder "Debug.toString"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using Debug.toString qualified by import alias is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1773,16 +1770,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.Under "Dbg.toString"
+                      , range = Review.ExpectUnder "Dbg.toString"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using unqualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1805,16 +1802,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using qualified Debug.toString from explicit import exposing and import alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1837,16 +1834,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.Under "Dbg.toString"
+                      , range = Review.ExpectUnder "Dbg.toString"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using unqualified Debug.toString from explicit import exposing with alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1869,16 +1866,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using qualified Debug.toString from explicit import exposing without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1901,16 +1898,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.Under "Debug.toString"
+                      , range = Review.ExpectUnder "Debug.toString"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using qualified Debug.toString from explicit import exposing (..) and import alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1933,16 +1930,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.Under "Dbg.toString"
+                      , range = Review.ExpectUnder "Dbg.toString"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using unqualified Debug.toString from import exposing (..) with alias and without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1965,16 +1962,16 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "using unqualified Debug.toString from import exposing (..) without module value/function declaration with the same name is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -1997,12 +1994,12 @@ and can for example be used to inspect private (opaque) types.
 It's nothing a published product should make use of.
 Using any `Debug` member also prevents compiling in optimized mode and publishing as a package."""
                             ]
-                      , range = Review.Test.UnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "toString", startingAt = { row = 6, column = 5 } }
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -2012,7 +2009,7 @@ commentDoesNotUseCertainWordsTests =
     Test.describe "CommentDoesNotUseCertainWords"
         [ Test.test "comments without marks are allowed"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2054,11 +2051,11 @@ commentDoesNotUseCertainWordsTests =
                 , review = CommentDoesNotUseCertainMarks.review [ "TODO" ]
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "single-line comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2075,16 +2072,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "multi-line comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2104,16 +2101,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "module documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2135,16 +2132,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "value documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2167,16 +2164,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "function documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2199,16 +2196,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "type alias documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2231,16 +2228,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "choice type documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2263,16 +2260,16 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "port documentation comment with mark is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2294,12 +2291,12 @@ commentDoesNotUseCertainWordsTests =
                     [ { path = "src/A.elm"
                       , message = "comment uses TODO mark"
                       , details = [ "This mark has been placed in a comment as a reminder. Read the comment and analyze the surrounding context to decide what needs to be done. Once the issue is resolved, remove the notice." ]
-                      , range = Review.Test.Under "TODO"
+                      , range = Review.ExpectUnder "TODO"
                       , fixedFiles = []
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
 
@@ -2309,7 +2306,7 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
     Test.describe "RecordTypeAliasConstructorFunctionIsNotUsed"
         [ Test.test "normal function calls and variant calls are not reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2325,11 +2322,11 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                 , review = RecordTypeAliasConstructorFunctionIsNotUsed.review
                 , expectedErrors = []
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "local fully applied record type alias constructor function use is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2351,7 +2348,7 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                             [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
                             , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
                             ]
-                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -2372,11 +2369,11 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "imported fully applied record type alias constructor function use is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2405,7 +2402,7 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                             [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
                             , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
                             ]
-                      , range = Review.Test.Under "User.User"
+                      , range = Review.ExpectUnder "User.User"
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -2425,11 +2422,11 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "local non-applied record type alias constructor function use is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2451,7 +2448,7 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                             [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
                             , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
                             ]
-                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -2472,11 +2469,11 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "local partially-applied record type alias constructor function use is reported"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2498,7 +2495,7 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                             [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
                             , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
                             ]
-                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -2520,11 +2517,11 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         , Test.test "local non-applied record type alias constructor function use is reported where field names and some _-suffixed already exist in scope"
             (\() ->
-                { projectConfiguration = Review.Test.applicationConfigurationMinimal
+                { projectConfiguration = Review.applicationConfigurationMinimal
                 , files =
                     [ { path = "src/A.elm"
                       , source = """
@@ -2546,7 +2543,7 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                             [ "Constructing this record by specifying the fields and values instead will make your code easier to understand and less prone to positional errors."
                             , "Read about more of the reasons in https://dark.elm.dmy.fr/packages/lue-bird/elm-no-record-type-alias-constructor-function/latest#why"
                             ]
-                      , range = Review.Test.UnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
+                      , range = Review.ExpectUnderExactly { section = "User", startingAt = { row = 7, column = 5 } }
                       , fixedFiles =
                             [ { path = "src/A.elm"
                               , source = """
@@ -2567,6 +2564,6 @@ recordTypeAliasConstructorFunctionIsNotUsedTests =
                       }
                     ]
                 }
-                    |> Review.Test.run
+                    |> Review.test
             )
         ]
