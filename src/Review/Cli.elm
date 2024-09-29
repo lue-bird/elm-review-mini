@@ -280,17 +280,17 @@ continuousNoChangeLinesCollapse noChangeLines =
             ""
 
         [ onlyNoChangeLine ] ->
-            "|   " ++ onlyNoChangeLine
+            "\n|   " ++ onlyNoChangeLine
 
         [ noChangeLine0, noChangeLine1 ] ->
-            "|   "
+            "\n|   "
                 ++ noChangeLine0
                 ++ "\n"
                 ++ "|   "
                 ++ noChangeLine1
 
         noChangeLine0 :: _ :: noChangeLine2 :: noChangeLine3Up ->
-            "|   "
+            "\n|   "
                 ++ noChangeLine0
                 ++ "\n⋮\n"
                 ++ "|   "
