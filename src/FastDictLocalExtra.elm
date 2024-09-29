@@ -1,4 +1,4 @@
-module FastDictLocalExtra exposing (all, concatToListMap, firstJustMap, fromListMap, unionWith)
+module FastDictLocalExtra exposing (concatToListMap, firstJustMap, fromListMap, unionWith)
 
 import FastDict
 
@@ -73,12 +73,7 @@ unionWith valueABMerge aDict bDict =
             aDict
 
 
-all : (key -> value -> Bool) -> FastDict.Dict key value -> Bool
-all isOkay =
-    FastDict.restructure True
-        (\state ->
-            isOkay state.key state.value && state.left () && state.right ()
-        )
+
 
 
 firstJustMap : (key -> value -> Maybe found) -> FastDict.Dict key value -> Maybe found
