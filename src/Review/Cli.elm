@@ -896,15 +896,14 @@ reviewRunList reviews project =
             |> List.foldl
                 (\runResultForReview soFar ->
                     FastDictLocalExtra.unionWith (\new already -> new ++ already)
-                        (runResultForReview.errorsByPath
-                            |> FastDict.map
-                                (\_ errors ->
-                                    errors |> List.sortWith (\a b -> Elm.Syntax.Range.compare a.range b.range)
-                                )
-                        )
+                        runResultForReview.errorsByPath
                         soFar
                 )
                 FastDict.empty
+            |> FastDict.map
+                (\_ errors ->
+                    errors |> List.sortWith (\a b -> Elm.Syntax.Range.compare a.range b.range)
+                )
     , nextRuns = runResultsForReviews |> List.map .nextRun
     }
 
