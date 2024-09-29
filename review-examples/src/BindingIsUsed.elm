@@ -260,7 +260,10 @@ moduleToKnowledge =
                                 else
                                     { unqualifiedName = unqualifiedName
                                     , nameRange = nameRange
-                                    , removeRange = declarationRange
+                                    , removeRange =
+                                        { start = declarationRange.start
+                                        , end = { row = declarationRange.end.row + 1, column = 1 }
+                                        }
                                     }
                                         |> List.singleton
 
