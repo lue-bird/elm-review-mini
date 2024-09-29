@@ -232,9 +232,9 @@ sourceHighlightDifferentLines aString bString =
                     (\change soFar ->
                         case change of
                             Diff.NoChange line ->
-                                { soFar
-                                    | continuousNoChangeLinesReversed =
-                                        line :: soFar.continuousNoChangeLinesReversed
+                                { continuousNoChangeLinesReversed =
+                                    line :: soFar.continuousNoChangeLinesReversed
+                                , highlighted = soFar.highlighted
                                 }
 
                             Diff.Added line ->
