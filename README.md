@@ -1,7 +1,7 @@
 Scan your [elm](https://elm-lang.org/) project to enforce conventions using reviews written in elm and [published as packages](https://dark.elm.dmy.fr/?q=elm-review-mini-).
 It's heavily inspired by the phenomenal [`jfmengels/elm-review`](https://dark.elm.dmy.fr/packages/jfmengels/elm-review/latest/) but comes with a much simpler API and much lighter internals (see also [the feeling section](#feelings)).
 
-Use it in your project by adding this starter config with the CLI set up
+To use it in your project, add this starter config with the CLI set up
 ```bash
 curl -L https://github.com/lue-bird/elm-review-mini-cli-starter/tarball/master review-mini | tar xz
 ```
@@ -55,39 +55,36 @@ type alias Knowledge =
 moduleDataToKnowledge :
     { moduleData_ | path : String, syntax : Elm.Syntax.File.File }
     -> Knowledge
-moduleDataToKnowledge =
-    \moduleData ->
-        { typosInStrings =
-            moduleData.syntax.declarations
-                |> List.concatMap declarationToTyposInStrings
-                |> List.map
-                    (\typoRange ->
-                        { range = typoRange
-                        , modulePath = moduleData.path
-                        }
-                    )
-        }
+moduleDataToKnowledge moduleData =
+    { typosInStrings =
+        moduleData.syntax.declarations
+            |> List.concatMap declarationToTyposInStrings
+            |> List.map
+                (\typoRange ->
+                    { range = typoRange
+                    , modulePath = moduleData.path
+                    }
+                )
+    }
 
 declarationToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
     -> List Elm.Syntax.Range.Range
-declarationToTyposInStrings =
-    \(Elm.Syntax.Node.Node _ declaration) ->
-        case declaration of
-            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                functionDeclaration.declaration
-                    |> Elm.Syntax.Node.value
-                    |> .expression
-                    |> expressionToTyposInStrings
+declarationToTyposInStrings (Elm.Syntax.Node.Node _ declaration) =
+    case declaration of
+        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+            functionDeclaration.declaration
+                |> Elm.Syntax.Node.value
+                |> .expression
+                |> expressionToTyposInStrings
 
-            _ ->
-                []
+        _ ->
+            []
 
 expressionToTyposInStrings :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
     -> List Elm.Syntax.Range.Range
-expressionToTyposInStrings =
-    \expressionNode ->
+expressionToTyposInStrings expressionNode =
         case expressionNode of
             Elm.Syntax.Node.Node range (Elm.Syntax.Expression.Literal string) ->
                 string
@@ -123,27 +120,25 @@ report knowledge =
 rangeRelativeTo :
     Elm.Syntax.Range.Location
     -> (Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range)
-rangeRelativeTo baseStart =
-    \offsetRange ->
-        { start = offsetRange.start |> locationRelativeTo baseStart
-        , end = offsetRange.end |> locationRelativeTo baseStart
-        }
+rangeRelativeTo baseStart offsetRange =
+    { start = offsetRange.start |> locationRelativeTo baseStart
+    , end = offsetRange.end |> locationRelativeTo baseStart
+    }
 
 locationRelativeTo :
     Elm.Syntax.Range.Location
     -> (Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location)
-locationRelativeTo baseStart =
-    \offsetLocation ->
-        case offsetLocation.row of
-            1 ->
-                { row = baseStart.row
-                , column = baseStart.column + offsetLocation.column
-                }
+locationRelativeTo baseStart offsetLocation =
+    case offsetLocation.row of
+        1 ->
+            { row = baseStart.row
+            , column = baseStart.column + offsetLocation.column
+            }
 
-            offsetRowAtLeast2 ->
-                { row = baseStart.row + (offsetRowAtLeast2 - 1)
-                , column = offsetLocation.column
-                }
+        offsetRowAtLeast2 ->
+            { row = baseStart.row + (offsetRowAtLeast2 - 1)
+            , column = offsetLocation.column
+            }
 ```
 
 ## when to create or enable a review
