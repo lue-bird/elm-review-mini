@@ -213,94 +213,94 @@ moduleDataToKnowledge =
             FastDict.singleton moduleName
                 (moduleData.syntax |> Review.moduleExposes)
         , modulePossibleTypeAliasConstructorUses =
-            { modulePath = moduleData.path
-            , moduleName = moduleName
-            , moduleDeclaredNames =
-                moduleData.syntax.declarations
-                    |> FastSet.LocalExtra.unionFromListMap
-                        (\(Elm.Syntax.Node.Node _ declaration) ->
-                            declaration |> Declaration.LocalExtra.declaredNames
-                        )
-            , importsExposingAll =
-                moduleData.syntax.imports
-                    |> List.filterMap
-                        (\(Elm.Syntax.Node.Node _ import_) ->
-                            case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
-                                Nothing ->
-                                    Nothing
-
-                                Just (Elm.Syntax.Exposing.Explicit _) ->
-                                    Nothing
-
-                                Just (Elm.Syntax.Exposing.All _) ->
-                                    { moduleName = import_.moduleName |> Elm.Syntax.Node.value
-                                    , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
-                                    }
-                                        |> Just
-                        )
-            , importsExposingExplicit =
-                moduleData.syntax.imports
-                    |> List.filterMap
-                        (\(Elm.Syntax.Node.Node _ import_) ->
-                            (case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
-                                Just (Elm.Syntax.Exposing.All _) ->
-                                    Nothing
-
-                                Nothing ->
-                                    { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
-                                        |> Just
-
-                                Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
-                                    topLevelExposeList |> Review.topLevelExposeListToExposes |> Just
+            [ { modulePath = moduleData.path
+              , moduleName = moduleName
+              , moduleDeclaredNames =
+                    moduleData.syntax.declarations
+                        |> FastSet.LocalExtra.unionFromListMap
+                            (\(Elm.Syntax.Node.Node _ declaration) ->
+                                declaration |> Declaration.LocalExtra.declaredNames
                             )
-                                |> Maybe.map
-                                    (\exposes ->
+              , importsExposingAll =
+                    moduleData.syntax.imports
+                        |> List.filterMap
+                            (\(Elm.Syntax.Node.Node _ import_) ->
+                                case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just (Elm.Syntax.Exposing.Explicit _) ->
+                                        Nothing
+
+                                    Just (Elm.Syntax.Exposing.All _) ->
                                         { moduleName = import_.moduleName |> Elm.Syntax.Node.value
                                         , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
-                                        , simpleNames = exposes.simpleNames
-                                        , typesExposingVariants = exposes.typesExposingVariants
                                         }
-                                    )
-                        )
-            , possibleTypeAliasConstructorUses =
-                moduleData.syntax.declarations
-                    |> List.concatMap
-                        (\(Elm.Syntax.Node.Node _ declaration) ->
-                            case declaration of
-                                Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
-                                    valueOrFunctionDeclaration.declaration
-                                        |> Elm.Syntax.Node.value
-                                        |> .expression
-                                        |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
-                                            (valueOrFunctionDeclaration.declaration
-                                                |> Elm.Syntax.Node.value
-                                                |> .arguments
-                                                |> List.concatMap Review.patternBindings
-                                                |> FastSet.fromList
-                                            )
-                                        |> List.map
-                                            (\possibleTypeAliasConstructorUse ->
-                                                { qualification = possibleTypeAliasConstructorUse.qualification
-                                                , unqualifiedName = possibleTypeAliasConstructorUse.unqualifiedName
-                                                , referenceRange = possibleTypeAliasConstructorUse.referenceRange
-                                                , bindingsInScope = possibleTypeAliasConstructorUse.bindingsInScope
-                                                , directCallRange = possibleTypeAliasConstructorUse.directCallRange
-                                                , directCallArguments =
-                                                    possibleTypeAliasConstructorUse.directCallArguments
-                                                        |> List.map
-                                                            (\directCallArgument ->
-                                                                { startColumn = directCallArgument.range.start.column
-                                                                , source = moduleData.source |> Review.sourceExtractInRange directCallArgument.range
-                                                                }
-                                                            )
-                                                }
-                                            )
+                                            |> Just
+                            )
+              , importsExposingExplicit =
+                    moduleData.syntax.imports
+                        |> List.filterMap
+                            (\(Elm.Syntax.Node.Node _ import_) ->
+                                (case import_.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                                    Just (Elm.Syntax.Exposing.All _) ->
+                                        Nothing
 
-                                _ ->
-                                    []
-                        )
-            }
-                |> List.singleton
+                                    Nothing ->
+                                        { simpleNames = FastSet.empty, typesExposingVariants = FastSet.empty }
+                                            |> Just
+
+                                    Just (Elm.Syntax.Exposing.Explicit topLevelExposeList) ->
+                                        topLevelExposeList |> Review.topLevelExposeListToExposes |> Just
+                                )
+                                    |> Maybe.map
+                                        (\exposes ->
+                                            { moduleName = import_.moduleName |> Elm.Syntax.Node.value
+                                            , alias = import_.moduleAlias |> Maybe.map (\(Elm.Syntax.Node.Node _ aliasParts) -> aliasParts |> String.join ".")
+                                            , simpleNames = exposes.simpleNames
+                                            , typesExposingVariants = exposes.typesExposingVariants
+                                            }
+                                        )
+                            )
+              , possibleTypeAliasConstructorUses =
+                    moduleData.syntax.declarations
+                        |> List.concatMap
+                            (\(Elm.Syntax.Node.Node _ declaration) ->
+                                case declaration of
+                                    Elm.Syntax.Declaration.FunctionDeclaration valueOrFunctionDeclaration ->
+                                        valueOrFunctionDeclaration.declaration
+                                            |> Elm.Syntax.Node.value
+                                            |> .expression
+                                            |> expressionPossibleTypeAliasConstructorUsesWithBindingsInScope
+                                                (valueOrFunctionDeclaration.declaration
+                                                    |> Elm.Syntax.Node.value
+                                                    |> .arguments
+                                                    |> List.concatMap Review.patternBindings
+                                                    |> FastSet.fromList
+                                                )
+                                            |> List.map
+                                                (\possibleTypeAliasConstructorUse ->
+                                                    { qualification = possibleTypeAliasConstructorUse.qualification
+                                                    , unqualifiedName = possibleTypeAliasConstructorUse.unqualifiedName
+                                                    , referenceRange = possibleTypeAliasConstructorUse.referenceRange
+                                                    , bindingsInScope = possibleTypeAliasConstructorUse.bindingsInScope
+                                                    , directCallRange = possibleTypeAliasConstructorUse.directCallRange
+                                                    , directCallArguments =
+                                                        possibleTypeAliasConstructorUse.directCallArguments
+                                                            |> List.map
+                                                                (\directCallArgument ->
+                                                                    { startColumn = directCallArgument.range.start.column
+                                                                    , source = moduleData.source |> Review.sourceExtractInRange directCallArgument.range
+                                                                    }
+                                                                )
+                                                    }
+                                                )
+
+                                    _ ->
+                                        []
+                            )
+              }
+            ]
         }
 
 
@@ -321,14 +321,14 @@ expressionPossibleTypeAliasConstructorUsesWithBindingsInScope outerBindingsInSco
         case expressionNode of
             Elm.Syntax.Node.Node referenceRange (Elm.Syntax.Expression.FunctionOrValue qualification unqualifiedName) ->
                 if unqualifiedName |> isPossibleTypeAliasConstructorName then
-                    { qualification = qualification
-                    , unqualifiedName = unqualifiedName
-                    , referenceRange = referenceRange
-                    , bindingsInScope = outerBindingsInScope
-                    , directCallRange = referenceRange
-                    , directCallArguments = []
-                    }
-                        |> List.singleton
+                    [ { qualification = qualification
+                      , unqualifiedName = unqualifiedName
+                      , referenceRange = referenceRange
+                      , bindingsInScope = outerBindingsInScope
+                      , directCallRange = referenceRange
+                      , directCallArguments = []
+                      }
+                    ]
 
                 else
                     []
@@ -452,69 +452,69 @@ report knowledge =
                                         ]
                                     , range = possibleTypeAliasConstructorUse.referenceRange
                                     , fix =
-                                        { path = possibleTypeAliasConstructorUsesInModule.modulePath
-                                        , edits =
-                                            [ let
-                                                curriedFieldValueNames : List String
-                                                curriedFieldValueNames =
-                                                    usedRecordTypeAlias.recordFields
-                                                        |> List.drop (possibleTypeAliasConstructorUse.directCallArguments |> List.length)
-                                                        |> List.map
-                                                            (\argumentName ->
-                                                                argumentName
-                                                                    |> disambiguateFromSet
-                                                                        (FastSet.union reservedInScope possibleTypeAliasConstructorUsesInModule.moduleDeclaredNames)
-                                                            )
-
-                                                baseIndentation : String
-                                                baseIndentation =
-                                                    String.repeat (possibleTypeAliasConstructorUse.directCallRange.start.column - 1) " "
-
-                                                record : String
-                                                record =
-                                                    [ "{ "
-                                                    , List.map2
-                                                        (\field value -> field ++ " =" ++ value)
+                                        [ { path = possibleTypeAliasConstructorUsesInModule.modulePath
+                                          , edits =
+                                                [ let
+                                                    curriedFieldValueNames : List String
+                                                    curriedFieldValueNames =
                                                         usedRecordTypeAlias.recordFields
-                                                        ((possibleTypeAliasConstructorUse.directCallArguments
+                                                            |> List.drop (possibleTypeAliasConstructorUse.directCallArguments |> List.length)
                                                             |> List.map
-                                                                (\argument ->
-                                                                    "\n"
-                                                                        ++ String.repeat (argument.startColumn - 1) " "
-                                                                        ++ argument.source
+                                                                (\argumentName ->
+                                                                    argumentName
+                                                                        |> disambiguateFromSet
+                                                                            (FastSet.union reservedInScope possibleTypeAliasConstructorUsesInModule.moduleDeclaredNames)
                                                                 )
-                                                         )
-                                                            ++ (curriedFieldValueNames
-                                                                    |> List.map (\curriedFieldValueName -> " " ++ curriedFieldValueName)
-                                                               )
-                                                        )
-                                                        |> String.join ("\n" ++ baseIndentation ++ ", ")
-                                                    , "\n"
-                                                    , baseIndentation
-                                                    , "}"
-                                                    ]
-                                                        |> String.concat
-                                              in
-                                              Review.replaceRange possibleTypeAliasConstructorUse.directCallRange
-                                                (case curriedFieldValueNames of
-                                                    [] ->
-                                                        record
 
-                                                    _ ->
-                                                        [ "(\\"
-                                                        , curriedFieldValueNames |> String.join " "
-                                                        , " ->\n"
-                                                        , baseIndentation
-                                                        , record
+                                                    baseIndentation : String
+                                                    baseIndentation =
+                                                        String.repeat (possibleTypeAliasConstructorUse.directCallRange.start.column - 1) " "
+
+                                                    record : String
+                                                    record =
+                                                        [ "{ "
+                                                        , List.map2
+                                                            (\field value -> field ++ " =" ++ value)
+                                                            usedRecordTypeAlias.recordFields
+                                                            ((possibleTypeAliasConstructorUse.directCallArguments
+                                                                |> List.map
+                                                                    (\argument ->
+                                                                        "\n"
+                                                                            ++ String.repeat (argument.startColumn - 1) " "
+                                                                            ++ argument.source
+                                                                    )
+                                                             )
+                                                                ++ (curriedFieldValueNames
+                                                                        |> List.map (\curriedFieldValueName -> " " ++ curriedFieldValueName)
+                                                                   )
+                                                            )
+                                                            |> String.join ("\n" ++ baseIndentation ++ ", ")
                                                         , "\n"
                                                         , baseIndentation
-                                                        , ")"
+                                                        , "}"
                                                         ]
                                                             |> String.concat
-                                                )
-                                            ]
-                                        }
-                                            |> List.singleton
+                                                  in
+                                                  Review.replaceRange possibleTypeAliasConstructorUse.directCallRange
+                                                    (case curriedFieldValueNames of
+                                                        [] ->
+                                                            record
+
+                                                        _ ->
+                                                            [ "(\\"
+                                                            , curriedFieldValueNames |> String.join " "
+                                                            , " ->\n"
+                                                            , baseIndentation
+                                                            , record
+                                                            , "\n"
+                                                            , baseIndentation
+                                                            , ")"
+                                                            ]
+                                                                |> String.concat
+                                                    )
+                                                ]
+                                          }
+                                        ]
                                     }
                                         |> Just
                         )

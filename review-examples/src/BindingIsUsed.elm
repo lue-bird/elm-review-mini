@@ -258,25 +258,25 @@ moduleToKnowledge =
                                     []
 
                                 else
-                                    { unqualifiedName = unqualifiedName
-                                    , nameRange = nameRange
-                                    , removeRange =
-                                        { start = declarationRange.start
-                                        , end = { row = declarationRange.end.row + 1, column = 1 }
-                                        }
-                                    }
-                                        |> List.singleton
+                                    [ { unqualifiedName = unqualifiedName
+                                      , nameRange = nameRange
+                                      , removeRange =
+                                            { start = declarationRange.start
+                                            , end = { row = declarationRange.end.row + 1, column = 1 }
+                                            }
+                                      }
+                                    ]
 
                             Elm.Syntax.Declaration.AliasDeclaration typeAliasDeclaration ->
                                 if moduleExposes.simpleNames |> FastSet.member (typeAliasDeclaration.name |> Elm.Syntax.Node.value) then
                                     []
 
                                 else
-                                    { unqualifiedName = typeAliasDeclaration.name |> Elm.Syntax.Node.value
-                                    , nameRange = typeAliasDeclaration.name |> Elm.Syntax.Node.range
-                                    , removeRange = declarationRange
-                                    }
-                                        |> List.singleton
+                                    [ { unqualifiedName = typeAliasDeclaration.name |> Elm.Syntax.Node.value
+                                      , nameRange = typeAliasDeclaration.name |> Elm.Syntax.Node.range
+                                      , removeRange = declarationRange
+                                      }
+                                    ]
 
                             Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
                                 if moduleExposes.typesWithVariantNames |> FastDict.member (choiceTypeDeclaration.name |> Elm.Syntax.Node.value) then
@@ -292,11 +292,11 @@ moduleToKnowledge =
                                                 []
 
                                             else
-                                                { unqualifiedName = onlyVariant.name |> Elm.Syntax.Node.value
-                                                , nameRange = onlyVariant.name |> Elm.Syntax.Node.range
-                                                , removeRange = declarationRange
-                                                }
-                                                    |> List.singleton
+                                                [ { unqualifiedName = onlyVariant.name |> Elm.Syntax.Node.value
+                                                  , nameRange = onlyVariant.name |> Elm.Syntax.Node.range
+                                                  , removeRange = declarationRange
+                                                  }
+                                                ]
 
                                         (Elm.Syntax.Node.Node variant0Range variant0) :: variant1Node :: variant2NodeUp ->
                                             (variant1Node :: variant2NodeUp)
