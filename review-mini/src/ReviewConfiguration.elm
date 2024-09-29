@@ -1,15 +1,15 @@
 module ReviewConfiguration exposing (configuration)
 
-import Review
-import ModuleAndExposesAreUsed
-import ImportExposingIsExplicit
-import LetValueOrFunctionIsTypeAnnotated
-import ModuleExposingIsExplicit
-import ModuleValueOrFunctionIsTypeAnnotated
-import DebugIsNotUsed
 import BindingIsUsed
 import CommentDoesNotUseCertainMarks
+import DebugIsNotUsed
+import ImportExposingIsExplicit
+import LetValueOrFunctionIsTypeAnnotated
+import ModuleAndExposesAreUsed
+import ModuleExposingIsExplicit
+import ModuleValueOrFunctionIsTypeAnnotated
 import RecordTypeAliasConstructorFunctionIsNotUsed
+import Review
 
 
 configuration : { extraPaths : List String, reviews : List Review.Review }
