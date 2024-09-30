@@ -23,7 +23,7 @@ configuration =
         ]
     }
 ```
-see also ["when to enable a review"](#when-to-create-or-enable-a-review).
+see also ["when to add a review"](#when-to-add-a-review).
 
 An example of [creating a custom review](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#create) to fix a typo in a string that was made too often:
 ```elm
@@ -141,44 +141,33 @@ locationRelativeTo baseStart offsetLocation =
             }
 ```
 
-## when to create or enable a review
+## when to add a review
 
-The bar to write or enable a review should be pretty high.
-A new review can often turn out to be a nuisance to someone, sometimes in ways you didn't predict, so making sure the review solves a real problem, and that your team is on board with it, is important.
-If a developer disagrees with a review, they may try to circumvent it, resulting in code that is even more error prone than the pattern that was originally forbidden.
-So the value provided by the review should be much greater than the trouble it causes, and if you find that a review doesn't live up to this, consider disabling it.
+A new review can turn out to be an annoyance, sometimes in ways you didn't predict, so make sure the review solves a real problem and that everyone is on board, especially if it enforces a code style.
+If a developer disagrees with a review, they may try to circumvent it, which is not the point and not a great experience for anyone.
 
-Reviews are most useful when some concretely defined bad pattern must _never_ appear in the code and less useful when a pattern is _sometimes_ allowed to appear on a case-by-case basis (false positives).
+Reviews are useful when some concretely defined bad pattern must _never_ appear in the code and less useful when a pattern is _sometimes_ allowed to appear on a case-by-case basis (false positives).
 With `elm-review-mini`, there is _no way to locally ignore specific review errors_, see ["How disable comments make static analysis tools worse" by Jeroen Engels](https://jfmengels.net/disable-comments/)
 and similarly, there is no way to suppress legacy issues as lower-priority because in my opinion even these should always be visible as a (longer term) project checklist.
 
-You can however [configure file paths (e.g. from vendored packages or generated code) for which no errors will be reported](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
+You can however [configure file paths for which no errors will be reported (e.g. for vendored packages or generated code)](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini/1.0.0/Review#ignoreErrorsForPathsWhere).
 If you really need to make exceptions, which you most likely won't, the review should be configurable or detecting exception marks like `-- @allow-non-tco` must be written in the review itself.
 
-Raise the bar for inclusion even higher for reviews that enforce a certain **coding style** or suggest simplifications to your code.
-For example: If a record contains only one field, then I could suggest not using a record
-and use the field value directly, which would make things simpler. But using a
-record can have the advantage of being more explicit: `Dict String Range` is
-harder to understand than `{ moduleInfosByPath : Dict String { headerNameRange : Range } }`.
+To sum up, a checklist
 
-Some reviews might suggest using advanced techniques to avoid pitfalls, which can make it harder for newcomers to get something done.
-When enabling this kind of review, make sure that the message it gives is helpful enough to unblock users.
+  - We had or fear problems with the set of patterns we want to forbid
+  - We could not find a way to solve the problem by changing the API
+  - If the review already exists, we've read its documentation section about when not to enable the review
+  - We've thought hard about what the corner cases could be and what kind of patterns this would forbid that are actually acceptable
+  - We all agree to enforce the review
+  - We are ready to disable the review if it turns out to be more inconvenient than helpful
 
-When wondering whether to enable a review, here's a checklist
-
-  - We had problems with the set of patterns we want to forbid
-  - We could not find a way to solve the problem by changing the API of the problematic code or introducing a new API
-  - If the review already exists, we have read its documentation and the section about when not to enable the review
-  - We have thought very hard about what the corner cases could be and what kind of patterns this would forbid that are actually acceptable
-  - We think the review explains well enough how to solve the issue, to make sure beginners are not annoyed by it
-  - I have communicated with my teammates and they all agree to enforce the review
-  - I am ready to disable the review if it turns out to be more disturbing than helpful
-
-## current rough spots of elm-review-mini
+## current rough spots
 
   - no LSP integration (shouldn't be too hard as it's similar to elm-review)
   - no ecosystem
   - the problem you encountered. Please [open an issue](https://github.com/lue-bird/elm-review-mini/issues) <3
+
 
 --------
 
