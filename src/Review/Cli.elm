@@ -434,20 +434,6 @@ initialStateAndCommand config =
     )
 
 
-failedToParsePathsMessage : List String -> String
-failedToParsePathsMessage pathsThatFailedToParse =
-    case pathsThatFailedToParse of
-        [ onlyPathThatFailedToParse ] ->
-            "module at path "
-                ++ onlyPathThatFailedToParse
-                ++ " failed to parse"
-
-        nonSinglePathsThatFailedToParse ->
-            "modules at paths "
-                ++ (nonSinglePathsThatFailedToParse |> String.join " and ")
-                ++ " failed to parse"
-
-
 reactToEvent :
     { configuration : { reviews : List Review.Review, extraPaths : List String }
     , toJs : Json.Encode.Value -> Cmd Never
@@ -860,6 +846,20 @@ reactToEvent config event state =
             )
 
 
+failedToParsePathsMessage : List String -> String
+failedToParsePathsMessage pathsThatFailedToParse =
+    case pathsThatFailedToParse of
+        [ onlyPathThatFailedToParse ] ->
+            "module at path "
+                ++ onlyPathThatFailedToParse
+                ++ " failed to parse"
+
+        nonSinglePathsThatFailedToParse ->
+            "modules at paths "
+                ++ (nonSinglePathsThatFailedToParse |> String.join " and ")
+                ++ " failed to parse"
+
+
 reviewWithRun : Review.Run -> (Review -> Review)
 reviewWithRun nextRun review =
     { ignoreErrorsForPathsWhere = review.ignoreErrorsForPathsWhere
@@ -1024,7 +1024,15 @@ errorsByPathToNextFixableErrorOrAll project errorsByPath =
         otherErrorsByPath : FastDict.Dict String (List FileReviewError)
         otherErrorsByPath =
             nextFixableErrorOrAll.otherErrors
-                |> FastDict.filter (\_ errors -> errors /= [])
+                |> FastDict.filter
+                    (\_ errors ->
+                        case errors of
+                            [] ->
+                                False
+
+                            _ :: _ ->
+                                True
+                    )
     in
     case nextFixableErrorOrAll.fixable of
         Just fixable ->
