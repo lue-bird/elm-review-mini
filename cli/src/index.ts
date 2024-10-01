@@ -39,6 +39,9 @@ export function compileElm(elmProjectDirectoryPath: string, mainElmModuleNamePat
 }
 
 export function startWatching(elmPorts: ElmPorts) {
+    process.on("SIGINT", () => {
+        process.exit()
+    })
     function sendToElm(eventData: any): void {
         // console.log("js → elm: ", eventData)
         elmPorts.fromJs.send(eventData)
