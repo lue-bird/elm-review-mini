@@ -23,6 +23,10 @@ Everything below is intended for writing a new review.
 
 @docs create
 
+Alongside your implementation, write [tests](#testing),
+document what is enforced, what the goal is and which situations the review makes sense
+and add examples of patterns that will (not) be reported.
+
 
 # inspecting
 
@@ -238,7 +242,7 @@ type Inspect knowledge
 
 
 {-| Relative path to the project elm.json to be used in an [`Error`](#Error) or [expected test error](Review#test).
-You could also just use `"elm.json"` which feels a bit brittle.
+Always equal to `"elm.json"`
 -}
 elmJsonPath : String
 elmJsonPath =
@@ -346,9 +350,9 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                             )
             }
 
-I strongly recommend [`FastDict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/)
-for your writing your review instead of `Dict`
-because `Dict.union` and friends have performance footguns you shouldn't need to worry about
+I strongly recommend [`miniBill/elm-fast-dict`](https://dark.elm.dmy.fr/packages/miniBill/elm-fast-dict/latest/)
+for your writing your review instead of `Dict`/`Set`
+because `union` and friends have performance footguns you shouldn't need to worry about
 
 -}
 inspectModule :
@@ -390,14 +394,9 @@ inspectDirectDependencies moduleDataToKnowledge =
 
 {-| To write a new [`Review`](#Review) you need to
 
-  - `inspect`: the parts you want to scan to collect knowledge from. See [section inspecting](#inspecting)
-  - `knowledgeMerge`: assemble knowledge from multiple you've collected into one
-  - `report`: the final evaluation, turning your combined knowledge into a list of [errors](#Error)
-
-Write [tests](#testing) alongside your implementation
-and document your review,
-explaining when (not) to enable the review
-and adding examples of patterns that will (not) be reported
+  - `inspect`: what parts to collect what knowledge from, see ["inspecting"](#inspecting)
+  - `knowledgeMerge`: combine collected knowledge from different parts
+  - `report`: evaluate your combined knowledge and provide [errors](#Error)
 
 -}
 create :
@@ -682,10 +681,9 @@ dictRemoveKeys listOfKeysToRemove dict =
 
 Take the elm compiler errors as inspiration in terms of helpfulness:
 
-  - error `message`: half-sentence on what _is_ undesired here. A user
+  - error `message`: half-sentence on what is bad here. A user
     that has encountered this error multiple times should know exactly what to do.
-    Example: "\`\` is never used" → a user who
-    knows the rule knows that a function can be removed and which one
+    Example: "Module.helper is never used" → this helper can be removed
   - error `details`: additional information such as the rationale and suggestions
     for a solution or alternative
   - error report `range`: The region marked as problematic. Make this section as small as
@@ -2451,11 +2449,6 @@ toReviewResult review project =
                     fileErrors |> Ok
 
 
-failureMessage : String -> String -> String
-failureMessage title content =
-    [ title |> Ansi.bold |> Ansi.red, "\n\n", content ] |> String.concat
-
-
 moduleFailedToParse : { path : String } -> String
 moduleFailedToParse file =
     failureMessage "module failed to parse"
@@ -2949,31 +2942,6 @@ checkMessageAppearsUnder toCheck =
                 ()
 
 
-formatSourceCodeWithFormatter : (List String -> List String) -> List String -> String
-formatSourceCodeWithFormatter formatter lines =
-    if List.length lines == 1 then
-        formatter lines
-            |> String.join "\n"
-
-    else
-        formatter lines
-            |> List.map
-                (\str ->
-                    case str of
-                        "" ->
-                            ""
-
-                        nonBlankLine ->
-                            "    " ++ nonBlankLine
-                )
-            |> String.join "\n"
-
-
-formatSourceCode : String -> String
-formatSourceCode string =
-    formatSourceCodeWithFormatter identity (string |> String.lines)
-
-
 underMismatch : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> { under : String, errorSourceInRange : String } -> String
 underMismatch error range =
     failureMessage "error location doesn't match"
@@ -2999,18 +2967,6 @@ Hint: Maybe you're passing the range of a wrong node to the review error?"""
          ]
             |> String.concat
         )
-
-
-locationToCodeString : Elm.Syntax.Range.Location -> String
-locationToCodeString =
-    \location ->
-        [ "{ row = "
-        , String.fromInt location.row
-        , ", column = "
-        , String.fromInt location.column
-        , " }"
-        ]
-            |> String.concat
 
 
 wrongLocation : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> Elm.Syntax.Range.Range -> String -> String
@@ -3482,6 +3438,48 @@ elmJsonParsingFailure decodeError =
          ]
             |> String.concat
         )
+
+
+failureMessage : String -> String -> String
+failureMessage title content =
+    [ title |> Ansi.bold |> Ansi.red, "\n\n", content ] |> String.concat
+
+
+formatSourceCodeWithFormatter : (List String -> List String) -> List String -> String
+formatSourceCodeWithFormatter formatter lines =
+    if List.length lines == 1 then
+        formatter lines
+            |> String.join "\n"
+
+    else
+        formatter lines
+            |> List.map
+                (\str ->
+                    case str of
+                        "" ->
+                            ""
+
+                        nonBlankLine ->
+                            "    " ++ nonBlankLine
+                )
+            |> String.join "\n"
+
+
+formatSourceCode : String -> String
+formatSourceCode string =
+    formatSourceCodeWithFormatter identity (string |> String.lines)
+
+
+locationToCodeString : Elm.Syntax.Range.Location -> String
+locationToCodeString =
+    \location ->
+        [ "{ row = "
+        , String.fromInt location.row
+        , ", column = "
+        , String.fromInt location.column
+        , " }"
+        ]
+            |> String.concat
 
 
 type alias FileReviewError =
