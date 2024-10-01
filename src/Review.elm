@@ -388,7 +388,7 @@ inspectDirectDependencies moduleDataToKnowledge =
     InspectDirectDependencies moduleDataToKnowledge
 
 
-{-| First, read ["when to write or enable a review"](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini#when-to-write-or-enable-a-review).
+{-| First, read ["when to add a review"](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini#when-to-add-a-review).
 To write a new [`Review`](#Review) you need to
 
   - `inspect`: the parts you want to scan to collect knowledge from. See [section inspecting](#inspecting)
