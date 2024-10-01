@@ -11,7 +11,7 @@ last list =
             onlyElement |> Just
 
         _ :: el1 :: el2Up ->
-            (el1 :: el2Up) |> last
+            last (el1 :: el2Up)
 
 
 lastMap : (a -> a) -> (List a -> List a)
