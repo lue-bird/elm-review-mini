@@ -19,7 +19,7 @@ and uses the combined knowledge to report problems.
 
 @docs ignoreErrorsForPathsWhere
 
-Everything below is intended for writing a new review
+Everything below is intended for writing a new review.
 
 @docs create
 
@@ -388,8 +388,7 @@ inspectDirectDependencies moduleDataToKnowledge =
     InspectDirectDependencies moduleDataToKnowledge
 
 
-{-| First, read ["when to add a review"](https://dark.elm.dmy.fr/packages/lue-bird/elm-review-mini#when-to-add-a-review).
-To write a new [`Review`](#Review) you need to
+{-| To write a new [`Review`](#Review) you need to
 
   - `inspect`: the parts you want to scan to collect knowledge from. See [section inspecting](#inspecting)
   - `knowledgeMerge`: assemble knowledge from multiple you've collected into one
