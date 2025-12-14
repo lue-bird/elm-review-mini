@@ -17,8 +17,8 @@ type Target
 
 
 module_ : String -> Target
-module_ =
-    FileTarget.Module >> FileTarget
+module_ path =
+    FileTarget (FileTarget.Module path)
 
 
 elmJson : Target
@@ -32,8 +32,8 @@ readme =
 
 
 extraFile : String -> Target
-extraFile =
-    FileTarget.ExtraFile >> FileTarget
+extraFile path =
+    FileTarget (FileTarget.ExtraFile path)
 
 
 setCurrentFilePathOnTargetIfNeeded : String -> Target -> Target

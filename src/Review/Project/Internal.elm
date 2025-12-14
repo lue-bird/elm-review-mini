@@ -47,7 +47,7 @@ sourceDirectoriesForProject : Elm.Project.Project -> List String
 sourceDirectoriesForProject elmJson_ =
     case elmJson_ of
         Elm.Project.Application { dirs } ->
-            List.map (removeDotSlashAtBeginning >> Path.makeOSAgnostic >> endWithSlash) dirs
+            List.map (\dir -> dir |> removeDotSlashAtBeginning |> Path.makeOSAgnostic |> endWithSlash) dirs
 
         Elm.Project.Package _ ->
             [ "src/" ]

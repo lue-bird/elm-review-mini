@@ -1340,7 +1340,7 @@ fromProjectRuleSchema (ProjectRuleSchema schema) =
                 , requestedData =
                     RequestedData.combine
                         (Maybe.map requestedDataFromContextCreator schema.moduleContextCreator)
-                        (Maybe.map (.fromModuleToProject >> requestedDataFromContextCreator) schema.folder)
+                        (Maybe.map (\folder -> folder.fromModuleToProject |> requestedDataFromContextCreator) schema.folder)
                         |> RequestedData.withFiles extraFileGlobs
                 , providesFixes = schema.providesFixes
                 , ruleProjectVisitor =
@@ -1518,8 +1518,8 @@ without the extensible record type variable.
 removeExtensibleRecordTypeVariable :
     (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { a | hasAtLeastOneVisitor : () } moduleContext)
     -> (ModuleRuleSchema {} moduleContext -> ModuleRuleSchema { hasAtLeastOneVisitor : () } moduleContext)
-removeExtensibleRecordTypeVariable function =
-    function >> removeExtensibleRecordFromModuleRuleSchema
+removeExtensibleRecordTypeVariable visitor schema =
+    schema |> visitor |> removeExtensibleRecordFromModuleRuleSchema
 
 
 removeExtensibleRecordFromModuleRuleSchema : ModuleRuleSchema schemaState moduleContext -> ModuleRuleSchema a moduleContext

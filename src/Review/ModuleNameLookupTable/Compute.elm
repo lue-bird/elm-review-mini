@@ -568,7 +568,7 @@ createFakeImport : { moduleName : ModuleName, exposingList : Maybe Exposing, mod
 createFakeImport { moduleName, moduleAlias, exposingList } =
     Node Range.emptyRange
         { moduleName = Node Range.emptyRange moduleName
-        , moduleAlias = moduleAlias |> Maybe.map (List.singleton >> Node Range.emptyRange)
+        , moduleAlias = moduleAlias |> Maybe.map (\aliasName -> Node Range.emptyRange [ aliasName ])
         , exposingList = exposingList |> Maybe.map (Node Range.emptyRange)
         }
 
@@ -1543,22 +1543,22 @@ moduleNameForType context typeName moduleName =
 
 isValueDeclaredInModule : String -> Elm.Docs.Module -> Bool
 isValueDeclaredInModule valueName module_ =
-    List.any (.name >> (==) valueName) module_.values
-        || List.any (.name >> (==) valueName) module_.aliases
+    List.any (\value -> value.name == valueName) module_.values
+        || List.any (\alias -> alias.name == valueName) module_.aliases
         || List.any
-            (\union -> List.any (Tuple.first >> (==) valueName) union.tags)
+            (\union -> List.any (\( variantName, _ ) -> variantName == valueName) union.tags)
             module_.unions
 
 
 isTypeDeclaredInModule : String -> Elm.Docs.Module -> Bool
 isTypeDeclaredInModule typeName module_ =
-    List.any (.name >> (==) typeName) module_.aliases
-        || List.any (.name >> (==) typeName) module_.unions
+    List.any (\alias -> alias.name == typeName) module_.aliases
+        || List.any (\union -> union.name == typeName) module_.unions
 
 
 isInScope : String -> NonEmpty Scope -> Bool
 isInScope name scopes =
-    NonEmpty.any (.names >> Dict.member name) scopes
+    NonEmpty.any (\scope -> scope.names |> Dict.member name) scopes
 
 
 joinModuleName : ModuleName -> String
@@ -1576,10 +1576,10 @@ expressionChildren node =
             elements
 
         Expression.RecordExpr fields ->
-            List.map (Node.value >> (\( _, expr ) -> expr)) fields
+            List.map (\(Node _ ( _, fieldValue )) -> fieldValue) fields
 
         Expression.RecordUpdateExpression _ setters ->
-            List.map (Node.value >> (\( _, expr ) -> expr)) setters
+            List.map (\(Node _ ( _, fieldValue )) -> fieldValue) setters
 
         Expression.ParenthesizedExpression expr ->
             [ expr ]

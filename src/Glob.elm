@@ -199,7 +199,7 @@ fragmentParser =
             |. Parser.symbol "?"
         , Parser.succeed Asterisk
             |. Parser.symbol "*"
-        , Parser.succeed (Alternatives << Set.toList << Set.fromList)
+        , Parser.succeed (\options -> Alternatives (Set.toList (Set.fromList options)))
             |= Parser.sequence
                 { start = "{"
                 , end = "}"

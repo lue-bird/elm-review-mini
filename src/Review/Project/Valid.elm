@@ -296,7 +296,7 @@ nodesAndEdges getModuleId module_ moduleId =
 importedModules : OpaqueProjectModule -> List ModuleName
 importedModules module_ =
     (ProjectModule.ast module_).imports
-        |> List.map (Node.value >> .moduleName >> Node.value)
+        |> List.map (\(Node.Node _ import_) -> import_.moduleName |> Node.value)
 
 
 
