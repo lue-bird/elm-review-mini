@@ -421,7 +421,7 @@ collectLookupTable declarations context =
                 Declaration.FunctionDeclaration function ->
                     ctx
                         |> declarationEnterVisitor declaration
-                        |> visitExpressions (function.declaration |> Node.value |> .expression)
+                        |> visitExpressionAndSubs (function.declaration |> Node.value |> .expression)
                         |> declarationExitVisitor declaration
 
                 _ ->
@@ -431,22 +431,125 @@ collectLookupTable declarations context =
         declarations
 
 
-visitExpressions : Node Expression -> Context -> Context
-visitExpressions node context =
+visitExpressionAndSubs : Node Expression -> Context -> Context
+visitExpressionAndSubs expressionNode context =
     -- IGNORE TCO
     let
+        (Node expressionRange expression) =
+            expressionNode
+
         newContext : Context
         newContext =
             context
-                |> popScopeEnter node
-                |> expressionEnterVisitor node
+                |> popScopeEnter expressionRange
+                |> expressionEnterVisitor expressionNode
     in
-    List.foldl
-        visitExpressions
-        newContext
-        (expressionChildren node)
-        |> expressionExitVisitor node
-        |> popScopeExit node
+    (case expression of
+        Expression.Application (applied :: arg0 :: arg1Up) ->
+            List.foldl
+                visitExpressionAndSubs
+                (newContext
+                    |> visitExpressionAndSubs applied
+                    |> visitExpressionAndSubs arg0
+                )
+                arg1Up
+
+        Expression.ListExpr elements ->
+            List.foldl
+                visitExpressionAndSubs
+                newContext
+                elements
+
+        Expression.RecordExpr fields ->
+            List.foldl
+                (\(Node _ ( _, fieldValue )) soFar -> visitExpressionAndSubs fieldValue soFar)
+                newContext
+                fields
+
+        Expression.RecordUpdateExpression _ setters ->
+            List.foldl
+                (\(Node _ ( _, fieldValue )) soFar -> visitExpressionAndSubs fieldValue soFar)
+                newContext
+                setters
+
+        Expression.ParenthesizedExpression expr ->
+            visitExpressionAndSubs expr newContext
+
+        Expression.OperatorApplication _ direction left right ->
+            case direction of
+                Infix.Left ->
+                    visitExpressionAndSubs right
+                        (newContext
+                            |> visitExpressionAndSubs left
+                        )
+
+                Infix.Non ->
+                    visitExpressionAndSubs right
+                        (newContext
+                            |> visitExpressionAndSubs left
+                        )
+
+                Infix.Right ->
+                    visitExpressionAndSubs left
+                        (newContext
+                            |> visitExpressionAndSubs right
+                        )
+
+        Expression.IfBlock condition onTrue onFalse ->
+            visitExpressionAndSubs onFalse
+                (newContext
+                    |> visitExpressionAndSubs condition
+                    |> visitExpressionAndSubs onTrue
+                )
+
+        Expression.LetExpression letIn ->
+            visitExpressionAndSubs letIn.expression
+                (List.foldl
+                    (\declaration acc ->
+                        case Node.value declaration of
+                            Expression.LetFunction function ->
+                                visitExpressionAndSubs (functionToExpression function) acc
+
+                            Expression.LetDestructuring _ expr ->
+                                visitExpressionAndSubs expr acc
+                    )
+                    newContext
+                    letIn.declarations
+                )
+
+        Expression.CaseExpression caseOf ->
+            List.foldl
+                (\( _, caseExpression ) soFar ->
+                    soFar |> visitExpressionAndSubs caseExpression
+                )
+                (newContext |> visitExpressionAndSubs caseOf.expression)
+                caseOf.cases
+
+        Expression.LambdaExpression lambda ->
+            visitExpressionAndSubs lambda.expression newContext
+
+        Expression.TupledExpression [ part0, part1 ] ->
+            visitExpressionAndSubs part1
+                (newContext |> visitExpressionAndSubs part0)
+
+        Expression.TupledExpression [ part0, part1, part2 ] ->
+            visitExpressionAndSubs part2
+                (newContext
+                    |> visitExpressionAndSubs part0
+                    |> visitExpressionAndSubs part1
+                )
+
+        Expression.Negation expr ->
+            visitExpressionAndSubs expr newContext
+
+        Expression.RecordAccess expr _ ->
+            visitExpressionAndSubs expr newContext
+
+        _ ->
+            newContext
+    )
+        |> expressionExitVisitor expressionNode
+        |> popScopeExit expressionRange
 
 
 preludeModuleDocs : Dict ModuleName Elm.Docs.Module -> Dict ModuleName Elm.Docs.Module
@@ -475,7 +578,7 @@ elmCorePrelude =
         explicit : List Exposing.TopLevelExpose -> Maybe Exposing
         explicit exposed =
             exposed
-                |> List.map (Node Range.emptyRange)
+                |> List.map Node.empty
                 |> Exposing.Explicit
                 |> Just
     in
@@ -1182,8 +1285,8 @@ collectModuleNamesFromPattern context patternsToVisit acc =
             acc
 
 
-popScopeEnter : Node Expression -> Context -> Context
-popScopeEnter (Node range _) context =
+popScopeEnter : Range -> Context -> Context
+popScopeEnter range context =
     let
         currentScope : Scope
         currentScope =
@@ -1201,8 +1304,8 @@ popScopeEnter (Node range _) context =
             { context | scopes = NonEmpty.cons { emptyScope | names = names, caseToExit = range } context.scopes }
 
 
-popScopeExit : Node Expression -> Context -> Context
-popScopeExit (Node range _) context =
+popScopeExit : Range -> Context -> Context
+popScopeExit range context =
     let
         currentScope : Scope
         currentScope =
@@ -1564,71 +1667,6 @@ isInScope name scopes =
 joinModuleName : ModuleName -> String
 joinModuleName name =
     String.join "." name
-
-
-expressionChildren : Node Expression -> List (Node Expression)
-expressionChildren node =
-    case Node.value node of
-        Expression.Application expressions ->
-            expressions
-
-        Expression.ListExpr elements ->
-            elements
-
-        Expression.RecordExpr fields ->
-            List.map (\(Node _ ( _, fieldValue )) -> fieldValue) fields
-
-        Expression.RecordUpdateExpression _ setters ->
-            List.map (\(Node _ ( _, fieldValue )) -> fieldValue) setters
-
-        Expression.ParenthesizedExpression expr ->
-            [ expr ]
-
-        Expression.OperatorApplication _ direction left right ->
-            case direction of
-                Infix.Left ->
-                    [ left, right ]
-
-                Infix.Right ->
-                    [ right, left ]
-
-                Infix.Non ->
-                    [ left, right ]
-
-        Expression.IfBlock cond then_ else_ ->
-            [ cond, then_, else_ ]
-
-        Expression.LetExpression { expression, declarations } ->
-            List.foldr
-                (\declaration acc ->
-                    case Node.value declaration of
-                        Expression.LetFunction function ->
-                            functionToExpression function :: acc
-
-                        Expression.LetDestructuring _ expr ->
-                            expr :: acc
-                )
-                [ expression ]
-                declarations
-
-        Expression.CaseExpression { expression, cases } ->
-            expression
-                :: List.map (\( _, caseExpression ) -> caseExpression) cases
-
-        Expression.LambdaExpression { expression } ->
-            [ expression ]
-
-        Expression.TupledExpression expressions ->
-            expressions
-
-        Expression.Negation expr ->
-            [ expr ]
-
-        Expression.RecordAccess expr _ ->
-            [ expr ]
-
-        _ ->
-            []
 
 
 functionToExpression : Expression.Function -> Node Expression
