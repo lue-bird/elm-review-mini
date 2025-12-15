@@ -763,7 +763,21 @@ addToScope variableData innerContext =
         newScopes =
             registerVariable variableData innerContext.scopes
     in
-    { innerContext | scopes = newScopes }
+    { scopes = newScopes
+
+    --
+    , localTypes = innerContext.localTypes
+    , importAliases = innerContext.importAliases
+    , importedFunctions = innerContext.importedFunctions
+    , importedTypes = innerContext.importedTypes
+    , modules = innerContext.modules
+    , exposesEverything = innerContext.exposesEverything
+    , exposedNames = innerContext.exposedNames
+    , exposedUnions = innerContext.exposedUnions
+    , exposedAliases = innerContext.exposedAliases
+    , exposedValues = innerContext.exposedValues
+    , lookupTable = innerContext.lookupTable
+    }
 
 
 registerExposedValue : { a | documentation : Maybe (Node String), signature : Maybe (Node Signature) } -> String -> Context -> Context
@@ -881,7 +895,12 @@ recordUpdateToDocsType innerContext updates =
 registerVariable : VariableInfo -> NonEmpty Scope -> NonEmpty Scope
 registerVariable variableInfo scopes =
     NonEmpty.mapHead
-        (\scope -> { scope | names = Dict.insert (Node.value variableInfo.node) variableInfo scope.names })
+        (\scope ->
+            { names = Dict.insert (Node.value variableInfo.node) variableInfo scope.names
+            , cases = scope.cases
+            , caseToExit = scope.caseToExit
+            }
+        )
         scopes
 
 
@@ -995,32 +1014,19 @@ registerImportExposed import_ innerContext =
             case exposing_ of
                 Exposing.All _ ->
                     let
-                        foldIntoDict : List { a | name : comparable } -> Dict comparable ModuleName -> Dict comparable ModuleName
-                        foldIntoDict list dict =
-                            List.foldl (\{ name } acc -> Dict.insert name moduleName acc) dict list
-
-                        foldCustomTypesIntoDict : List { a | tags : List ( String, b ) } -> Dict String ModuleName -> Dict String ModuleName
-                        foldCustomTypesIntoDict unions dict =
-                            List.foldl
-                                (\union acc ->
-                                    List.foldl (\( name, _ ) subAcc -> Dict.insert name moduleName subAcc) acc union.tags
-                                )
-                                dict
-                                unions
-
                         importedFunctions : Dict String ModuleName
                         importedFunctions =
                             innerContext.importedFunctions
-                                |> foldIntoDict module_.values
-                                |> foldIntoDict module_.binops
-                                |> foldIntoDict module_.aliases
-                                |> foldCustomTypesIntoDict module_.unions
+                                |> foldIntoDict moduleName module_.values
+                                |> foldIntoDict moduleName module_.binops
+                                |> foldIntoDict moduleName module_.aliases
+                                |> foldCustomTypesIntoDict moduleName module_.unions
 
                         importedTypes : Dict String ModuleName
                         importedTypes =
                             innerContext.importedTypes
-                                |> foldIntoDict module_.unions
-                                |> foldIntoDict module_.aliases
+                                |> foldIntoDict moduleName module_.unions
+                                |> foldIntoDict moduleName module_.aliases
                     in
                     { innerContext
                         | importedFunctions = importedFunctions
@@ -1055,6 +1061,21 @@ registerImportExposed import_ innerContext =
                         | importedFunctions = importedFunctions
                         , importedTypes = importedTypes
                     }
+
+
+foldIntoDict : ModuleName -> List { a | name : comparable } -> Dict comparable ModuleName -> Dict comparable ModuleName
+foldIntoDict moduleName list dict =
+    List.foldl (\{ name } acc -> Dict.insert name moduleName acc) dict list
+
+
+foldCustomTypesIntoDict : ModuleName -> List { a | tags : List ( String, b ) } -> Dict String ModuleName -> Dict String ModuleName
+foldCustomTypesIntoDict moduleName unions dict =
+    List.foldl
+        (\union acc ->
+            List.foldl (\( name, _ ) subAcc -> Dict.insert name moduleName subAcc) acc union.tags
+        )
+        dict
+        unions
 
 
 valuesFromExposingList : ModuleName -> Elm.Docs.Module -> List (Node TopLevelExpose) -> Dict String ModuleName -> Dict String ModuleName
@@ -1301,7 +1322,21 @@ popScopeEnter range context =
             context
 
         Just ( _, names ) ->
-            { context | scopes = NonEmpty.cons { emptyScope | names = names, caseToExit = range } context.scopes }
+            { scopes = NonEmpty.cons { names = names, caseToExit = range, cases = [] } context.scopes
+
+            --
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
+            , lookupTable = context.lookupTable
+            }
 
 
 popScopeExit : Range -> Context -> Context
@@ -1312,7 +1347,21 @@ popScopeExit range context =
             NonEmpty.head context.scopes
     in
     if range == currentScope.caseToExit then
-        { context | scopes = NonEmpty.pop context.scopes }
+        { scopes = NonEmpty.pop context.scopes
+
+        --
+        , localTypes = context.localTypes
+        , importAliases = context.importAliases
+        , importedFunctions = context.importedFunctions
+        , importedTypes = context.importedTypes
+        , modules = context.modules
+        , exposesEverything = context.exposesEverything
+        , exposedNames = context.exposedNames
+        , exposedUnions = context.exposedUnions
+        , exposedAliases = context.exposedAliases
+        , exposedValues = context.exposedValues
+        , lookupTable = context.lookupTable
+        }
 
     else
         context
@@ -1350,10 +1399,24 @@ expressionEnterVisitor node context =
                                             names =
                                                 collectNamesFromPattern PatternVariable arguments Dict.empty
                                         in
-                                        NonEmpty.mapHead (\scope -> { scope | cases = ( Node.range expression, names ) :: scope.cases }) withLetVariable
+                                        NonEmpty.mapHead
+                                            (\scope ->
+                                                { cases = ( Node.range expression, names ) :: scope.cases
+                                                , names = scope.names
+                                                , caseToExit = scope.caseToExit
+                                                }
+                                            )
+                                            withLetVariable
 
                                 Expression.LetDestructuring pattern _ ->
-                                    NonEmpty.mapHead (\scope -> { scope | names = collectNamesFromPattern LetVariable [ pattern ] scope.names }) scopes
+                                    NonEmpty.mapHead
+                                        (\scope ->
+                                            { names = collectNamesFromPattern LetVariable [ pattern ] scope.names
+                                            , cases = scope.cases
+                                            , caseToExit = scope.caseToExit
+                                            }
+                                        )
+                                        scopes
                         )
                         (NonEmpty.cons emptyScope context.scopes)
                         letExpression.declarations
@@ -1405,27 +1468,70 @@ expressionEnterVisitor node context =
                         ( [], context.lookupTable )
                         caseBlock.cases
             in
-            { context
-                | scopes = NonEmpty.mapHead (\scope -> { scope | cases = cases }) context.scopes
-                , lookupTable = lookupTable
+            { scopes =
+                NonEmpty.mapHead
+                    (\scope ->
+                        { cases = cases
+                        , names = scope.names
+                        , caseToExit = scope.caseToExit
+                        }
+                    )
+                    context.scopes
+            , lookupTable = lookupTable
+
+            --
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
             }
 
         Expression.FunctionOrValue moduleName name ->
-            { context
-                | lookupTable =
-                    Builder.add
-                        (Node.range node)
-                        (moduleNameForValue context name moduleName)
-                        context.lookupTable
+            { lookupTable =
+                Builder.add
+                    (Node.range node)
+                    (moduleNameForValue context name moduleName)
+                    context.lookupTable
+
+            --
+            , scopes = context.scopes
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
             }
 
         Expression.RecordUpdateExpression (Node range name) _ ->
-            { context
-                | lookupTable =
-                    Builder.add
-                        range
-                        (moduleNameForValue context name [])
-                        context.lookupTable
+            { lookupTable =
+                Builder.add
+                    range
+                    (moduleNameForValue context name [])
+                    context.lookupTable
+
+            --
+            , scopes = context.scopes
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
             }
 
         Expression.LambdaExpression { args, expression } ->
@@ -1441,27 +1547,62 @@ expressionEnterVisitor node context =
                     , caseToExit = Node.range expression
                     }
             in
-            { context
-                | lookupTable = collectModuleNamesFromPattern context args context.lookupTable
-                , scopes = NonEmpty.cons newScope context.scopes
+            { lookupTable = collectModuleNamesFromPattern context args context.lookupTable
+            , scopes = NonEmpty.cons newScope context.scopes
+
+            --
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
             }
 
         Expression.PrefixOperator op ->
-            { context
-                | lookupTable =
-                    Builder.add
-                        (Node.range node)
-                        (moduleNameForValue context op [])
-                        context.lookupTable
+            { lookupTable =
+                Builder.add
+                    (Node.range node)
+                    (moduleNameForValue context op [])
+                    context.lookupTable
+
+            --
+            , scopes = context.scopes
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
             }
 
         Expression.OperatorApplication op _ _ _ ->
-            { context
-                | lookupTable =
-                    Builder.add
-                        (Node.range node)
-                        (moduleNameForValue context op [])
-                        context.lookupTable
+            { lookupTable =
+                Builder.add
+                    (Node.range node)
+                    (moduleNameForValue context op [])
+                    context.lookupTable
+
+            --
+            , scopes = context.scopes
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
             }
 
         _ ->
@@ -1517,13 +1658,63 @@ expressionExitVisitor : Node Expression -> Context -> Context
 expressionExitVisitor node context =
     case Node.value node of
         Expression.LetExpression _ ->
-            { context | scopes = NonEmpty.pop context.scopes }
+            { scopes = NonEmpty.pop context.scopes
+
+            --
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
+            , lookupTable = context.lookupTable
+            }
 
         Expression.CaseExpression _ ->
-            { context | scopes = NonEmpty.mapHead (\scope -> { scope | cases = [] }) context.scopes }
+            { scopes =
+                NonEmpty.mapHead
+                    (\scope ->
+                        { cases = []
+                        , names = scope.names
+                        , caseToExit = scope.caseToExit
+                        }
+                    )
+                    context.scopes
+
+            --
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
+            , lookupTable = context.lookupTable
+            }
 
         Expression.LambdaExpression _ ->
-            { context | scopes = NonEmpty.pop context.scopes }
+            { scopes = NonEmpty.pop context.scopes
+
+            --
+            , localTypes = context.localTypes
+            , importAliases = context.importAliases
+            , importedFunctions = context.importedFunctions
+            , importedTypes = context.importedTypes
+            , modules = context.modules
+            , exposesEverything = context.exposesEverything
+            , exposedNames = context.exposedNames
+            , exposedUnions = context.exposedUnions
+            , exposedAliases = context.exposedAliases
+            , exposedValues = context.exposedValues
+            , lookupTable = context.lookupTable
+            }
 
         _ ->
             context
