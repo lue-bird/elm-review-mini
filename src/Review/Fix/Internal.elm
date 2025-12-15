@@ -5,7 +5,6 @@ module Review.Fix.Internal exposing
     , editModule
     )
 
-import Array
 import Elm.Parser as Parser
 import Elm.Project
 import Elm.Syntax.File exposing (File)
@@ -215,14 +214,23 @@ applyReplace range replacement lines =
         linesAfter =
             List.drop range.end.row lines
 
+        fullStartLine : String
+        fullStartLine =
+            getRowAtLine lines (range.start.row - 1)
+
         startLine : String
         startLine =
-            getRowAtLine lines (range.start.row - 1)
+            fullStartLine
                 |> Unicode.left (range.start.column - 1)
 
         endLine : String
         endLine =
-            getRowAtLine lines (range.end.row - 1)
+            (if range.end.row == range.start.row then
+                fullStartLine
+
+             else
+                getRowAtLine lines (range.end.row - 1)
+            )
                 |> Unicode.dropLeft (range.end.column - 1)
     in
     ( linesBefore
@@ -233,7 +241,7 @@ applyReplace range replacement lines =
 
 getRowAtLine : List String -> Int -> String
 getRowAtLine lines rowIndex =
-    case lines |> Array.fromList |> Array.get rowIndex of
+    case lines |> listGet rowIndex of
         Just line ->
             if String.trim line /= "" then
                 line
@@ -243,6 +251,20 @@ getRowAtLine lines rowIndex =
 
         Nothing ->
             ""
+
+
+listGet : Int -> List a -> Maybe a
+listGet index list =
+    case list of
+        [] ->
+            Nothing
+
+        head :: tail ->
+            if index == 0 then
+                Just head
+
+            else
+                listGet (index - 1) tail
 
 
 
