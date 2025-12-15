@@ -18,23 +18,23 @@ applyColor color string =
 
 
 red : String -> String
-red =
-    applyColor "31"
+red string =
+    applyColor "31" string
 
 
 green : String -> String
-green =
-    applyColor "32"
+green string =
+    applyColor "32" string
 
 
 yellow : String -> String
-yellow =
-    applyColor "33"
+yellow string =
+    applyColor "33" string
 
 
 cyan : String -> String
-cyan =
-    applyColor "36"
+cyan string =
+    applyColor "36" string
 
 
 noColor : String
@@ -52,8 +52,8 @@ applyBackgroundColor color string =
 
 
 backgroundRed : String -> String
-backgroundRed =
-    applyBackgroundColor "41"
+backgroundRed string =
+    applyBackgroundColor "41" string
 
 
 noBackgroundColor : String

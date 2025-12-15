@@ -632,8 +632,8 @@ codeInspectorForSource : Bool -> String -> CodeInspector
 codeInspectorForSource isModule source =
     { isModule = isModule
     , source = source
-    , getCodeAtLocation = getCodeAtLocationInSourceCode source
-    , checkIfLocationIsAmbiguous = checkIfLocationIsAmbiguousInSourceCode source
+    , getCodeAtLocation = \range -> getCodeAtLocationInSourceCode source range
+    , checkIfLocationIsAmbiguous = \err under -> checkIfLocationIsAmbiguousInSourceCode source err under
     }
 
 
@@ -1590,16 +1590,15 @@ getCodeAtLocationInSourceCode sourceCode =
 
 
 checkIfLocationIsAmbiguousInSourceCode : SourceCode -> ReviewError -> String -> Expectation
-checkIfLocationIsAmbiguousInSourceCode sourceCode =
-    \error_ under ->
-        let
-            occurrencesInSourceCode : List Int
-            occurrencesInSourceCode =
-                String.indexes under sourceCode
-        in
-        hasOneElement occurrencesInSourceCode
-            |> Expect.equal True
-            |> onFail (\() -> FailureMessage.locationIsAmbiguousInSourceCode sourceCode error_ under occurrencesInSourceCode)
+checkIfLocationIsAmbiguousInSourceCode sourceCode error_ under =
+    let
+        occurrencesInSourceCode : List Int
+        occurrencesInSourceCode =
+            String.indexes under sourceCode
+    in
+    hasOneElement occurrencesInSourceCode
+        |> Expect.equal True
+        |> onFail (\() -> FailureMessage.locationIsAmbiguousInSourceCode sourceCode error_ under occurrencesInSourceCode)
 
 
 
@@ -1821,10 +1820,10 @@ checkErrorsMatch : ProjectInternals -> SuccessfulRunResult -> List ExpectedError
 checkErrorsMatch project runResult expectedErrors expectedNumberOfErrors errors =
     case ( expectedErrors, errors ) of
         ( [], [] ) ->
-            [ always Expect.pass ]
+            [ \() -> Expect.pass ]
 
         ( expected :: restOfExpectedErrors, error_ :: restOfErrors ) ->
-            checkErrorMatch project runResult expected error_
+            (\() -> checkErrorMatch project runResult expected error_ ())
                 :: checkErrorsMatch project runResult restOfExpectedErrors expectedNumberOfErrors restOfErrors
 
         ( _ :: _, [] ) ->
@@ -1843,7 +1842,7 @@ checkErrorsMatch project runResult expectedErrors expectedNumberOfErrors errors 
 
 
 checkErrorMatch : ProjectInternals -> SuccessfulRunResult -> ExpectedError -> ReviewError -> (() -> Expectation)
-checkErrorMatch project runResult (ExpectedError expectedError) error_ =
+checkErrorMatch project runResult (ExpectedError expectedError) error_ () =
     let
         target : FailureMessage.Target
         target =
@@ -1879,6 +1878,7 @@ checkErrorMatch project runResult (ExpectedError expectedError) error_ =
         , \() -> checkFixesHaveNoProblem target error_
         , \() -> checkFixesAreCorrect project target runResult.moduleName error_ expectedError
         ]
+        ()
 
 
 checkMessageAppearsUnder : CodeInspector -> ReviewError -> ExpectedErrorDetails -> Expectation

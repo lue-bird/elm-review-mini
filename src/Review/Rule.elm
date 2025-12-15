@@ -1435,7 +1435,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
             , moduleKey = ModuleKey "dummy"
             , moduleDocumentation = Nothing
             , moduleNameLookupTable = ModuleNameLookupTableInternal.empty []
-            , extractSourceCode = always "dummy"
+            , extractSourceCode = \_ -> "dummy"
             , filePath = "dummy file path"
             , isInSourceDirectories = True
             }
@@ -5576,16 +5576,17 @@ computeModuleWithRuleVisitors project module_ inputRuleModuleVisitors (Requested
             , moduleNameLookupTable = moduleNameLookupTable
             , moduleDocumentation = findModuleDocumentation ast
             , extractSourceCode =
-                if requestedData.sourceCodeExtractor then
-                    let
-                        lines : List String
-                        lines =
-                            String.lines (ProjectModule.source module_)
-                    in
-                    \range -> extractSourceCode lines range
+                \range ->
+                    if requestedData.sourceCodeExtractor then
+                        let
+                            lines : List String
+                            lines =
+                                String.lines (ProjectModule.source module_)
+                        in
+                        extractSourceCode lines range
 
-                else
-                    always ""
+                    else
+                        ""
             , filePath = ProjectModule.path module_
             , isInSourceDirectories = ProjectModule.isInSourceDirectories module_
             }
