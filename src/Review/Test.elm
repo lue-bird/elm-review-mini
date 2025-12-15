@@ -488,12 +488,10 @@ runOnModulesWithProjectDataHelp project rule sources =
 
                                     fileErrors : List SuccessfulRunResult
                                     fileErrors =
-                                        List.concat
-                                            [ List.map (\module_ -> moduleToRunResult errors module_) modules
-                                            , elmJsonRunResult errors projectWithModules
-                                            , readmeRunResult errors projectWithModules
-                                            , extraFileRunResult errors projectWithModules
-                                            ]
+                                        List.map (\module_ -> moduleToRunResult errors module_) modules
+                                            ++ elmJsonRunResult errors projectWithModules
+                                            ++ readmeRunResult errors projectWithModules
+                                            ++ extraFileRunResult errors projectWithModules
 
                                     foundGlobalErrors : List ReviewError
                                     foundGlobalErrors =

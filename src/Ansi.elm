@@ -5,7 +5,7 @@ module Ansi exposing (backgroundRed, bold, cyan, green, red, yellow)
 
 bold : String -> String
 bold text =
-    String.concat [ "\u{001B}[1m", text, "\u{001B}[22m" ]
+    "\u{001B}[1m" ++ text ++ "\u{001B}[22m"
 
 
 
@@ -14,7 +14,7 @@ bold text =
 
 applyColor : String -> String -> String
 applyColor color string =
-    String.concat [ "\u{001B}[" ++ color ++ "m", string, noColor ]
+    "\u{001B}[" ++ color ++ "m" ++ string ++ noColor
 
 
 red : String -> String
@@ -48,7 +48,7 @@ noColor =
 
 applyBackgroundColor : String -> String -> String
 applyBackgroundColor color string =
-    String.concat [ "\u{001B}[" ++ color ++ "m", string, noBackgroundColor ]
+    "\u{001B}[" ++ color ++ "m" ++ string ++ noBackgroundColor
 
 
 backgroundRed : String -> String

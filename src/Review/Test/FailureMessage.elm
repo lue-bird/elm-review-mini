@@ -1184,7 +1184,7 @@ formatJson value =
 
 deadEndsToString : List Parser.DeadEnd -> String
 deadEndsToString deadEnds =
-    String.concat (List.intersperse "\n" (List.map deadEndToString deadEnds))
+    String.join "\n" (List.map deadEndToString deadEnds)
 
 
 deadEndToString : Parser.DeadEnd -> String

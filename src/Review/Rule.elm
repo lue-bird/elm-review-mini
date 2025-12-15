@@ -5071,14 +5071,12 @@ setRuleName ruleName_ error_ =
 
 errorsFromCache : ProjectRuleCache projectContext -> List (Error {})
 errorsFromCache cache =
-    List.concat
-        [ Dict.foldl (\_ cacheEntry acc -> List.append (ModuleCache.errors cacheEntry) acc) [] cache.moduleContexts
-        , ProjectFileCache.errorsForMaybe cache.elmJson
-        , ProjectFileCache.errorsForMaybe cache.readme
-        , ExtraFile.errorsForMaybe cache.extraFiles
-        , ProjectFileCache.errorsForMaybe cache.dependencies
-        , Maybe.map EndAnalysisCache.output cache.finalEvaluationErrors |> Maybe.withDefault []
-        ]
+    Dict.foldl (\_ cacheEntry acc -> List.append (ModuleCache.errors cacheEntry) acc) [] cache.moduleContexts
+        ++ ProjectFileCache.errorsForMaybe cache.elmJson
+        ++ ProjectFileCache.errorsForMaybe cache.readme
+        ++ ExtraFile.errorsForMaybe cache.extraFiles
+        ++ ProjectFileCache.errorsForMaybe cache.dependencies
+        ++ (Maybe.map EndAnalysisCache.output cache.finalEvaluationErrors |> Maybe.withDefault [])
 
 
 

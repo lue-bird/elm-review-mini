@@ -225,10 +225,8 @@ applyReplace range replacement lines =
             getRowAtLine lines (range.end.row - 1)
                 |> Unicode.dropLeft (range.end.column - 1)
     in
-    ( List.concat
-        [ linesBefore
-        , startLine ++ replacement ++ endLine |> String.lines
-        ]
+    ( linesBefore
+        ++ (startLine ++ replacement ++ endLine |> String.lines)
     , linesAfter
     )
 
