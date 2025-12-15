@@ -1,4 +1,4 @@
-module Review.ModuleNameLookupTable.Internal exposing (ModuleNameLookupTable(..), empty, fromList, toRangeLike)
+module Review.ModuleNameLookupTable.Internal exposing (ModuleNameLookupTable(..), RangeLike, empty, fromDict, fromList, toRangeLike)
 
 import Bitwise
 import Dict exposing (Dict)
@@ -15,15 +15,19 @@ empty currentModuleName =
     ModuleNameLookupTable currentModuleName Dict.empty
 
 
+fromDict : ModuleName -> Dict RangeLike ModuleName -> ModuleNameLookupTable
+fromDict =
+    ModuleNameLookupTable
+
+
 fromList : ModuleName -> List ( Range, ModuleName ) -> ModuleNameLookupTable
-fromList fileModuleName list =
-    List.foldl
-        (\( range, moduleName ) dict ->
-            Dict.insert (toRangeLike range) moduleName dict
+fromList fileModuleName entries =
+    ModuleNameLookupTable fileModuleName
+        (List.foldl
+            (\( range, moduleOrigin ) soFar -> Dict.insert (toRangeLike range) moduleOrigin soFar)
+            Dict.empty
+            entries
         )
-        Dict.empty
-        list
-        |> ModuleNameLookupTable fileModuleName
 
 
 type alias RangeLike =
@@ -39,7 +43,7 @@ toRangeLike { start, end } =
     --       Int
     --
     --   toRangeLike { start } =
-    --       Bitwise.shiftLeftBy 16 start.row + start.colum
+    --       Bitwise.shiftLeftBy 16 start.row + start.column
     --
     -- Unfortunately with v7 this is not possible, because we do not have the position of the
     -- operator with `Expression.OperatorApplication`, creating a collision when looking for the

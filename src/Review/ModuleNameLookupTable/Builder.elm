@@ -5,6 +5,7 @@ module Review.ModuleNameLookupTable.Builder exposing
     , finalize
     )
 
+import Dict exposing (Dict)
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Range exposing (Range)
 import Review.ModuleNameLookupTable exposing (ModuleNameLookupTable)
@@ -12,19 +13,19 @@ import Review.ModuleNameLookupTable.Internal as Internal
 
 
 type ModuleNameLookupTableBuilder
-    = ModuleNameLookupTableBuilder (List ( Range, ModuleName ))
+    = ModuleNameLookupTableBuilder (Dict Internal.RangeLike ModuleName)
 
 
 empty : ModuleNameLookupTableBuilder
 empty =
-    ModuleNameLookupTableBuilder []
+    ModuleNameLookupTableBuilder Dict.empty
 
 
 add : Range -> ModuleName -> ModuleNameLookupTableBuilder -> ModuleNameLookupTableBuilder
 add range moduleName (ModuleNameLookupTableBuilder builder) =
-    ModuleNameLookupTableBuilder (( range, moduleName ) :: builder)
+    ModuleNameLookupTableBuilder (Dict.insert (Internal.toRangeLike range) moduleName builder)
 
 
 finalize : ModuleName -> ModuleNameLookupTableBuilder -> ModuleNameLookupTable
 finalize fileModuleName (ModuleNameLookupTableBuilder builder) =
-    Internal.fromList fileModuleName builder
+    Internal.fromDict fileModuleName builder
