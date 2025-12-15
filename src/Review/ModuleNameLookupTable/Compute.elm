@@ -672,7 +672,7 @@ createFakeImport { moduleName, moduleAlias, exposingList } =
     Node Range.emptyRange
         { moduleName = Node Range.emptyRange moduleName
         , moduleAlias = moduleAlias |> Maybe.map (\aliasName -> Node Range.emptyRange [ aliasName ])
-        , exposingList = exposingList |> Maybe.map (Node Range.emptyRange)
+        , exposingList = exposingList |> Maybe.map Node.empty
         }
 
 

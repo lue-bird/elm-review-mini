@@ -57,7 +57,11 @@ create params =
 
 sanitizeModule : Elm.Syntax.File.File -> Elm.Syntax.File.File
 sanitizeModule ast_ =
-    { ast_ | comments = List.sortBy (\(Node range _) -> positionAsInt range.start) ast_.comments }
+    { comments = List.sortBy (\(Node range _) -> positionAsInt range.start) ast_.comments
+    , moduleDefinition = ast_.moduleDefinition
+    , imports = ast_.imports
+    , declarations = ast_.declarations
+    }
 
 
 positionAsInt : { row : Int, column : Int } -> Int
@@ -100,7 +104,14 @@ isInSourceDirectories (OpaqueProjectModule module_) =
 
 setIsInSourceDirectories : Bool -> OpaqueProjectModule -> OpaqueProjectModule
 setIsInSourceDirectories isInSourceDirectories_ (OpaqueProjectModule module_) =
-    OpaqueProjectModule { module_ | isInSourceDirectories = isInSourceDirectories_ }
+    OpaqueProjectModule
+        { isInSourceDirectories = isInSourceDirectories_
+        , path = module_.path
+        , source = module_.source
+        , moduleName = module_.moduleName
+        , ast = module_.ast
+        , contentHash = module_.contentHash
+        }
 
 
 type alias ProjectModule =

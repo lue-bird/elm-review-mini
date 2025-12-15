@@ -634,7 +634,7 @@ highlightWhiteSpaceDifferences aString bString =
 replaceWhitespace : List String -> List String
 replaceWhitespace lines =
     lines
-        |> List.map (String.replace " " (Ansi.cyan "·"))
+        |> List.map (\line -> String.replace " " (Ansi.cyan "·") line)
         |> String.join (Ansi.cyan "\n")
         |> String.split "\n"
 
@@ -678,7 +678,7 @@ After applying the fixes, """ ++ problem.filePath ++ """ was left unchanged.
 
 Here are the individual edits for the file:
 
-  [ """ ++ String.join "\n  , " (List.map (editToCode "      ") problem.edits) ++ """
+  [ """ ++ String.join "\n  , " (List.map (\edit -> editToCode "      " edit) problem.edits) ++ """
   ]
 
 I expected the fix to make some changes to the source code, but it resulted
@@ -732,7 +732,7 @@ Here is the result of the automatic fixing:
 
 Here are the individual edits for the file:
 
-  [ """ ++ String.join "\n  , " (List.map (editToCode "      ") edits) ++ """
+  [ """ ++ String.join "\n  , " (List.map (\edit -> editToCode "      " edit) edits) ++ """
   ]
 
 This is problematic because fixes are meant to help the user, and applying
@@ -759,7 +759,7 @@ Here is the result of the automatic fixing:
 
 Here are the individual edits for the file:
 
-  [ """ ++ String.join "\n  , " (List.map (editToCode "      ") edits) ++ """
+  [ """ ++ String.join "\n  , " (List.map (\edit -> editToCode "      " edit) edits) ++ """
   ]
 
 This is problematic because fixes are meant to help the user, and applying
@@ -808,7 +808,7 @@ When evaluating the edits for """ ++ fileWithFixIssues ++ """
 I found that some edits were targeting (partially or completely) the same
 section of code:
 
-  """ ++ String.join "\n\n  " (List.map (editToCode "    ") edits) ++ """
+  """ ++ String.join "\n\n  " (List.map (\edit -> editToCode "    " edit) edits) ++ """
 
 The problem is that I can't determine which fix to apply first, and the
 result will be different and potentially invalid based on the order in

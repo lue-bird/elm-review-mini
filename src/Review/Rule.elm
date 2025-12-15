@@ -654,7 +654,7 @@ getValidProjectAndRules project rules =
         |> Result.andThen
             (\validProject ->
                 checkForConfigurationErrors validProject rules []
-                    |> Result.map (Tuple.pair validProject)
+                    |> Result.map (\visitors -> ( validProject, visitors ))
             )
 
 
@@ -1069,7 +1069,7 @@ newModuleRuleSchema name initialModuleContext =
     ModuleRuleSchema
         { name = name
         , initialModuleContext = Just initialModuleContext
-        , moduleContextCreator = initContextCreator (always initialModuleContext)
+        , moduleContextCreator = initContextCreator (\() -> initialModuleContext)
         , moduleDefinitionVisitor = Nothing
         , moduleDocumentationVisitor = Nothing
         , commentsVisitor = Nothing
@@ -1172,13 +1172,13 @@ fromModuleRuleSchema ((ModuleRuleSchema schema) as moduleVisitor) =
             ProjectRuleSchema
                 { name = schema.name
                 , initialProjectContext = initialModuleContext
-                , elmJsonVisitor = compactProjectDataVisitors (Maybe.map .project) schema.elmJsonVisitor
-                , readmeVisitor = compactProjectDataVisitors (Maybe.map .content) schema.readmeVisitor
+                , elmJsonVisitor = compactProjectDataVisitors (\maybeElmJson -> Maybe.map .project maybeElmJson) schema.elmJsonVisitor
+                , readmeVisitor = compactProjectDataVisitors (\maybeReadme -> Maybe.map .content maybeReadme) schema.readmeVisitor
                 , extraFilesVisitor = compactExtraFilesVisitor schema.extraFilesVisitor
                 , extraFileRequest = schema.extraFileRequest
                 , directDependenciesVisitor = compactProjectDataVisitors identity schema.directDependenciesVisitor
                 , dependenciesVisitor = compactProjectDataVisitors identity schema.dependenciesVisitor
-                , moduleVisitors = [ removeExtensibleRecordTypeVariable (always moduleVisitor) ]
+                , moduleVisitors = [ removeExtensibleRecordTypeVariable (\_ -> moduleVisitor) ]
                 , moduleContextCreator = Just (initContextCreator identity)
                 , folder = Nothing
                 , providesFixes = schema.providesFixes
@@ -1198,7 +1198,7 @@ fromModuleRuleSchema ((ModuleRuleSchema schema) as moduleVisitor) =
                 , extraFileRequest = Ok []
                 , directDependenciesVisitor = Nothing
                 , dependenciesVisitor = Nothing
-                , moduleVisitors = [ removeExtensibleRecordTypeVariable (always moduleVisitor) ]
+                , moduleVisitors = [ \moduleSchema -> removeExtensibleRecordTypeVariable (\_ -> moduleVisitor) moduleSchema ]
                 , moduleContextCreator = Just schema.moduleContextCreator
                 , folder = Nothing
                 , providesFixes = schema.providesFixes
@@ -1449,7 +1449,7 @@ mergeModuleVisitorsHelp ruleName_ initialProjectContext moduleContextCreator vis
             ModuleRuleSchema
                 { name = ruleName_
                 , initialModuleContext = Just initialModuleContext
-                , moduleContextCreator = initContextCreator (always initialModuleContext)
+                , moduleContextCreator = initContextCreator (\() -> initialModuleContext)
                 , moduleDefinitionVisitor = Nothing
                 , moduleDocumentationVisitor = Nothing
                 , commentsVisitor = Nothing
@@ -1903,7 +1903,7 @@ withModuleContextUsingContextCreator functions (ProjectRuleSchema schema) =
             | moduleContextCreator = Just functions.fromProjectToModule
             , folder =
                 Just
-                    { fromModuleToProject = mapContextCreator (Tuple.pair []) functions.fromModuleToProject
+                    { fromModuleToProject = mapContextCreator (\projectCtx -> ( [], projectCtx )) functions.fromModuleToProject
                     , foldProjectContexts = functions.foldProjectContexts
                     }
         }
@@ -6377,9 +6377,13 @@ visitExpression node rules =
                 updatedRules =
                     rules
                         |> mutatingMap (\acc -> runVisitor .expressionVisitorOnEnter node acc)
+
+                letInNode : Node Expression.LetBlock
+                letInNode =
+                    Node (Node.range node) letBlock
             in
             List.foldl
-                (visitLetDeclaration (Node (Node.range node) letBlock))
+                (\letDeclaration visitors -> visitLetDeclaration letInNode letDeclaration visitors)
                 updatedRules
                 letBlock.declarations
                 |> visitExpression letBlock.expression
@@ -6556,7 +6560,7 @@ createRuleProjectVisitor schema initialProject ruleData initialCache =
                 , dataExtractVisitor = createDataExtractVisitor schema raiseCache cache
                 , getErrorsForModule = \filePath -> getErrorsForModule cache filePath
                 , getErrors = \() -> errorsFromCache (finalCacheMarker schema.name hidden.ruleData.ruleId cache)
-                , setErrorsForModule = \filePath newErrors -> raiseCache { cache | moduleContexts = Dict.update filePath (Maybe.map (\entry -> ModuleCache.setErrors newErrors entry)) cache.moduleContexts }
+                , setErrorsForModule = \filePath newErrors -> raiseCache { cache | moduleContexts = Dict.update filePath (\maybeEntry -> Maybe.map (\entry -> ModuleCache.setErrors newErrors entry) maybeEntry) cache.moduleContexts }
                 , setErrorsForElmJson = \newErrors -> raiseCache { cache | elmJson = ProjectFileCache.setErrors newErrors cache.elmJson }
                 , setErrorsForReadme = \newErrors -> raiseCache { cache | readme = ProjectFileCache.setErrors newErrors cache.readme }
                 , setErrorsForExtraFiles = \newErrors -> raiseCache { cache | extraFiles = ExtraFile.setErrors newErrors cache.extraFiles }

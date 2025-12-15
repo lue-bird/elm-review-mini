@@ -49,7 +49,7 @@ defaults =
         , logger = Logger.none
         , fixMode = Internal.Disabled
         , suppressions = Dict.empty
-        , ignoreFix = always False
+        , ignoreFix = \_ -> False
         , supportFileRemoval = False
         }
 

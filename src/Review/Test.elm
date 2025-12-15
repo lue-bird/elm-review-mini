@@ -1547,7 +1547,7 @@ getCodeAtLocationInSourceCode sourceCode =
     \{ start, end } ->
         if start.row == end.row then
             Array.get (start.row - 1) lines
-                |> Maybe.map (Unicode.slice (start.column - 1) (end.column - 1))
+                |> Maybe.map (\startLine -> Unicode.slice (start.column - 1) (end.column - 1) startLine)
 
         else
             let
@@ -2198,7 +2198,7 @@ getExpectedFixedCodeThroughFilePathOrModuleName filePath moduleName expectedFixe
                 |> Maybe.andThen
                     (\fixTargetModuleName ->
                         Dict.get fixTargetModuleName expectedFixed
-                            |> Maybe.map (Tuple.pair fixTargetModuleName)
+                            |> Maybe.map (\fix -> ( fixTargetModuleName, fix ))
                     )
 
 
@@ -2265,7 +2265,7 @@ checkSourceIsAsExpected expectedFixedSource fixedSource error_ =
 
 trimRightOnEveryLine : String -> String
 trimRightOnEveryLine source =
-    Regex.replace whitespaceBeforeNewLine (always "") source
+    Regex.replace whitespaceBeforeNewLine (\_ -> "") source
 
 
 whitespaceBeforeNewLine : Regex

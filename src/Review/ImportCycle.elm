@@ -23,11 +23,11 @@ findCycle modules graph edge =
     let
         initialCycle : List (Graph.Node String)
         initialCycle =
-            Graph.guidedBfs Graph.alongIncomingEdges (visitorDiscoverCycle edge.to) [ edge.from ] [] graph
+            Graph.guidedBfs Graph.alongIncomingEdges (\path distance acc -> visitorDiscoverCycle edge.to path distance acc) [ edge.from ] [] graph
                 |> Tuple.first
     in
     findSmallerCycle graph initialCycle initialCycle
-        |> List.map (filePathToModuleName modules)
+        |> List.map (\node -> filePathToModuleName modules node)
 
 
 filePathToModuleName : Dict String OpaqueProjectModule -> { a | label : String } -> String
@@ -50,7 +50,11 @@ findSmallerCycle graph currentBest nodesToVisit =
             let
                 cycle : List (Graph.Node n)
                 cycle =
-                    Graph.guidedBfs Graph.alongIncomingEdges (visitorDiscoverCycle startingNode.id) [ startingNode.id ] [] graph
+                    Graph.guidedBfs Graph.alongIncomingEdges
+                        (\path distance acc -> visitorDiscoverCycle startingNode.id path distance acc)
+                        [ startingNode.id ]
+                        []
+                        graph
                         |> Tuple.first
 
                 newBest : List (Graph.Node n)

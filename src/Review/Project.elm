@@ -195,7 +195,20 @@ addParsedModule { path, source, ast } project =
 
 addModuleToProject : ProjectModule.OpaqueProjectModule -> Project -> Project
 addModuleToProject module_ (Internal.Project project) =
-    Internal.Project { project | modules = Dict.insert (ProjectModule.path module_) module_ project.modules }
+    Internal.Project
+        { modules = Dict.insert (ProjectModule.path module_) module_ project.modules
+
+        --
+        , modulesThatFailedToParse = project.modulesThatFailedToParse
+        , elmJson = project.elmJson
+        , readme = project.readme
+        , extraFiles = project.extraFiles
+        , extraFilesContentHashes = project.extraFilesContentHashes
+        , dependencies = project.dependencies
+        , moduleGraph = project.moduleGraph
+        , sourceDirectories = project.sourceDirectories
+        , cache = project.cache
+        }
 
 
 addFileThatFailedToParse : { path : String, source : String } -> Project -> Project
