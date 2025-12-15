@@ -1756,7 +1756,7 @@ checkGlobalErrorsMatch project originalNumberOfExpectedErrors params =
         [] ->
             case params.actual of
                 firstActual :: restOfActual ->
-                    case List.head (List.reverse params.needSecondPass) of
+                    case listLast params.needSecondPass of
                         Just notFoundError ->
                             failBecauseExpectedErrorCouldNotBeFound notFoundError ( firstActual, restOfActual )
 
@@ -1771,6 +1771,26 @@ checkGlobalErrorsMatch project originalNumberOfExpectedErrors params =
                     else
                         -- We expected more errors
                         Expect.fail <| FailureMessage.expectedMoreGlobalErrors originalNumberOfExpectedErrors (List.map .message params.needSecondPass)
+
+
+listLast : List a -> Maybe a
+listLast list =
+    case list of
+        [] ->
+            Nothing
+
+        head :: tail ->
+            Just (listFilledLast head tail)
+
+
+listFilledLast : a -> List a -> a
+listFilledLast head tail =
+    case tail of
+        [] ->
+            head
+
+        tailHead :: tailTail ->
+            listFilledLast tailHead tailTail
 
 
 findAndRemove : (a -> Bool) -> List a -> Maybe ( a, List a )
