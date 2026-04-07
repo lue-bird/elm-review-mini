@@ -2301,10 +2301,9 @@ toReviewResult review project =
             project.elmJson.project |> ElmJson.LocalExtra.sourceDirectories
 
         pathIsModule : String -> Bool
-        pathIsModule =
-            \path ->
-                (path |> String.endsWith ".elm")
-                    && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
+        pathIsModule path =
+            (path |> String.endsWith ".elm")
+                && (sourceDirectories |> List.any (\dir -> path |> String.startsWith dir))
 
         ( moduleFiles, extraFiles ) =
             project.files
