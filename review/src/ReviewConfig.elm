@@ -190,58 +190,57 @@ config =
 
 
 toCamelCase : String -> String
-toCamelCase =
-    \name ->
-        let
-            camelFolded : { camelized : String, upperCaseNextRequired : Maybe { underscores : Int } }
-            camelFolded =
-                name
-                    |> String.foldl
-                        (\char soFar ->
-                            if char |> Char.isUpper then
-                                { upperCaseNextRequired = Nothing
-                                , camelized = soFar.camelized ++ (char |> String.fromChar)
-                                }
+toCamelCase name =
+    let
+        camelFolded : { camelized : String, upperCaseNextRequired : Maybe { underscores : Int } }
+        camelFolded =
+            name
+                |> String.foldl
+                    (\char soFar ->
+                        if char |> Char.isUpper then
+                            { upperCaseNextRequired = Nothing
+                            , camelized = soFar.camelized ++ (char |> String.fromChar)
+                            }
 
-                            else if char |> Char.isLower then
-                                { upperCaseNextRequired = Nothing
-                                , camelized =
-                                    case soFar.upperCaseNextRequired of
-                                        Just _ ->
-                                            soFar.camelized ++ (char |> Char.toUpper |> String.fromChar)
+                        else if char |> Char.isLower then
+                            { upperCaseNextRequired = Nothing
+                            , camelized =
+                                case soFar.upperCaseNextRequired of
+                                    Just _ ->
+                                        soFar.camelized ++ (char |> Char.toUpper |> String.fromChar)
 
-                                        Nothing ->
-                                            soFar.camelized ++ (char |> String.fromChar)
-                                }
+                                    Nothing ->
+                                        soFar.camelized ++ (char |> String.fromChar)
+                            }
 
-                            else
-                                case char of
-                                    '_' ->
-                                        { upperCaseNextRequired =
-                                            Just
-                                                { underscores =
-                                                    case soFar.upperCaseNextRequired of
-                                                        Nothing ->
-                                                            1
+                        else
+                            case char of
+                                '_' ->
+                                    { upperCaseNextRequired =
+                                        Just
+                                            { underscores =
+                                                case soFar.upperCaseNextRequired of
+                                                    Nothing ->
+                                                        1
 
-                                                        Just trail ->
-                                                            trail.underscores + 1
-                                                }
-                                        , camelized = soFar.camelized
-                                        }
+                                                    Just trail ->
+                                                        trail.underscores + 1
+                                            }
+                                    , camelized = soFar.camelized
+                                    }
 
-                                    nonLetterNonUnderscoreChar ->
-                                        { upperCaseNextRequired = Nothing
-                                        , camelized = soFar.camelized ++ (nonLetterNonUnderscoreChar |> String.fromChar)
-                                        }
-                        )
-                        { camelized = ""
-                        , upperCaseNextRequired = Nothing
-                        }
-        in
-        case camelFolded.upperCaseNextRequired of
-            Nothing ->
-                camelFolded.camelized
+                                nonLetterNonUnderscoreChar ->
+                                    { upperCaseNextRequired = Nothing
+                                    , camelized = soFar.camelized ++ (nonLetterNonUnderscoreChar |> String.fromChar)
+                                    }
+                    )
+                    { camelized = ""
+                    , upperCaseNextRequired = Nothing
+                    }
+    in
+    case camelFolded.upperCaseNextRequired of
+        Nothing ->
+            camelFolded.camelized
 
-            Just trail ->
-                camelFolded.camelized ++ String.repeat trail.underscores "_"
+        Just trail ->
+            camelFolded.camelized ++ String.repeat trail.underscores "_"

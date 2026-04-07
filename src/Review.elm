@@ -2085,14 +2085,13 @@ type ExpectedErrorRange
 
 
 expectationsViolated : List String -> Expect.Expectation
-expectationsViolated =
-    \errors ->
-        case errors of
-            [] ->
-                Expect.pass
+expectationsViolated errors =
+    case errors of
+        [] ->
+            Expect.pass
 
-            error0 :: error1Up ->
-                Expect.fail ((error0 :: error1Up) |> String.join "\n\n\n\n")
+        error0 :: error1Up ->
+            Expect.fail ((error0 :: error1Up) |> String.join "\n\n\n\n")
 
 
 {-| Run a `Review` on a project, matching all reported module errors, `elm.json` errors and extra file errors
@@ -2231,50 +2230,48 @@ test config =
 
 
 multiLineStringNormalize : String -> String
-multiLineStringNormalize =
-    \string ->
-        case string |> String.lines of
-            [] ->
-                ""
+multiLineStringNormalize string =
+    case string |> String.lines of
+        [] ->
+            ""
 
-            [ onlyLine ] ->
-                onlyLine
+        [ onlyLine ] ->
+            onlyLine
 
-            firstLine :: secondLine :: thirdLineUp ->
-                case firstLine |> String.trim of
-                    "" ->
-                        let
-                            indentationToRemove : Int
-                            indentationToRemove =
-                                secondLine |> lineIndentation
-                        in
-                        (secondLine :: thirdLineUp)
-                            |> List.map (String.dropLeft indentationToRemove)
-                            |> String.join "\n"
+        firstLine :: secondLine :: thirdLineUp ->
+            case firstLine |> String.trim of
+                "" ->
+                    let
+                        indentationToRemove : Int
+                        indentationToRemove =
+                            secondLine |> lineIndentation
+                    in
+                    (secondLine :: thirdLineUp)
+                        |> List.map (String.dropLeft indentationToRemove)
+                        |> String.join "\n"
 
-                    _ ->
-                        string
+                _ ->
+                    string
 
 
 lineIndentation : String -> Int
-lineIndentation =
-    \line ->
-        line
-            |> String.foldl
-                (\char soFar ->
-                    if soFar.done then
-                        soFar
+lineIndentation line =
+    line
+        |> String.foldl
+            (\char soFar ->
+                if soFar.done then
+                    soFar
 
-                    else
-                        case char of
-                            ' ' ->
-                                { indentation = soFar.indentation + 1, done = False }
+                else
+                    case char of
+                        ' ' ->
+                            { indentation = soFar.indentation + 1, done = False }
 
-                            _ ->
-                                { indentation = soFar.indentation, done = True }
-                )
-                { indentation = 0, done = False }
-            |> .indentation
+                        _ ->
+                            { indentation = soFar.indentation, done = True }
+            )
+            { indentation = 0, done = False }
+        |> .indentation
 
 
 toReviewResult :
@@ -2628,43 +2625,42 @@ unknownFilesInExpectedErrors path =
 
 
 expectErrors : FastDict.Dict String String -> List { path : String, errors : List ExpectedFileError } -> (ReviewResult -> Expect.Expectation)
-expectErrors sourceByPath expectationsList =
-    \reviewResult ->
-        case reviewResult of
-            Err errors ->
-                expectationsViolated errors
+expectErrors sourceByPath expectationsList reviewResult =
+    case reviewResult of
+        Err errors ->
+            expectationsViolated errors
 
-            Ok runResults ->
-                let
-                    expectations : FastDict.Dict String (List ExpectedFileError)
-                    expectations =
-                        expectationsList
-                            |> List.foldl
-                                (\fileExpectation soFar ->
-                                    case fileExpectation.errors of
-                                        [] ->
-                                            soFar
+        Ok runResults ->
+            let
+                expectations : FastDict.Dict String (List ExpectedFileError)
+                expectations =
+                    expectationsList
+                        |> List.foldl
+                            (\fileExpectation soFar ->
+                                case fileExpectation.errors of
+                                    [] ->
+                                        soFar
 
-                                        error0 :: errors1Up ->
-                                            soFar |> FastDict.insert fileExpectation.path (error0 :: errors1Up)
-                                )
-                                FastDict.empty
-                in
-                Expect.all
-                    (runResults
-                        |> List.map
-                            (\runResult () ->
-                                checkAllErrorsMatch
-                                    { sourceByPath = sourceByPath
-                                    , runResult = runResult
-                                    , unorderedExpectedErrors =
-                                        expectations
-                                            |> FastDict.get runResult.path
-                                            |> Maybe.withDefault []
-                                    }
+                                    error0 :: errors1Up ->
+                                        soFar |> FastDict.insert fileExpectation.path (error0 :: errors1Up)
                             )
-                    )
-                    ()
+                            FastDict.empty
+            in
+            Expect.all
+                (runResults
+                    |> List.map
+                        (\runResult () ->
+                            checkAllErrorsMatch
+                                { sourceByPath = sourceByPath
+                                , runResult = runResult
+                                , unorderedExpectedErrors =
+                                    expectations
+                                        |> FastDict.get runResult.path
+                                        |> Maybe.withDefault []
+                                }
+                        )
+                )
+                ()
 
 
 checkAllErrorsMatch :
@@ -2867,18 +2863,17 @@ expectedErrorForMessage :
         , range : ExpectedErrorRange
     }
     -> { message : String, details : List String, under : String }
-expectedErrorForMessage =
-    \expectedError ->
-        { message = expectedError.message
-        , details = expectedError.details
-        , under =
-            case expectedError.range of
-                ExpectUnder section ->
-                    section
+expectedErrorForMessage expectedError =
+    { message = expectedError.message
+    , details = expectedError.details
+    , under =
+        case expectedError.range of
+            ExpectUnder section ->
+                section
 
-                ExpectUnderExactly underExactly ->
-                    underExactly.section
-        }
+            ExpectUnderExactly underExactly ->
+                underExactly.section
+    }
 
 
 checkMessageAppearsUnder :

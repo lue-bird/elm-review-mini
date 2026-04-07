@@ -114,75 +114,72 @@ exampleLine =
 
 
 sourceExtractInRangeFold : Elm.Syntax.Range.Range -> (String -> String)
-sourceExtractInRangeFold range =
-    \string ->
-        string
-            |> String.foldl
-                (\char soFar ->
-                    let
-                        isInRange : Bool
-                        isInRange =
-                            (soFar.row >= range.start.row)
-                                && (soFar.row <= range.start.row)
-                    in
-                    case char of
-                        '\n' ->
-                            { row = soFar.row + 1
-                            , lines =
-                                if isInRange then
-                                    "" :: soFar.lines
-
-                                else
-                                    soFar.lines
-                            }
-
-                        charNonNewLine ->
+sourceExtractInRangeFold range string =
+    string
+        |> String.foldl
+            (\char soFar ->
+                let
+                    isInRange : Bool
+                    isInRange =
+                        (soFar.row >= range.start.row)
+                            && (soFar.row <= range.start.row)
+                in
+                case char of
+                    '\n' ->
+                        { row = soFar.row + 1
+                        , lines =
                             if isInRange then
-                                { row = soFar.row
-                                , lines =
-                                    case soFar.lines of
-                                        [] ->
-                                            [ charNonNewLine |> String.fromChar ]
-
-                                        currentLine :: linesBefore ->
-                                            -- TODO either append instead or reverse once complete
-                                            String.cons charNonNewLine currentLine :: linesBefore
-                                }
+                                "" :: soFar.lines
 
                             else
-                                soFar
-                )
-                { row = 1, lines = [] }
-            |> .lines
-            |> List.map String.reverse
-            |> List.reverse
-            |> listLastMap (\lastLine -> lastLine |> unicodeLeft range.end.column)
-            |> String.join "\n"
-            |> unicodeDropLeft (range.start.column - 1)
+                                soFar.lines
+                        }
+
+                    charNonNewLine ->
+                        if isInRange then
+                            { row = soFar.row
+                            , lines =
+                                case soFar.lines of
+                                    [] ->
+                                        [ charNonNewLine |> String.fromChar ]
+
+                                    currentLine :: linesBefore ->
+                                        -- TODO either append instead or reverse once complete
+                                        String.cons charNonNewLine currentLine :: linesBefore
+                            }
+
+                        else
+                            soFar
+            )
+            { row = 1, lines = [] }
+        |> .lines
+        |> List.map String.reverse
+        |> List.reverse
+        |> listLastMap (\lastLine -> lastLine |> unicodeLeft range.end.column)
+        |> String.join "\n"
+        |> unicodeDropLeft (range.start.column - 1)
 
 
 sourceExtractInRangeDropTake : Elm.Syntax.Range.Range -> (String -> String)
-sourceExtractInRangeDropTake range =
-    \string ->
-        string
-            |> String.split "\n"
-            |> List.drop (range.start.row - 1)
-            |> List.take (range.end.row - range.start.row + 1)
-            |> listLastMap (\lastLine -> lastLine |> unicodeLeft range.end.column)
-            |> String.join "\n"
-            |> unicodeDropLeft (range.start.column - 1)
+sourceExtractInRangeDropTake range string =
+    string
+        |> String.split "\n"
+        |> List.drop (range.start.row - 1)
+        |> List.take (range.end.row - range.start.row + 1)
+        |> listLastMap (\lastLine -> lastLine |> unicodeLeft range.end.column)
+        |> String.join "\n"
+        |> unicodeDropLeft (range.start.column - 1)
 
 
 sourceExtractInRangeTakeDrop : Elm.Syntax.Range.Range -> (String -> String)
-sourceExtractInRangeTakeDrop range =
-    \string ->
-        string
-            |> String.split "\n"
-            |> List.take range.end.row
-            |> List.drop (range.start.row - 1)
-            |> listLastMap (\lastLine -> lastLine |> unicodeLeft range.end.column)
-            |> String.join "\n"
-            |> unicodeDropLeft (range.start.column - 1)
+sourceExtractInRangeTakeDrop range string =
+    string
+        |> String.split "\n"
+        |> List.take range.end.row
+        |> List.drop (range.start.row - 1)
+        |> listLastMap (\lastLine -> lastLine |> unicodeLeft range.end.column)
+        |> String.join "\n"
+        |> unicodeDropLeft (range.start.column - 1)
 
 
 listLastMap : (a -> a) -> (List a -> List a)
@@ -196,19 +193,18 @@ listLastMap mapper lines =
 
 
 listElementAtNaturalIndex : Int -> (List a -> Maybe a)
-listElementAtNaturalIndex index =
-    \list ->
-        case list of
-            [] ->
-                Nothing
+listElementAtNaturalIndex index list =
+    case list of
+        [] ->
+            Nothing
 
-            head :: tail ->
-                case index of
-                    0 ->
-                        head |> Just
+        head :: tail ->
+            case index of
+                0 ->
+                    head |> Just
 
-                    indexAtLeast1 ->
-                        listElementAtNaturalIndex (indexAtLeast1 - 1) tail
+                indexAtLeast1 ->
+                    listElementAtNaturalIndex (indexAtLeast1 - 1) tail
 
 
 sourceExtractInRangeArray : Elm.Syntax.Range.Range -> String -> String
@@ -549,13 +545,12 @@ boolMorph =
 
 
 bytesToUnsignedInt8List : Bytes -> List Int
-bytesToUnsignedInt8List =
-    \bytes ->
-        bytes
-            |> Bytes.Decode.decode
-                (unsignedInt8ListBytesDecoder (bytes |> Bytes.width))
-            |> -- above decoder should never fail
-               Maybe.withDefault []
+bytesToUnsignedInt8List bytes =
+    bytes
+        |> Bytes.Decode.decode
+            (unsignedInt8ListBytesDecoder (bytes |> Bytes.width))
+        |> -- above decoder should never fail
+            Maybe.withDefault []
 
 
 unsignedInt8ListBytesDecoder : Int -> Bytes.Decode.Decoder (List Int)
@@ -573,9 +568,8 @@ unsignedInt8ListBytesDecoder length =
 
 
 bytesFromUnsignedInt8List : List Int -> Bytes
-bytesFromUnsignedInt8List =
-    \uint8s ->
-        uint8s
-            |> List.map Bytes.Encode.unsignedInt8
-            |> Bytes.Encode.sequence
-            |> Bytes.Encode.encode
+bytesFromUnsignedInt8List uint8s =
+    uint8s
+        |> List.map Bytes.Encode.unsignedInt8
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode

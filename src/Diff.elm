@@ -117,7 +117,7 @@ arrayTestDiff arrA arrB =
             (bLength - aLength)
             aLength
             0
-            (Array.initialize (aLength + bLength + 1) (\_ -> []))
+            (Array.repeat (aLength + bLength + 1) [])
         )
 
 

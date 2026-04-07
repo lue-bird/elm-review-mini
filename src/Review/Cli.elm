@@ -415,7 +415,7 @@ program config =
                         )
                     |> Cmd.batch
                 )
-        , subscriptions = \state -> state |> listen config
+        , subscriptions = \_ -> listen config
         }
 
 
@@ -556,8 +556,8 @@ reactToEvent config event state =
                             ]
                     )
 
-                unexpectedState ->
-                    ( unexpectedState, [] )
+                WaitingForInitialFiles ->
+                    ( WaitingForInitialFiles, [] )
 
         ModuleAddedOrChanged moduleAddedOrChangedPathAndSource ->
             case state of
@@ -632,8 +632,8 @@ reactToEvent config event state =
                                     ]
                             )
 
-                unexpectedState ->
-                    ( unexpectedState, [] )
+                WaitingForInitialFiles ->
+                    ( WaitingForInitialFiles, [] )
 
         ModuleRemoved moduleRemoved ->
             case state of
@@ -699,8 +699,8 @@ reactToEvent config event state =
                             ]
                     )
 
-                unexpectedState ->
-                    ( unexpectedState, [] )
+                WaitingForInitialFiles ->
+                    ( WaitingForInitialFiles, [] )
 
         ExtraFileAddedOrChanged fileAddedOrChanged ->
             case state of
@@ -766,8 +766,8 @@ reactToEvent config event state =
                             ]
                     )
 
-                unexpectedState ->
-                    ( unexpectedState, [] )
+                WaitingForInitialFiles ->
+                    ( WaitingForInitialFiles, [] )
 
         ExtraFileRemoved fileRemoved ->
             case state of
@@ -833,8 +833,8 @@ reactToEvent config event state =
                             ]
                     )
 
-                unexpectedState ->
-                    ( unexpectedState, [] )
+                WaitingForInitialFiles ->
+                    ( WaitingForInitialFiles, [] )
 
         JsEventJsonFailedToDecode jsonDecodeError ->
             ( state
@@ -849,12 +849,15 @@ reactToEvent config event state =
 failedToParsePathsMessage : List String -> String
 failedToParsePathsMessage pathsThatFailedToParse =
     case pathsThatFailedToParse of
+        [] ->
+            "weird bug in elm-review-mini: failed to parse paths but none were recorded"
+
         [ onlyPathThatFailedToParse ] ->
             "module at path "
                 ++ onlyPathThatFailedToParse
                 ++ " failed to parse"
 
-        nonSinglePathsThatFailedToParse ->
+        (_ :: _ :: _) as nonSinglePathsThatFailedToParse ->
             "modules at paths "
                 ++ (nonSinglePathsThatFailedToParse |> String.join " and ")
                 ++ " failed to parse"
@@ -1092,8 +1095,8 @@ listen :
     , toJs : Json.Encode.Value -> Cmd Never
     , fromJs : (Json.Encode.Value -> ProgramEvent) -> Sub ProgramEvent
     }
-    -> (ProgramState -> Sub ProgramEvent)
-listen config _ =
+    -> Sub ProgramEvent
+listen config =
     config.fromJs
         (\fromJs ->
             case fromJs |> Json.Decode.decodeValue eventJsonDecoder of
