@@ -313,7 +313,7 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                 [ Review.inspectModule
                     (\moduleData ->
                         let
-                            importedModuleNames : Dict Elm.Syntax.ModuleName.ModuleName Elm.Syntax.Range.Range
+                            importedModuleNames : FastDict.Dict Elm.Syntax.ModuleName.ModuleName Elm.Syntax.Range.Range
                             importedModuleNames =
                                 moduleData.syntax.imports
                                     |> List.map
@@ -323,15 +323,15 @@ An example review that forbids importing both `Element` (`elm-ui`) and
                                     |> FastDict.fromList
                         in
                         case
-                            ( importedModuleNames |> Dict.get [ "Element" ]
-                            , importedModuleNames |> Dict.get [ "Html", "Styled" ]
+                            ( importedModuleNames |> FastDict.get [ "Element" ]
+                            , importedModuleNames |> FastDict.get [ "Html", "Styled" ]
                             )
                         of
                             ( Just elementImportRange, Just _ ) ->
                                 FastDict.singleton moduleData.path elementImportRange
 
-                        else
-                            FastDict.empty
+                            _ ->
+                                FastDict.empty
                     )
                 ]
             , knowledgeMerge = \a b -> FastDict.union a b
