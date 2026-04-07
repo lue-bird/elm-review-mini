@@ -17,6 +17,7 @@ import Docs.ReviewLinksAndSections
 import Docs.UpToDateReadmeLinks
 import EqualsCaseable
 import NoAlways
+import NoCatchAllForSpecificRemainingPatterns
 import NoDebug.Log
 import NoDebug.TodoOrToString
 import NoDeprecated
@@ -47,6 +48,7 @@ import NoUnused.Patterns
 import NoUnused.Variables
 import NoUnusedPorts
 import OnlyAllSingleUseTypeVarsEndWith_
+import Review.Action
 import Review.Documentation.CodeSnippet
 import Review.ImportSimple
 import Review.OpaqueType
@@ -76,7 +78,7 @@ config =
         }
     , Docs.UpToDateReadmeLinks.rule
 
-    -- ## simplify
+    -- ## simplify/refactor
     , NoUnused.Dependencies.rule
     , NoUnused.Exports.rule
     , NoUnused.Parameters.rule
@@ -85,20 +87,7 @@ config =
     , NoUnusedPorts.rule
     , Simplify.rule
         (Simplify.defaults |> Simplify.expectNaN)
-    , NoSinglePatternCase.rule
-        (NoSinglePatternCase.fixInArgument
-            |> NoSinglePatternCase.ifAsPatternRequired
-                (NoSinglePatternCase.fixInLetInstead
-                    |> NoSinglePatternCase.andIfNoLetExists
-                        NoSinglePatternCase.createNewLet
-                )
-        )
-
-    -- ## sort
-    , NoUnsortedTopLevelDeclarations.rule
-        (NoUnsortedTopLevelDeclarations.sortTopLevelDeclarations
-            |> NoUnsortedTopLevelDeclarations.glueHelpersAfter
-        )
+    , Review.Action.rule
 
     -- ## limit
     , NoUnused.CustomTypeConstructors.rule []
@@ -154,14 +143,6 @@ config =
                   ]
                     |> String.concat
                 ]
-      , ReviewPipelineStyles.parentheticalApplicationPipelines
-            |> ReviewPipelineStyles.forbid
-            |> ReviewPipelineStyles.that
-                (ReviewPipelineStyles.Predicates.haveAnyNonInputStepThatIs
-                    ReviewPipelineStyles.Predicates.aSemanticallyInfixFunction
-                )
-            |> ReviewPipelineStyles.andTryToFixThemBy ReviewPipelineStyles.Fixes.convertingToRightPizza
-            |> ReviewPipelineStyles.andCallThem "parenthetical application of a semantically-infix function"
       ]
         |> ReviewPipelineStyles.rule
     , UseCamelCase.rule
@@ -174,7 +155,7 @@ config =
     , OnlyAllSingleUseTypeVarsEndWith_.rule
     , NoRecordAliasConstructor.rule
     , NoExposingEverything.rule
-    , NoForbiddenWords.rule forbiddenWords
+    , NoForbiddenWords.rule [ "REPLACEME", "TODO", "- []" ]
     , NoMissingTypeAnnotation.rule
     , NoMissingTypeAnnotationInLetIn.rule
     , NoMissingTypeExpose.rule
@@ -184,6 +165,8 @@ config =
     , NoDebug.TodoOrToString.rule
         |> Review.Rule.ignoreErrorsForDirectories [ "tests/" ]
     , VariablesBetweenCaseOf.AccessInCases.forbid
+        |> Review.Rule.ignoreErrorsForFiles 
+            [ "src/ElmSyntaxToRust.elm", "src/Print.elm" ]
     , EqualsCaseable.forbid EqualsCaseable.Everywhere
     , NoDeprecated.rule NoDeprecated.defaults
     , NoPrematureLetComputation.rule
@@ -197,16 +180,13 @@ config =
     , NoUnnecessaryTrailingUnderscore.rule
     , NoUnsafeDivision.rule
     , Review.Pattern.Record.forbid
-    , Review.Pattern.As.forbid
+    --, Review.Pattern.As.forbid
     , Review.PhantomType.forbid
     , Review.OpaqueType.forbid
+    , NoCatchAllForSpecificRemainingPatterns.rule
+        { onlyReportCatchAllIfEquivalentToSinglePattern = False }
     ]
-        |> List.map (Review.Rule.ignoreErrorsForDirectories [ "VerifyExamples/" ])
-
-
-forbiddenWords : List String
-forbiddenWords =
-    [ "REPLACEME", "TODO", "- []" ]
+        |> List.map (Review.Rule.ignoreErrorsForDirectories [ "tests/VerifyExamples/" ])
 
 
 toCamelCase : String -> String
