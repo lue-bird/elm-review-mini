@@ -46,7 +46,19 @@ declarationToTyposInStrings (Elm.Syntax.Node.Node _ declaration) =
                 |> .expression
                 |> expressionToTyposInStrings
 
-        _ ->
+        Elm.Syntax.Declaration.AliasDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.PortDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.InfixDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.Destructuring _ _ ->
             []
 
 

@@ -1360,7 +1360,19 @@ moduleExposes syntaxFile =
                                                 )
                                         )
 
-                            _ ->
+                            Elm.Syntax.Declaration.FunctionDeclaration _ ->
+                                soFar
+
+                            Elm.Syntax.Declaration.AliasDeclaration _ ->
+                                soFar
+
+                            Elm.Syntax.Declaration.PortDeclaration _ ->
+                                soFar
+
+                            Elm.Syntax.Declaration.InfixDeclaration _ ->
+                                soFar
+
+                            Elm.Syntax.Declaration.Destructuring _ _ ->
                                 soFar
                     )
                     FastDict.empty
@@ -2449,36 +2461,30 @@ toReviewResult review project =
 moduleFailedToParse : { path : String } -> String
 moduleFailedToParse file =
     failureMessage "module failed to parse"
-        ([ """I could not parse the provided elm module source code at path """
-         , file.path
-         , ".\n\n"
-         , """Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)"""
-         ]
-            |> String.concat
+        ("""I could not parse the provided elm module source code at path """
+            ++ file.path
+            ++ ".\n\n"
+            ++ """Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)"""
         )
 
 
 dependencyElmJsonParsingFailure : Json.Decode.Error -> String
 dependencyElmJsonParsingFailure jsonDecodeError =
     failureMessage "dependency elm.json failed to parse"
-        ([ """I could not parse a provided dependency elm.json source: """
-         , jsonDecodeError |> Json.Decode.errorToString
-         , "\n\n"
-         , """Hint: Maybe you copy pasted the wrong file?"""
-         ]
-            |> String.concat
+        ("""I could not parse a provided dependency elm.json source: """
+            ++ (jsonDecodeError |> Json.Decode.errorToString)
+            ++ "\n\n"
+            ++ """Hint: Maybe you copy pasted the wrong file?"""
         )
 
 
 dependencyDocsJsonParsingFailure : Json.Decode.Error -> String
 dependencyDocsJsonParsingFailure jsonDecodeError =
     failureMessage "dependency docs.json failed to parse"
-        ([ """I could not parse a provided dependency docs.json source: """
-         , jsonDecodeError |> Json.Decode.errorToString
-         , "\n\n"
-         , """Hint: Maybe you copy pasted the wrong file?"""
-         ]
-            |> String.concat
+        ("""I could not parse a provided dependency docs.json source: """
+            ++ (jsonDecodeError |> Json.Decode.errorToString)
+            ++ "\n\n"
+            ++ """Hint: Maybe you copy pasted the wrong file?"""
         )
 
 
@@ -2583,44 +2589,38 @@ invalidExpectedErrorsIn project expectedErrors =
 elmJsonFixedSourceParsingFailure : Json.Decode.Error -> { message : String, details : List String } -> String
 elmJsonFixedSourceParsingFailure decodeError errorInfo =
     failureMessage "expected fixed elm.json failed to parse"
-        ([ """I could not decode the expected fixed elm.json for the error with the message
+        ("""I could not decode the expected fixed elm.json for the error with the message
 
   """
-         , errorInfo.message
-         , """"
+            ++ errorInfo.message
+            ++ """"
 
 because """
-         , decodeError |> Json.Decode.errorToString
-         ]
-            |> String.concat
+            ++ (decodeError |> Json.Decode.errorToString)
         )
 
 
 moduleFixedSourceParsingFailure : { path : String, errorInfo : { message : String, details : List String } } -> String
 moduleFixedSourceParsingFailure info =
     failureMessage "expected fixed module failed to parse"
-        ([ "I could not parse the provided expected fixed elm module source code at path "
-         , info.path
-         , """ for the error with the message
+        ("I could not parse the provided expected fixed elm module source code at path "
+            ++ info.path
+            ++ """ for the error with the message
 
   """
-         , info.errorInfo.message
-         , """
+            ++ info.errorInfo.message
+            ++ """
 
 Hint: Maybe you forgot to add the module definition at the top, like module A exposing (a)?"""
-         ]
-            |> String.concat
         )
 
 
 unknownFilesInExpectedErrors : String -> String
 unknownFilesInExpectedErrors path =
     failureMessage "expected errors use unknown path"
-        ([ """I expected errors for the file at path """
-         , path
-         , """ but I couldn't find an entry with its source in the test files field with that path."""
-         ]
-            |> String.concat
+        ("""I expected errors for the file at path """
+            ++ path
+            ++ """ but I couldn't find an entry with its source in the test files field with that path."""
         )
 
 
@@ -2901,7 +2901,14 @@ checkMessageAppearsUnder toCheck =
                         [ _ ] ->
                             Expect.pass
 
-                        occurrencesInSourceCode ->
+                        [] ->
+                            Expect.fail
+                                (locationIsMissingInSourceCode
+                                    toCheck.reviewError
+                                    under
+                                )
+
+                        (_ :: _ :: _) as occurrencesInSourceCode ->
                             Expect.fail
                                 (locationIsAmbiguousInSourceCode toCheck.source
                                     toCheck.reviewError
@@ -2940,98 +2947,120 @@ checkMessageAppearsUnder toCheck =
 underMismatch : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> { under : String, errorSourceInRange : String } -> String
 underMismatch error range =
     failureMessage "error location doesn't match"
-        ([ """I found an error with the message
+        ("""I found an error with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 and I was expecting it to be under
 
   """
-         , range.under |> formatSourceCode
-         , """
+            ++ (range.under |> formatSourceCode)
+            ++ """
 
 but I found it under
 
   """
-         , range.errorSourceInRange |> formatSourceCode
-         , """
+            ++ (range.errorSourceInRange |> formatSourceCode)
+            ++ """
 
 Hint: Maybe you're passing the range of a wrong node to the review error?"""
-         ]
-            |> String.concat
         )
 
 
 wrongLocation : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> Elm.Syntax.Range.Range -> String -> String
 wrongLocation error range under =
     failureMessage "exact error location doesn't match"
-        ([ """I was looking for the error with the message
+        ("""I was looking for the error with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 under the code
 
   """
-         , under |> formatSourceCode
-         , """
+            ++ (under |> formatSourceCode)
+            ++ """
 
 and I found it, but the exact location you specified is not the one I found.
 
 I was expecting the error at
 
   """
-         , range.start |> locationToCodeString
-         , """
+            ++ (range.start |> locationToCodeString)
+            ++ """
 
 but I found it at
 
   """
-         , error.range.start |> locationToCodeString
-         ]
-            |> String.concat
+            ++ (error.range.start |> locationToCodeString)
+        )
+
+
+locationIsMissingInSourceCode : { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String -> String
+locationIsMissingInSourceCode error under =
+    failureMessage "expected error location is missing"
+        ("""The exact location where the error appears isn't present in the source code.
+
+You are looking for the error message
+
+  """
+            ++ error.message
+            ++ """
+
+and expecting to see it under
+
+  """
+            ++ (under |> formatSourceCode)
+            ++ """
+
+I found no locations where that code appeared.
+
+Hint: I found the error at
+
+  """
+            ++ (error.range.start |> locationToCodeString)
+            ++ "\n"
         )
 
 
 locationIsAmbiguousInSourceCode : String -> { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String -> List Int -> String
 locationIsAmbiguousInSourceCode sourceCode error under occurrencesInSourceCode =
     failureMessage "expected error location is ambiguous"
-        ([ """The exact location where the error appears is ambiguous.
+        ("""The exact location where the error appears is ambiguous.
 
 You are looking for the error message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 and expecting to see it under
 
   """
-         , under |> formatSourceCode
-         , """
+            ++ (under |> formatSourceCode)
+            ++ """
 
 I found """
-         , occurrencesInSourceCode |> List.length |> String.fromInt
-         , """ locations where that code appeared. Switch from Review.ExpectUnder to
+            ++ (occurrencesInSourceCode |> List.length |> String.fromInt)
+            ++ """ locations where that code appeared. Switch from Review.ExpectUnder to
 Review.ExpectUnderExactly to make the range you were targeting unambiguous.
 
 Tip: I found them starting at:
 """
-         , occurrencesInSourceCode
-            |> List.map
-                (\occurrence ->
-                    "  - "
-                        ++ (occurrence
-                                |> startingLocationInSource sourceCode
-                                |> locationToCodeString
-                           )
-                )
-            |> String.join "\n"
-         ]
-            |> String.concat
+            ++ (occurrencesInSourceCode
+                    |> List.map
+                        (\occurrence ->
+                            "  - "
+                                ++ (occurrence
+                                        |> startingLocationInSource sourceCode
+                                        |> locationToCodeString
+                                   )
+                        )
+                    |> String.join "\n"
+               )
         )
 
 
@@ -3073,43 +3102,39 @@ checkDetailsAreCorrect error expectedError =
 unexpectedDetails : List String -> { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
 unexpectedDetails expectedDetails error =
     failureMessage "error details don't match"
-        ([ """I found an error for a file with the message
+        ("""I found an error for a file with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 and I was expecting its details to be
 
   """
-         , expectedDetails |> List.map (\paragraph -> "  " ++ paragraph) |> String.join "\n\n"
-         , """
+            ++ (expectedDetails |> List.map (\paragraph -> "  " ++ paragraph) |> String.join "\n\n")
+            ++ """
 
 but I found the details
 
   """
-         , error.details |> List.map (\paragraph -> "  " ++ paragraph) |> String.join "\n\n"
-         ]
-            |> String.concat
+            ++ (error.details |> List.map (\paragraph -> "  " ++ paragraph) |> String.join "\n\n")
         )
 
 
 emptyDetails : String -> String
 emptyDetails errorMessage =
     failureMessage "error details are empty"
-        ([ """I found an error with the message
+        ("""I found an error with the message
 
   """
-         , errorMessage
-         , """
+            ++ errorMessage
+            ++ """
 
 but its details were empty. Having details will
 help the user who encounters the problem by for example
   - explaining what the problem is
   - explaining the reasoning behind the problem
   - giving suggestions on how to solve the problem or alternatives"""
-         ]
-            |> String.concat
         )
 
 
@@ -3128,8 +3153,8 @@ checkFixesAreCorrect toCheck =
                     (\file -> { key = file.path, value = file.source })
     in
     FastDict.merge
-        (\path _ -> (::) (missingSourceEditsForFile path toCheck.expected))
-        (\path expectedFixedSource reviewEdits ->
+        (\path _ soFar -> missingSourceEditsForFile path toCheck.expected :: soFar)
+        (\path expectedFixedSource reviewEdits soFar ->
             ListLocalExtra.consJust
                 (checkFileFixesAreCorrect
                     toCheck.expected
@@ -3137,8 +3162,9 @@ checkFixesAreCorrect toCheck =
                     expectedFixedSource
                     reviewEdits
                 )
+                soFar
         )
-        (\path _ -> (::) (unexpectedEditsToFile path toCheck.expected))
+        (\path _ soFar -> unexpectedEditsToFile path toCheck.expected :: soFar)
         expectedFixedSourcedByPath
         toCheck.reviewError.fixEditsByPath
         []
@@ -3175,31 +3201,44 @@ checkFileFixesAreCorrect expectedError source expectedFixedSource reviewErrorEdi
 
 
 removeWhitespace : String -> String
-removeWhitespace =
-    \string -> string |> String.replace " " "" |> String.replace "\n" ""
+removeWhitespace string =
+    string
+        |> String.filter
+            (\char ->
+                case char of
+                    ' ' ->
+                        False
+
+                    '\n' ->
+                        False
+
+                    '\u{000D}' ->
+                        False
+
+                    _ ->
+                        True
+            )
 
 
 fixedSourceMismatch : String -> String -> { error_ | message : String, details : List String } -> String
 fixedSourceMismatch resultingSource expectedSource error =
     failureMessage "fixed source doesn't match"
-        ([ """I found a different fixed source code than expected for the error with the message
+        ("""I found a different fixed source code than expected for the error with the message
 
 """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 after the fixes have been applied, I expected the source to be
 
 """
-         , formatSourceCode expectedSource
-         , """
+            ++ (expectedSource |> formatSourceCode)
+            ++ """
 
 but I found the source
 
 """
-         , formatSourceCode resultingSource
-         ]
-            |> String.concat
+            ++ (resultingSource |> formatSourceCode)
         )
 
 
@@ -3210,27 +3249,25 @@ fixedSourceWhitespaceMismatch resultingSource expectedSource error =
             highlightDifferencesInSourceCodes ( resultingSource, expectedSource )
     in
     failureMessage "fixed source whitespace doesn't match"
-        ([ """I found a different fixed source than expected for the error with the message
+        ("""I found a different fixed source than expected for the error with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 The problem is related to """
-         , "whitespace" |> Ansi.bold |> Ansi.yellow
-         , """.
+            ++ ("whitespace" |> Ansi.bold |> Ansi.yellow)
+            ++ """.
 after the fixes have been applied, I expected the source to be
 
 """
-         , expected
-         , """
+            ++ expected
+            ++ """
 
 but I found the source
 
 """
-         , resulting
-         ]
-            |> String.concat
+            ++ resulting
         )
 
 
@@ -3255,13 +3292,13 @@ highlightWhiteSpaceDifferences ( aString, bString ) =
                         ( a ++ String.fromChar str, b ++ String.fromChar str )
 
                     Diff.Added '\n' ->
-                        ( [ a, Ansi.backgroundRed "↵", "\n" ] |> String.concat, b )
+                        ( a ++ Ansi.backgroundRed "↵" ++ "\n", b )
 
                     Diff.Added str ->
                         ( a ++ Ansi.backgroundRed (String.fromChar str), b )
 
                     Diff.Removed '\n' ->
-                        ( a, [ b, Ansi.backgroundRed "↵", "\n" ] |> String.concat )
+                        ( a, b ++ Ansi.backgroundRed "↵" ++ "\n" )
 
                     Diff.Removed str ->
                         ( a, b ++ Ansi.backgroundRed (String.fromChar str) )
@@ -3280,11 +3317,11 @@ replaceWhitespace lines =
 unchangedSourceAfterFix : { error_ | message : String, details : List String } -> String
 unchangedSourceAfterFix error =
     failureMessage "applying edits did not change the source"
-        ([ """After applying the fixes provided by the error with the message
+        ("""After applying the fixes provided by the error with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 I expected the fix to make some changes to the source, but it resulted
 in the same source as before the fixes.
@@ -3292,19 +3329,17 @@ in the same source as before the fixes.
 This is problematic because I will tell the user that this rule provides an
 automatic fix, but I will have to disappoint them when I later find out it
 doesn't do anything."""
-         ]
-            |> String.concat
         )
 
 
 hasCollisionsInFixRanges : { error_ | message : String, details : List String } -> String
 hasCollisionsInFixRanges error =
     failureMessage "source edit ranges collide"
-        ([ """When applying the fixes provided by the error with the message
+        ("""When applying the fixes provided by the error with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 I found that some fixes were targeting (partially or completely) the same
 section of code. The problem with that is that I can't determine which fix
@@ -3316,128 +3351,113 @@ the positions (for inserting) of every fix to be mutually exclusive.
 
 Hint: Maybe you duplicated a fix, or you targeted the wrong node for one
 of your fixes."""
-         ]
-            |> String.concat
         )
 
 
 missingSourceEditsForFile : String -> { error_ | message : String, details : List String } -> String
 missingSourceEditsForFile path expectedError =
     failureMessage "file fix edits are missing"
-        ([ """The error with the message
+        ("""The error with the message
 
   """
-         , expectedError.message
-         , """
+            ++ expectedError.message
+            ++ """
 
 did not provide edits as a fix for the file at the path """
-         , path
-         , """ which I had expected."""
-         ]
-            |> String.concat
+            ++ path
+            ++ """ which I had expected."""
         )
 
 
 unexpectedEditsToFile : String -> { error_ | message : String, details : List String } -> String
 unexpectedEditsToFile path error =
     failureMessage "source edits to file not expected"
-        ([ """The error with the message
+        ("""The error with the message
 
   """
-         , error.message
-         , """
+            ++ error.message
+            ++ """
 
 provided a fix with source edits for the file at path """
-         , path
-         , """ for which I expected no edits.
+            ++ path
+            ++ """ for which I expected no edits.
 
 To expect edits, add an entry { path = \""""
-         , path
-         , """", source = ..your expected changed source.. } to your error's fixedFiles field."""
-         ]
-            |> String.concat
+            ++ path
+            ++ """", source = ..your expected changed source.. } to your error's fixedFiles field."""
         )
 
 
 messageMismatch : { expectedError_ | message : String, details : List String } -> { error_ | message : String, details : List String } -> String
 messageMismatch expectedError reviewError =
     failureMessage "error message doesn't match"
-        ([ """I was looking for the error with the message
+        ("""I was looking for the error with the message
 
   """
-         , expectedError.message
-         , """
+            ++ expectedError.message
+            ++ """
 
 but I found the error message
 
   """
-         , reviewError.message
-         ]
-            |> String.concat
+            ++ reviewError.message
         )
 
 
 tooFewErrors : String -> List { message : String, details : List String, under : String } -> String
 tooFewErrors path missingExpectedErrors =
     failureMessage "missing errors"
-        ([ "I expected to see more errors for the file at path "
-         , path
-         , """.
+        ("I expected to see more errors for the file at path "
+            ++ path
+            ++ """.
 Here are those I could not find:
 
 """
-         , missingExpectedErrors
-            |> List.map (\expectedError -> "  - " ++ expectedError.message)
-            |> String.join "\n"
-         ]
-            |> String.concat
+            ++ (missingExpectedErrors
+                    |> List.map (\expectedError -> "  - " ++ expectedError.message)
+                    |> String.join "\n"
+               )
         )
 
 
 tooManyErrors : String -> List { error_ | range : Elm.Syntax.Range.Range, message : String, details : List String } -> String
 tooManyErrors path extraErrors =
     failureMessage "unexpected additional errors"
-        ([ "I found too many errors for the file at path "
-         , path
-         , ":\n\n"
-         , extraErrors
-            |> List.map
-                (\error ->
-                    [ "  - ", error.message, "\n    at ", rangeToCodeString error.range ] |> String.concat
-                )
-            |> String.join "\n"
-         ]
-            |> String.concat
+        ("I found too many errors for the file at path "
+            ++ path
+            ++ ":\n\n"
+            ++ (extraErrors
+                    |> List.map
+                        (\error ->
+                            "  - " ++ error.message ++ "\n    at " ++ (error.range |> rangeToCodeString)
+                        )
+                    |> String.join "\n"
+               )
         )
 
 
 rangeToCodeString : Elm.Syntax.Range.Range -> String
-rangeToCodeString =
-    \range ->
-        [ "{ start = "
-        , range.start |> locationToCodeString
-        , ", end = "
-        , range.end |> locationToCodeString
-        , " }"
-        ]
-            |> String.concat
+rangeToCodeString range =
+    "{ start = "
+        ++ (range.start |> locationToCodeString)
+        ++ ", end = "
+        ++ (range.end |> locationToCodeString)
+        ++ " }"
 
 
 elmJsonParsingFailure : Json.Decode.Error -> String
 elmJsonParsingFailure decodeError =
     failureMessage "elm.json failed to parse"
-        ([ """I could not decode the provided elm.json because """
-         , decodeError |> Json.Decode.errorToString
-         , "\n\n"
-         , """Hint: Try to start with a working elm.json from one of your projects and add dependencies from there"""
-         ]
-            |> String.concat
+        ("""I could not decode the provided elm.json because """
+            ++ (decodeError |> Json.Decode.errorToString)
+            ++ "\n\n"
+            ++ """Hint: Try to start with a working elm.json from one of your projects and add dependencies from there"""
         )
 
 
 failureMessage : String -> String -> String
 failureMessage title content =
-    [ title |> Ansi.bold |> Ansi.red, "\n\n", content ] |> String.concat
+    (title |> Ansi.bold |> Ansi.red) ++ "\n\n" ++ content
 
 
 formatSourceCodeWithFormatter : (List String -> List String) -> List String -> String
@@ -3466,15 +3486,12 @@ formatSourceCode string =
 
 
 locationToCodeString : Elm.Syntax.Range.Location -> String
-locationToCodeString =
-    \location ->
-        [ "{ row = "
-        , String.fromInt location.row
-        , ", column = "
-        , String.fromInt location.column
-        , " }"
-        ]
-            |> String.concat
+locationToCodeString location =
+    "{ row = "
+        ++ (location.row |> String.fromInt)
+        ++ ", column = "
+        ++ (location.column |> String.fromInt)
+        ++ " }"
 
 
 type alias FileReviewError =
